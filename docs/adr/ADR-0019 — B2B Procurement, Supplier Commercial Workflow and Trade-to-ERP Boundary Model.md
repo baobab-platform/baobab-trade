@@ -1,6 +1,6 @@
 # ADR-0019 — B2B Procurement, Supplier Commercial Workflow and Trade-to-ERP Boundary Model
 
-**Status:** Proposed — Normative Commerce Architecture  
+**Status:** Accepted — Normative Commerce Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `nabhold/baobab-trade`  
