@@ -1,4 +1,4 @@
-FROM node:24.18.0-alpine3.24 AS deps
+FROM node:26.8-alpine3.24 AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --ignore-scripts
@@ -7,7 +7,7 @@ FROM deps AS build
 COPY . .
 RUN npm run build
 
-FROM node:24.18.0-alpine3.24 AS runtime
+FROM node:26.8-alpine3.24 AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 RUN apk upgrade --no-cache && chown node:node /app
