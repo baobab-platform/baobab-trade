@@ -32,6 +32,6 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    uses: nabhold/shared/.github/workflows/security-codeql.yml@498c431ea7eb76eb038975bc49e7087499d30d48 # shared main, verified 2026-08-30
+    uses: nabhold/shared/.github/workflows/security-codeql.yml@798a16822f5ea46c826fafc689a64303d32ba3e4 # shared main, verified 2026-08-30
     with:
       languages: '["javascript-typescript"]'
