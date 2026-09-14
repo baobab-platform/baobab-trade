@@ -149,24 +149,24 @@ alone is insufficient to determine compliance.
 
 # 4. Responsibilities
 
-| Concern | Primary Authority |
-|---|---|
-| Tenant | CP |
-| Market participation | CP |
-| Trade lane | CP |
-| Provider binding | CP |
-| Product identity | Shared / product authority |
-| Product classification | Regulatory/compliance provider |
-| Trade workflow | Trade |
-| Import/export eligibility | Compliance provider |
-| Customs declaration workflow | Trade/provider |
-| Customs valuation | Customs provider + ERP inputs |
-| Duties | Customs/tax provider |
-| Financial posting | ERP |
-| Customs inventory status | Trade/ERP projection |
-| Compliance evidence | Evidence architecture |
-| Identity/access | IAM |
-| Regulatory intelligence | Pulse where applicable |
+| Concern                      | Primary Authority              |
+| ---------------------------- | ------------------------------ |
+| Tenant                       | CP                             |
+| Market participation         | CP                             |
+| Trade lane                   | CP                             |
+| Provider binding             | CP                             |
+| Product identity             | Shared / product authority     |
+| Product classification       | Regulatory/compliance provider |
+| Trade workflow               | Trade                          |
+| Import/export eligibility    | Compliance provider            |
+| Customs declaration workflow | Trade/provider                 |
+| Customs valuation            | Customs provider + ERP inputs  |
+| Duties                       | Customs/tax provider           |
+| Financial posting            | ERP                            |
+| Customs inventory status     | Trade/ERP projection           |
+| Compliance evidence          | Evidence architecture          |
+| Identity/access              | IAM                            |
+| Regulatory intelligence      | Pulse where applicable         |
 
 ---
 
@@ -2370,17 +2370,17 @@ That complexity is inherent in cross-border trade.
 
 # 141. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Canonical compliance/customs contracts |
-| `nabhold/baobab-trade` | Compliance workflow and trade gates |
-| `nabhold/baobab-cp` | Capability/provider/context resolution |
-| `nabhold/baobab-erp` | Financial customs consequences |
-| `nabhold/baobab-iam` | Compliance roles/access |
-| `nabhold/baobab-cms` | Governed content/evidence support where appropriate |
-| `nabhold/baobab-pulse` | Regulatory intelligence where appropriate |
-| `nabhold/infrastructure` | Provider connectivity/secrets/events |
-| External providers | Regulatory determinations/execution |
+| Repository               | Responsibility                                      |
+| ------------------------ | --------------------------------------------------- |
+| `nabhold/shared`         | Canonical compliance/customs contracts              |
+| `nabhold/baobab-trade`   | Compliance workflow and trade gates                 |
+| `nabhold/baobab-cp`      | Capability/provider/context resolution              |
+| `nabhold/baobab-erp`     | Financial customs consequences                      |
+| `nabhold/baobab-iam`     | Compliance roles/access                             |
+| `nabhold/baobab-cms`     | Governed content/evidence support where appropriate |
+| `nabhold/baobab-pulse`   | Regulatory intelligence where appropriate           |
+| `nabhold/infrastructure` | Provider connectivity/secrets/events                |
+| External providers       | Regulatory determinations/execution                 |
 
 ---
 

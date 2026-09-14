@@ -213,18 +213,18 @@ No single engine owns all documents.
 
 Examples:
 
-| Document | Likely Authority |
-|---|---|
-| Supplier quotation | Trade |
-| Purchase order | ERP |
-| Customer quotation | Trade |
-| Sales order | ERP / canonical transaction projection |
-| Commercial invoice | ERP |
-| Customs declaration | Customs provider |
-| Transport document | Logistics provider |
-| Proof of delivery | Logistics provider |
-| Qualification certificate | External authority / supplier evidence |
-| Product compliance certificate | Regulatory authority/provider |
+| Document                       | Likely Authority                       |
+| ------------------------------ | -------------------------------------- |
+| Supplier quotation             | Trade                                  |
+| Purchase order                 | ERP                                    |
+| Customer quotation             | Trade                                  |
+| Sales order                    | ERP / canonical transaction projection |
+| Commercial invoice             | ERP                                    |
+| Customs declaration            | Customs provider                       |
+| Transport document             | Logistics provider                     |
+| Proof of delivery              | Logistics provider                     |
+| Qualification certificate      | External authority / supplier evidence |
+| Product compliance certificate | Regulatory authority/provider          |
 
 ---
 
@@ -2196,16 +2196,16 @@ These are justified for cross-border production trade.
 
 # 160. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Canonical document/evidence contracts and events |
-| `nabhold/baobab-cp` | Context, tenant, legal entity, provider/storage resolution |
-| `nabhold/baobab-trade` | Trade-document orchestration, packages, transaction associations |
-| `nabhold/baobab-cms` | Document/media management capabilities where selected |
-| `nabhold/baobab-erp` | Financial/procurement document authority |
-| `nabhold/baobab-iam` | Document authorization and identity |
+| Repository               | Responsibility                                                         |
+| ------------------------ | ---------------------------------------------------------------------- |
+| `nabhold/shared`         | Canonical document/evidence contracts and events                       |
+| `nabhold/baobab-cp`      | Context, tenant, legal entity, provider/storage resolution             |
+| `nabhold/baobab-trade`   | Trade-document orchestration, packages, transaction associations       |
+| `nabhold/baobab-cms`     | Document/media management capabilities where selected                  |
+| `nabhold/baobab-erp`     | Financial/procurement document authority                               |
+| `nabhold/baobab-iam`     | Document authorization and identity                                    |
 | `nabhold/infrastructure` | Object storage, encryption, scanning, backup, retention infrastructure |
-| External providers | Authoritative external documents |
+| External providers       | Authoritative external documents                                       |
 
 ---
 

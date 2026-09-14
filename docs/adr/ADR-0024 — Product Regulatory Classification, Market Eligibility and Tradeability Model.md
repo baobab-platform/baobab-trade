@@ -2013,15 +2013,15 @@ These are necessary for credible cross-border commerce.
 
 # 130. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Canonical regulatory contracts/events |
-| `nabhold/baobab-cp` | Context, capability and provider resolution |
+| Repository             | Responsibility                                                              |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `nabhold/shared`       | Canonical regulatory contracts/events                                       |
+| `nabhold/baobab-cp`    | Context, capability and provider resolution                                 |
 | `nabhold/baobab-trade` | Regulatory product projection, eligibility gates, transaction orchestration |
-| `nabhold/baobab-erp` | Financial/accounting consequences |
-| `nabhold/baobab-iam` | Regulatory roles and authorization |
-| `nabhold/baobab-pulse` | Optional regulatory intelligence |
-| External providers | Authoritative/specialist regulatory determinations where configured |
+| `nabhold/baobab-erp`   | Financial/accounting consequences                                           |
+| `nabhold/baobab-iam`   | Regulatory roles and authorization                                          |
+| `nabhold/baobab-pulse` | Optional regulatory intelligence                                            |
+| External providers     | Authoritative/specialist regulatory determinations where configured         |
 
 ---
 
