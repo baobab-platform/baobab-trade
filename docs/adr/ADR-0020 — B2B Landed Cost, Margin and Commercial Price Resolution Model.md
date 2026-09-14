@@ -9,7 +9,7 @@
 **Platform Context Authority:** `nabhold/baobab-cp`  
 **Canonical Contract Authority:** `nabhold/shared`  
 **Intelligence Provider:** `nabhold/baobab-pulse` where applicable  
-**Reference Tenant:** ZuriBeans  
+**Reference Tenant:** ZuriBeans
 
 ## Related Trade ADRs
 
@@ -2317,21 +2317,21 @@ where separate related entities are used.
 
 At minimum:
 
-| Scenario | Expected |
-|---|---|
-| Actual cost available | Use authorised cost basis |
-| Estimated landed cost | Mark estimate |
-| Missing cost | Block/fallback by policy |
-| Margin below hard floor | Block |
-| Margin below soft floor | Approval |
-| Contract price | Apply contract |
-| Volume pricing | Apply eligible tier |
-| Expired quote | Revalidate |
-| FX unavailable | Block/fallback |
-| Cross-border cost | Include lane costs |
-| Local trade | Exclude irrelevant cross-border costs |
-| Actual cost drift | Record margin variance |
-| Duplicate cost event | Idempotent |
+| Scenario                | Expected                              |
+| ----------------------- | ------------------------------------- |
+| Actual cost available   | Use authorised cost basis             |
+| Estimated landed cost   | Mark estimate                         |
+| Missing cost            | Block/fallback by policy              |
+| Margin below hard floor | Block                                 |
+| Margin below soft floor | Approval                              |
+| Contract price          | Apply contract                        |
+| Volume pricing          | Apply eligible tier                   |
+| Expired quote           | Revalidate                            |
+| FX unavailable          | Block/fallback                        |
+| Cross-border cost       | Include lane costs                    |
+| Local trade             | Exclude irrelevant cross-border costs |
+| Actual cost drift       | Record margin variance                |
+| Duplicate cost event    | Idempotent                            |
 
 ---
 
@@ -2429,15 +2429,15 @@ This is necessary for serious B2B trading.
 
 # 143. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Canonical cost/pricing contracts |
+| Repository             | Responsibility                            |
+| ---------------------- | ----------------------------------------- |
+| `nabhold/shared`       | Canonical cost/pricing contracts          |
 | `nabhold/baobab-trade` | Commercial pricing, margin, quote pricing |
-| `nabhold/baobab-erp` | Financial/landed/inventory cost |
-| `nabhold/baobab-cp` | Context and provider resolution |
-| `nabhold/baobab-pulse` | Optional market/FX intelligence |
-| `nabhold/zuribeans` | Commercial price/quotation UI |
-| `nabhold/baobab-iam` | Pricing role/approval authority |
+| `nabhold/baobab-erp`   | Financial/landed/inventory cost           |
+| `nabhold/baobab-cp`    | Context and provider resolution           |
+| `nabhold/baobab-pulse` | Optional market/FX intelligence           |
+| `nabhold/zuribeans`    | Commercial price/quotation UI             |
+| `nabhold/baobab-iam`   | Pricing role/approval authority           |
 
 ---
 

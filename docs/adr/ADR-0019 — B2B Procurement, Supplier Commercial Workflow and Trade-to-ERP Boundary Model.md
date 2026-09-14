@@ -167,30 +167,30 @@ The intended separation is:
 
 # 4. Authority Matrix
 
-| Concern | Authority |
-|---|---|
-| Supplier portal experience | ZuriBeans Digital Estate |
-| Supplier authentication | IAM |
+| Concern                                  | Authority                              |
+| ---------------------------------------- | -------------------------------------- |
+| Supplier portal experience               | ZuriBeans Digital Estate               |
+| Supplier authentication                  | IAM                                    |
 | Supplier organisation canonical identity | Shared/CP according to canonical model |
-| Supplier onboarding workflow | Trade |
-| Supplier qualification | Trade / governance projection |
-| Supplier commercial interaction | Trade |
-| Supplier RFQ | Trade |
-| Supplier quotation | Trade |
-| Quote comparison | Trade |
-| Supplier selection | Trade |
-| Purchase requirement | ERP or authorised upstream workflow |
-| Purchase requisition | ERP |
-| Purchase order | ERP |
-| Goods receipt | ERP |
-| Financial inventory receipt | ERP |
-| Supplier invoice | ERP |
-| AP liability | ERP |
-| Supplier payment | ERP |
-| GL | ERP |
-| Commercial supplier projection | Trade |
-| Procurement readiness | CP |
-| Canonical contracts | Shared |
+| Supplier onboarding workflow             | Trade                                  |
+| Supplier qualification                   | Trade / governance projection          |
+| Supplier commercial interaction          | Trade                                  |
+| Supplier RFQ                             | Trade                                  |
+| Supplier quotation                       | Trade                                  |
+| Quote comparison                         | Trade                                  |
+| Supplier selection                       | Trade                                  |
+| Purchase requirement                     | ERP or authorised upstream workflow    |
+| Purchase requisition                     | ERP                                    |
+| Purchase order                           | ERP                                    |
+| Goods receipt                            | ERP                                    |
+| Financial inventory receipt              | ERP                                    |
+| Supplier invoice                         | ERP                                    |
+| AP liability                             | ERP                                    |
+| Supplier payment                         | ERP                                    |
+| GL                                       | ERP                                    |
+| Commercial supplier projection           | Trade                                  |
+| Procurement readiness                    | CP                                     |
+| Canonical contracts                      | Shared                                 |
 
 ---
 
@@ -2891,17 +2891,17 @@ Without it, Baobab would have a mature sell side and an improvised buy side—wh
 
 # 148. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Canonical supplier/procurement contracts |
-| `nabhold/baobab-cp` | Market participation, context, provider resolution, readiness |
-| `nabhold/baobab-iam` | Supplier-user identity and organisation relationships |
-| `nabhold/baobab-trade` | Supplier commercial workflow, RFQ, quote, award, projections |
-| `nabhold/baobab-erp` | Vendor, requisition, PO, receipt, AP, accounting |
-| `nabhold/zuribeans` | Supplier-facing digital experience |
-| `nabhold/baobab-cms` | Supplier guidance/content where applicable |
-| `nabhold/baobab-pulse` | Optional sourcing intelligence |
-| `nabhold/infrastructure` | Event/runtime/observability infrastructure |
+| Repository               | Responsibility                                                |
+| ------------------------ | ------------------------------------------------------------- |
+| `nabhold/shared`         | Canonical supplier/procurement contracts                      |
+| `nabhold/baobab-cp`      | Market participation, context, provider resolution, readiness |
+| `nabhold/baobab-iam`     | Supplier-user identity and organisation relationships         |
+| `nabhold/baobab-trade`   | Supplier commercial workflow, RFQ, quote, award, projections  |
+| `nabhold/baobab-erp`     | Vendor, requisition, PO, receipt, AP, accounting              |
+| `nabhold/zuribeans`      | Supplier-facing digital experience                            |
+| `nabhold/baobab-cms`     | Supplier guidance/content where applicable                    |
+| `nabhold/baobab-pulse`   | Optional sourcing intelligence                                |
+| `nabhold/infrastructure` | Event/runtime/observability infrastructure                    |
 
 ---
 

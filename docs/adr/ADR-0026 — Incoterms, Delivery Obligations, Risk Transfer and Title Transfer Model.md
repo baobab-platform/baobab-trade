@@ -2086,17 +2086,17 @@ The complexity reflects actual international trade rather than artificial softwa
 
 # 153. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Canonical Incoterm, responsibility, risk/title contracts and events |
-| `nabhold/baobab-cp` | Tenant/market/trade-lane context and provider resolution |
+| Repository             | Responsibility                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `nabhold/shared`       | Canonical Incoterm, responsibility, risk/title contracts and events                     |
+| `nabhold/baobab-cp`    | Tenant/market/trade-lane context and provider resolution                                |
 | `nabhold/baobab-trade` | Negotiation, contract terms, responsibility orchestration, risk/title policy evaluation |
-| `nabhold/baobab-erp` | Accounting/inventory financial consequences |
-| `nabhold/baobab-iam` | Authorization for commercial-term changes |
-| `nabhold/baobab-cms` | Contract/document representations where applicable |
-| Logistics providers | Physical transport events |
-| Compliance providers | Regulatory determinations |
-| `nabhold/baobab-pulse` | Optional freight/risk intelligence |
+| `nabhold/baobab-erp`   | Accounting/inventory financial consequences                                             |
+| `nabhold/baobab-iam`   | Authorization for commercial-term changes                                               |
+| `nabhold/baobab-cms`   | Contract/document representations where applicable                                      |
+| Logistics providers    | Physical transport events                                                               |
+| Compliance providers   | Regulatory determinations                                                               |
+| `nabhold/baobab-pulse` | Optional freight/risk intelligence                                                      |
 
 ---
 

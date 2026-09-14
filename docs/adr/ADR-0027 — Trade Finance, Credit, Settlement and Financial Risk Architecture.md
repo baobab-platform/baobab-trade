@@ -2539,16 +2539,16 @@ These are necessary costs for serious B2B cross-border trade.
 
 # 181. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Canonical credit, finance, settlement contracts/events |
-| `nabhold/baobab-cp` | Context, capability and financial-provider resolution |
-| `nabhold/baobab-trade` | Commercial credit, reservation, terms, finance workflow, financial clearance |
-| `nabhold/baobab-erp` | AR, AP, invoices, payments, cash, GL, authoritative exposure |
-| `nabhold/baobab-iam` | Finance/credit authorization |
-| `nabhold/baobab-cms` | Financial/trade-document representations where applicable |
-| `nabhold/infrastructure` | Secrets, messaging, observability, secure connectivity |
-| Banks / Payment Providers / Finance Providers | Regulated financial execution |
+| Repository                                    | Responsibility                                                               |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `nabhold/shared`                              | Canonical credit, finance, settlement contracts/events                       |
+| `nabhold/baobab-cp`                           | Context, capability and financial-provider resolution                        |
+| `nabhold/baobab-trade`                        | Commercial credit, reservation, terms, finance workflow, financial clearance |
+| `nabhold/baobab-erp`                          | AR, AP, invoices, payments, cash, GL, authoritative exposure                 |
+| `nabhold/baobab-iam`                          | Finance/credit authorization                                                 |
+| `nabhold/baobab-cms`                          | Financial/trade-document representations where applicable                    |
+| `nabhold/infrastructure`                      | Secrets, messaging, observability, secure connectivity                       |
+| Banks / Payment Providers / Finance Providers | Regulated financial execution                                                |
 
 ---
 

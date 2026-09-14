@@ -196,30 +196,30 @@ Mappings SHALL be explicit.
 
 # 6. Ownership Matrix
 
-| Information | Authority |
-|---|---|
-| Canonical legal identity | CP / Shared |
-| Legal identifiers | CP canonical identity |
-| Supplier role | CP relationship model |
-| Supplier onboarding workflow | Trade |
-| Supplier qualification | Trade |
-| Supplier product capability | Trade |
-| Supplier market eligibility | Trade + compliance provider |
-| Supplier commercial terms | Trade |
-| Supplier quotation | Trade |
-| Supplier sourcing event | Trade |
-| Supplier award | Trade |
-| Purchase commitment | ERP |
-| Purchase Order | ERP |
-| Goods Receipt | ERP |
-| Supplier Invoice | ERP |
-| AP | ERP |
-| Supplier payment | ERP |
-| Bank/payment master | ERP with secured workflow |
-| Supplier portal users | IAM |
-| Supplier IAM organisation | IAM projection |
-| Supplier screening | Compliance provider |
-| Supplier performance analytics | Trade/Pulse projection |
+| Information                    | Authority                   |
+| ------------------------------ | --------------------------- |
+| Canonical legal identity       | CP / Shared                 |
+| Legal identifiers              | CP canonical identity       |
+| Supplier role                  | CP relationship model       |
+| Supplier onboarding workflow   | Trade                       |
+| Supplier qualification         | Trade                       |
+| Supplier product capability    | Trade                       |
+| Supplier market eligibility    | Trade + compliance provider |
+| Supplier commercial terms      | Trade                       |
+| Supplier quotation             | Trade                       |
+| Supplier sourcing event        | Trade                       |
+| Supplier award                 | Trade                       |
+| Purchase commitment            | ERP                         |
+| Purchase Order                 | ERP                         |
+| Goods Receipt                  | ERP                         |
+| Supplier Invoice               | ERP                         |
+| AP                             | ERP                         |
+| Supplier payment               | ERP                         |
+| Bank/payment master            | ERP with secured workflow   |
+| Supplier portal users          | IAM                         |
+| Supplier IAM organisation      | IAM projection              |
+| Supplier screening             | Compliance provider         |
+| Supplier performance analytics | Trade/Pulse projection      |
 
 ---
 
@@ -2078,16 +2078,16 @@ These are necessary costs for production-grade B2B procurement.
 
 # 140. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Supplier contracts/events |
-| `nabhold/baobab-cp` | Canonical organisation/role/relationship/mapping |
-| `nabhold/baobab-trade` | Supplier relationship, onboarding, qualification, sourcing |
-| `nabhold/baobab-erp` | Vendor projection, PO, receipt, AP, settlement |
-| `nabhold/baobab-iam` | Supplier organisation users/access |
-| `nabhold/baobab-cms` | Evidence/content support where applicable |
-| `nabhold/baobab-pulse` | Optional supplier intelligence |
-| `nabhold/infrastructure` | Events, secrets, storage, observability |
+| Repository               | Responsibility                                             |
+| ------------------------ | ---------------------------------------------------------- |
+| `nabhold/shared`         | Supplier contracts/events                                  |
+| `nabhold/baobab-cp`      | Canonical organisation/role/relationship/mapping           |
+| `nabhold/baobab-trade`   | Supplier relationship, onboarding, qualification, sourcing |
+| `nabhold/baobab-erp`     | Vendor projection, PO, receipt, AP, settlement             |
+| `nabhold/baobab-iam`     | Supplier organisation users/access                         |
+| `nabhold/baobab-cms`     | Evidence/content support where applicable                  |
+| `nabhold/baobab-pulse`   | Optional supplier intelligence                             |
+| `nabhold/infrastructure` | Events, secrets, storage, observability                    |
 
 ---
 

@@ -866,13 +866,13 @@ It describes commercial responsibilities.
 
 Conceptually:
 
-| Responsibility | Party |
-|---|---|
-| Origin transport | Seller/Buyer |
-| Export clearance | Seller/Buyer |
-| Main carriage | Seller/Buyer |
-| Insurance | Seller/Buyer |
-| Import clearance | Seller/Buyer |
+| Responsibility        | Party        |
+| --------------------- | ------------ |
+| Origin transport      | Seller/Buyer |
+| Export clearance      | Seller/Buyer |
+| Main carriage         | Seller/Buyer |
+| Insurance             | Seller/Buyer |
+| Import clearance      | Seller/Buyer |
 | Destination transport | Seller/Buyer |
 
 Exact allocation comes from contract/Incoterm context.
@@ -2504,16 +2504,16 @@ This complexity reflects real cross-border logistics.
 
 # 160. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Canonical logistics contracts/events |
-| `nabhold/baobab-trade` | Shipment and logistics orchestration |
-| `nabhold/baobab-cp` | Capability/provider resolution |
-| `nabhold/baobab-erp` | Freight financial consequences |
-| `nabhold/baobab-iam` | Logistics roles/permissions |
-| `nabhold/baobab-pulse` | Optional route/freight intelligence |
+| Repository               | Responsibility                               |
+| ------------------------ | -------------------------------------------- |
+| `nabhold/shared`         | Canonical logistics contracts/events         |
+| `nabhold/baobab-trade`   | Shipment and logistics orchestration         |
+| `nabhold/baobab-cp`      | Capability/provider resolution               |
+| `nabhold/baobab-erp`     | Freight financial consequences               |
+| `nabhold/baobab-iam`     | Logistics roles/permissions                  |
+| `nabhold/baobab-pulse`   | Optional route/freight intelligence          |
 | `nabhold/infrastructure` | Connectivity, broker, secrets, observability |
-| External providers | Physical logistics execution |
+| External providers       | Physical logistics execution                 |
 
 ---
 

@@ -58,32 +58,32 @@ It requires extension.
 
 The subsequent Baobab architecture exposed material areas requiring additional normative treatment:
 
-| Area | ADR-0018 | Addendum |
-|---|---|---|
-| Contextual tax | Strong | Retained |
-| Legal Seller | Strong | Retained |
-| Seller registrations | Strong | Extended |
-| B2B tax | Present | Extended |
-| Cross-border tax | High-level | Expanded |
-| Import VAT/GST | Mentioned | Formalized |
-| Export treatment | Mentioned | Formalized |
-| Export evidence | Missing | Added |
-| Customs duty boundary | Present | Strengthened |
-| Tax point | Implicit | Added |
-| Recoverability | Missing | Added |
-| Withholding tax | Missing | Added |
-| Intercompany tax | Missing | Added |
-| Inter-branch tax | Missing | Added |
-| Incoterm interaction | Missing | Added |
-| Importer/exporter of record | Missing | Added |
-| Landed-cost interaction | Missing | Added |
-| Trade-document evidence | Missing | Added |
-| Tax provider capabilities | Partial | Formalized |
-| Effective rule provenance | Present | Strengthened |
-| Tax decision snapshot | Present | Strengthened |
-| ERP tax mapping | Present | Expanded |
-| Tax readiness | Limited | Added |
-| Tax reconciliation | Present | Expanded |
+| Area                        | ADR-0018   | Addendum     |
+| --------------------------- | ---------- | ------------ |
+| Contextual tax              | Strong     | Retained     |
+| Legal Seller                | Strong     | Retained     |
+| Seller registrations        | Strong     | Extended     |
+| B2B tax                     | Present    | Extended     |
+| Cross-border tax            | High-level | Expanded     |
+| Import VAT/GST              | Mentioned  | Formalized   |
+| Export treatment            | Mentioned  | Formalized   |
+| Export evidence             | Missing    | Added        |
+| Customs duty boundary       | Present    | Strengthened |
+| Tax point                   | Implicit   | Added        |
+| Recoverability              | Missing    | Added        |
+| Withholding tax             | Missing    | Added        |
+| Intercompany tax            | Missing    | Added        |
+| Inter-branch tax            | Missing    | Added        |
+| Incoterm interaction        | Missing    | Added        |
+| Importer/exporter of record | Missing    | Added        |
+| Landed-cost interaction     | Missing    | Added        |
+| Trade-document evidence     | Missing    | Added        |
+| Tax provider capabilities   | Partial    | Formalized   |
+| Effective rule provenance   | Present    | Strengthened |
+| Tax decision snapshot       | Present    | Strengthened |
+| ERP tax mapping             | Present    | Expanded     |
+| Tax readiness               | Limited    | Added        |
+| Tax reconciliation          | Present    | Expanded     |
 
 ---
 
@@ -2002,34 +2002,34 @@ Country-specific tax configuration/rules/providers belong behind governed interf
 
 # 136. Repository Responsibilities
 
-| Repository | Responsibility |
-|---|---|
-| `nabhold/shared` | Canonical tax context, determination, component, registration and events |
-| `nabhold/baobab-cp` | Tenant/legal-entity/market/provider/capability resolution |
-| `nabhold/baobab-trade` | Customer-facing transaction-tax orchestration and committed snapshot |
-| `nabhold/baobab-erp` | Tax accounting, recoverability, statutory posting/reporting |
-| `nabhold/baobab-iam` | Authorization for sensitive tax operations |
-| `nabhold/baobab-cms` | Tax-document presentation where appropriate, not tax authority |
-| External Tax Providers | Delegated jurisdictional determination |
-| Customs Providers | Customs/duty/import context under ADR-0021 |
+| Repository             | Responsibility                                                           |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `nabhold/shared`       | Canonical tax context, determination, component, registration and events |
+| `nabhold/baobab-cp`    | Tenant/legal-entity/market/provider/capability resolution                |
+| `nabhold/baobab-trade` | Customer-facing transaction-tax orchestration and committed snapshot     |
+| `nabhold/baobab-erp`   | Tax accounting, recoverability, statutory posting/reporting              |
+| `nabhold/baobab-iam`   | Authorization for sensitive tax operations                               |
+| `nabhold/baobab-cms`   | Tax-document presentation where appropriate, not tax authority           |
+| External Tax Providers | Delegated jurisdictional determination                                   |
+| Customs Providers      | Customs/duty/import context under ADR-0021                               |
 
 ---
 
 # 137. Cross-ADR Authority Matrix
 
-| Concern | Governing Decision |
-|---|---|
-| Transaction tax | ADR-0018 + Addendum |
-| Legal entity relationship | ADR-BCP-012 |
-| Inventory ownership | ADR-BCP-013 |
-| Counterparty identity | ADR-BCP-014 |
-| Landed cost | ADR-0020 |
-| Customs/duty | ADR-0021 |
-| Product regulatory eligibility | ADR-0024 |
-| Evidence/documents | ADR-0025 |
-| Incoterms/risk/title | ADR-0026 |
-| Credit/settlement | ADR-0027 |
-| ERP accounting | ERP ADR series |
+| Concern                        | Governing Decision  |
+| ------------------------------ | ------------------- |
+| Transaction tax                | ADR-0018 + Addendum |
+| Legal entity relationship      | ADR-BCP-012         |
+| Inventory ownership            | ADR-BCP-013         |
+| Counterparty identity          | ADR-BCP-014         |
+| Landed cost                    | ADR-0020            |
+| Customs/duty                   | ADR-0021            |
+| Product regulatory eligibility | ADR-0024            |
+| Evidence/documents             | ADR-0025            |
+| Incoterms/risk/title           | ADR-0026            |
+| Credit/settlement              | ADR-0027            |
+| ERP accounting                 | ERP ADR series      |
 
 ---
 
