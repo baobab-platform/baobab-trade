@@ -1,6 +1,6 @@
 {
   "name": "Nabhold baobab-trade",
-  "image": "ghcr.io/nabhold/baobab-dev:1.2.6",
+  "image": "ghcr.io/nabhold/baobab-dev:1.4.0",
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "init": true,
