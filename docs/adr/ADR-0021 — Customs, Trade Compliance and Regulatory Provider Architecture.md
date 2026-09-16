@@ -1,6 +1,6 @@
 # ADR-0021 — Customs, Trade Compliance and Regulatory Provider Architecture
 
-**Status:** Proposed — Normative Trade Architecture  
+**Status:** Accepted — Normative Trade Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `nabhold/baobab-trade`  

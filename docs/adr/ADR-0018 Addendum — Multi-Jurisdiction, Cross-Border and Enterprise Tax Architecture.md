@@ -1,6 +1,6 @@
 # ADR-0018 Addendum — Multi-Jurisdiction, Cross-Border and Enterprise Tax Architecture
 
-**Status:** Proposed Addendum to Accepted ADR-0018  
+**Status:** Accepted Addendum to Accepted ADR-0018  
 **Date:** 2026-09-12  
 **Base Decision:** ADR-0018 — MedusaJS Commerce Tax, Jurisdiction and Legal Transaction Context  
 **Base Decision Status:** Remains Accepted  

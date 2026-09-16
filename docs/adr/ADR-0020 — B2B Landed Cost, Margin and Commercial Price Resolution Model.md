@@ -1,6 +1,6 @@
 # ADR-0020 — B2B Landed Cost, Margin and Commercial Price Resolution Model
 
-**Status:** Proposed — Normative Commerce Architecture  
+**Status:** Accepted — Normative Commerce Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `nabhold/baobab-trade`  

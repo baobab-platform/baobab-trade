@@ -1,6 +1,6 @@
 # ADR-0022 — Shipping, Logistics, Freight and Transport Provider Abstraction
 
-**Status:** Proposed — Normative Trade Architecture  
+**Status:** Accepted — Normative Trade Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `nabhold/baobab-trade`  
