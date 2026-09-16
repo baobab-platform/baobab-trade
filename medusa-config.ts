@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "@medusajs/framework/utils"
 import { getInfrastructureModules } from "./src/baobab/config/infrastructure"
+import { buildAuthProviderConfiguration } from "./src/baobab/auth/providers"
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd())
 
@@ -20,23 +21,7 @@ for (const secret of requiredSecrets) {
 // module at all replaces Medusa's own default provider list rather than
 // merging with it, so emailpass is listed explicitly alongside oidc to
 // keep existing local admin login working unchanged.
-const authProviders: { resolve: string; id: string; options?: Record<string, unknown> }[] = [
-  { resolve: "@medusajs/medusa/auth-emailpass", id: "emailpass" },
-]
-if (process.env.BAOBAB_IAM_OIDC_ISSUER) {
-  authProviders.push({
-    resolve: "@medusajs/auth-oidc",
-    id: "oidc",
-    options: {
-      issuer: process.env.BAOBAB_IAM_OIDC_ISSUER,
-      client_id: process.env.BAOBAB_IAM_OIDC_CLIENT_ID || "baobab-trade-admin",
-      client_secret: process.env.BAOBAB_IAM_OIDC_CLIENT_SECRET,
-      callback_url:
-        process.env.BAOBAB_IAM_OIDC_CALLBACK_URL || "http://localhost:9000/auth/user/oidc/callback",
-      display_name: "Baobab Workforce SSO",
-    },
-  })
-}
+const auth = buildAuthProviderConfiguration(process.env)
 
 export default defineConfig({
   projectConfig: {
@@ -55,12 +40,12 @@ export default defineConfig({
       // auth-methods-per-actor.js). Without this, the "oidc" provider
       // registered below for workforce admin login (Gate IAM-5) was also
       // implicitly reachable via /auth/customer/oidc/*, even though no
-      // customer-facing OIDC integration exists yet (Gate IAM-7 deferred
-      // pending its own architectural decision). `customer` stays
-      // emailpass-only until that lands.
+      // ZuriBeans OIDC is registered under its own provider ID and never
+      // becomes an admin method. Authentication still grants no B2B
+      // organisation membership or purchasing authority.
       authMethodsPerActor: {
-        customer: ["emailpass"],
-        user: authProviders.map((provider) => provider.id),
+        customer: auth.methodsPerActor.customer,
+        user: auth.methodsPerActor.user,
       },
     },
   },
@@ -84,7 +69,7 @@ export default defineConfig({
     {
       resolve: "@medusajs/medusa/auth",
       options: {
-        providers: authProviders,
+        providers: auth.providers,
       },
     },
     {
