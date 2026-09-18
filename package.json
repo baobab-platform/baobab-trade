@@ -87,7 +87,7 @@
     "@medusajs/framework": "2.20.1",
     "@medusajs/medusa": "2.20.1",
     "@medusajs/utils": "2.20.1",
-    "awilix": "8.0.1",
+    "awilix": "13.0.5",
     "pg": "8.13.1"
   },
   "devDependencies": {
