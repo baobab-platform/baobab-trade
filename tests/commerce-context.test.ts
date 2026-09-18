@@ -51,6 +51,7 @@ const clientFor = (resolvedMarket = market): ControlPlaneClient => ({
         ),
       ),
     ),
+  resolvePlatformContext: vi.fn(),
 })
 
 describe("Baobab commerce context isolation", () => {

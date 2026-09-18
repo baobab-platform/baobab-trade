@@ -12,6 +12,14 @@
 // b2b_organisation row via canonical_organisation_id (populated by the
 // admin canonical-link route, src/api/admin/b2b/organisations/[id]/
 // canonical-link/route.ts).
+//
+// Gate ZB-03.6: b2b_organisation.tenant_id is otherwise Trade-local/
+// admin-set, never independently checked against baobab-cp's canonical
+// registry. When a workload verifier is configured (see
+// getWorkloadTenantVerifier), this route additionally attests that CP's
+// own record agrees tenant_id belongs to this organisation before serving
+// context -- opt-in, so this is skipped entirely where unconfigured.
+import { randomUUID } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
 import { B2B_MODULE } from "../../../../modules/b2b"
@@ -21,6 +29,7 @@ import {
   B2BAuthorizationError,
   resolveBuyerContext,
 } from "../../../../baobab/b2b"
+import { getWorkloadTenantVerifier } from "../../../../baobab/control-plane/workload-tenant-verifier"
 
 export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) => {
   const canonicalOrganisationId = req.query.canonical_organisation_id
@@ -42,6 +51,22 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     )
   }
   const organisation = organisations[0]
+
+  const tenantVerifier = getWorkloadTenantVerifier()
+  if (tenantVerifier) {
+    try {
+      await tenantVerifier.verifyOrganisationTenant(
+        organisation.tenant_id,
+        canonicalOrganisationId,
+        req.headers["x-correlation-id"]?.toString() || randomUUID(),
+      )
+    } catch {
+      throw new MedusaError(
+        MedusaError.Types.FORBIDDEN,
+        "the Control Plane could not attest this organisation's tenant",
+      )
+    }
+  }
 
   const context = await resolveBuyerContext(b2b, organisation.id, req.auth_context.actor_id)
   if (!context) {
