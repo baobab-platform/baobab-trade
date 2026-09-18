@@ -12,6 +12,10 @@ import {
   type MappingResolutionRequest,
   type MappingResolutionResponse,
 } from "../contracts/canonical-mapping"
+import {
+  isValidPlatformContextResolutionResponse,
+  type RawPlatformContextResolutionResponse,
+} from "../contracts/platform-context"
 
 export interface ControlPlaneClient {
   resolveContext(accessToken: string, correlationId: string): Promise<BaobabTenantContext>
@@ -21,6 +25,12 @@ export interface ControlPlaneClient {
     accessToken: string,
     correlationId: string,
   ): Promise<MappingResolutionResponse>
+  resolvePlatformContext(
+    tenantId: string,
+    organisationId: string,
+    accessToken: string,
+    correlationId: string,
+  ): Promise<RawPlatformContextResolutionResponse>
 }
 
 export type HttpControlPlaneClientOptions = {
@@ -29,6 +39,7 @@ export type HttpControlPlaneClientOptions = {
   productId: string
   marketPathTemplate?: string
   mappingResolutionPath?: string
+  platformContextPath?: string
   timeoutMs?: number
   now?: () => number
 }
@@ -60,6 +71,7 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
   private readonly productId: string
   private readonly marketPathTemplate: string
   private readonly mappingResolutionPath: string
+  private readonly platformContextPath: string
   private readonly timeoutMs: number
   private readonly now: () => number
   private readonly contextCache = new Map<string, CachedContext>()
@@ -73,6 +85,9 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
     )
     this.mappingResolutionPath = withLeadingSlash(
       options.mappingResolutionPath ?? "/v1/resolution/mappings",
+    )
+    this.platformContextPath = withLeadingSlash(
+      options.platformContextPath ?? "/v1/platform-context/resolve",
     )
     this.timeoutMs = options.timeoutMs ?? 3000
     this.now = options.now ?? Date.now
@@ -190,6 +205,43 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
       candidate.canonical_entity_id !== request.canonical_entity_id
     ) {
       throw new Error("Control Plane returned an invalid mapping-resolution response")
+    }
+
+    return candidate
+  }
+
+  /**
+   * Resolves platform (tenant + organisation) context per POST
+   * /v1/platform-context/resolve, using a workload-scoped access token
+   * rather than a buyer's own token -- see ADR for this slice. Never
+   * cached: this call exists specifically to attest a tenant_id/
+   * organisation_id pair at read time, so callers must always see a fresh
+   * result rather than a value from an unrelated earlier assertion.
+   */
+  async resolvePlatformContext(
+    tenantId: string,
+    organisationId: string,
+    accessToken: string,
+    correlationId: string,
+  ): Promise<RawPlatformContextResolutionResponse> {
+    const response = await fetch(`${this.baseUrl}${this.platformContextPath}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+        "x-correlation-id": correlationId,
+      },
+      body: JSON.stringify({ tenant_id: tenantId, organisation_id: organisationId }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    })
+
+    if (!response.ok) {
+      await readProblemOrThrow(response)
+    }
+
+    const candidate: unknown = await response.json()
+    if (!isValidPlatformContextResolutionResponse(candidate)) {
+      throw new Error("Control Plane returned an invalid platform-context response")
     }
 
     return candidate

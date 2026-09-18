@@ -175,3 +175,91 @@ describe("HttpControlPlaneClient.resolveMapping", () => {
     ).rejects.toThrow("invalid mapping-resolution response")
   })
 })
+
+describe("HttpControlPlaneClient.resolvePlatformContext", () => {
+  it("POSTs tenant_id and organisation_id to /v1/platform-context/resolve", async () => {
+    const response = {
+      context_id: "ctx_01k4m7x9q2v6c8r3d5f1h0j4",
+      tenant_id: "tn_01k4m7x9q2v6c8r3d5f1h0j4",
+      resolved_at: "2026-09-01T10:00:00Z",
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, response))
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new HttpControlPlaneClient({
+      baseUrl: "http://control-plane.local",
+      contextPath: "/v1/context/resolve",
+      productId: "baobab-trade",
+    })
+
+    const resolved = await client.resolvePlatformContext(
+      "tn_01k4m7x9q2v6c8r3d5f1h0j4",
+      "canon-org-1",
+      "workload-token",
+      "corr-1",
+    )
+
+    expect(resolved.tenant_id).toBe("tn_01k4m7x9q2v6c8r3d5f1h0j4")
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe("http://control-plane.local/v1/platform-context/resolve")
+    expect(init.method).toBe("POST")
+    expect(init.headers.authorization).toBe("Bearer workload-token")
+    expect(JSON.parse(init.body)).toEqual({
+      tenant_id: "tn_01k4m7x9q2v6c8r3d5f1h0j4",
+      organisation_id: "canon-org-1",
+    })
+  })
+
+  it("never caches -- always re-resolves so a stale attestation can't be served", async () => {
+    const response = {
+      context_id: "ctx_01k4m7x9q2v6c8r3d5f1h0j4",
+      tenant_id: "tn_01k4m7x9q2v6c8r3d5f1h0j4",
+      resolved_at: "2026-09-01T10:00:00Z",
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, response))
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new HttpControlPlaneClient({
+      baseUrl: "http://control-plane.local",
+      contextPath: "/v1/context/resolve",
+      productId: "baobab-trade",
+    })
+
+    await client.resolvePlatformContext("tn_1", "canon-org-1", "workload-token", "corr-1")
+    await client.resolvePlatformContext("tn_1", "canon-org-1", "workload-token", "corr-2")
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("fails closed on a non-conforming 200 body rather than trusting it", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { context_id: "ctx_1" })))
+    const client = new HttpControlPlaneClient({
+      baseUrl: "http://control-plane.local",
+      contextPath: "/v1/context/resolve",
+      productId: "baobab-trade",
+    })
+
+    await expect(
+      client.resolvePlatformContext("tn_1", "canon-org-1", "workload-token", "corr-1"),
+    ).rejects.toThrow("invalid platform-context response")
+  })
+
+  it("surfaces a Control Plane problem response instead of retrying silently", async () => {
+    const problem = {
+      type: "https://errors.nabhold.com/organisation-not-found",
+      title: "Organisation not found",
+      status: 404,
+      code: "ORGANISATION_NOT_FOUND",
+      correlation_id: "7c8f131b-d8ba-4d89-b60b-a187d3944074",
+      retryable: false,
+    }
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(404, problem)))
+    const client = new HttpControlPlaneClient({
+      baseUrl: "http://control-plane.local",
+      contextPath: "/v1/context/resolve",
+      productId: "baobab-trade",
+    })
+
+    await expect(
+      client.resolvePlatformContext("tn_1", "canon-org-1", "workload-token", "corr-1"),
+    ).rejects.toThrow(ControlPlaneProblemError)
+  })
+})
