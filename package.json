@@ -94,7 +94,7 @@
     "@medusajs/admin-sdk": "2.20.1",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "20.17.10",
-    "@typescript-eslint/eslint-plugin": "8.18.2",
+    "@typescript-eslint/eslint-plugin": "8.68.0",
     "@typescript-eslint/parser": "8.18.2",
     "eslint": "9.39.5",
     "eslint-config-prettier": "9.1.0",
