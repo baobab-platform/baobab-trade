@@ -54,7 +54,7 @@ Add an **opt-in** tenant-attestation check to `GET /store/b2b/context`:
    user-scoped one.
 3. `ControlPlaneWorkloadTenantVerifier` (`src/baobab/control-plane/workload-tenant-verifier.ts`)
    combines the two and, critically, does **not** trust a bare `200 OK` from CP: it checks the
-   `tenant_id` CP echoes back equals the `tenant_id` being asserted. A `200` that resolves *some*
+   `tenant_id` CP echoes back equals the `tenant_id` being asserted. A `200` that resolves _some_
    context for the organisation without confirming the same tenant is treated as a failure
    (`TenantAttestationError`), following the same fail-closed pattern already used in
    `resolveMapping`'s canonical-entity-ID echo check (`src/baobab/control-plane/client.ts`).
@@ -103,7 +103,7 @@ can promote this to `requiredInProduction`.
   tenant reassignment in baobab-cp after Trade's row was created would go undetected until the next
   admin write, defeating the purpose of an authoritative-context check on every read.
 - **Reuse the buyer's own access token instead of a workload identity.** Rejected: the buyer's token
-  proves who the buyer is, not that CP independently agrees which tenant the *organisation* belongs
+  proves who the buyer is, not that CP independently agrees which tenant the _organisation_ belongs
   to — this is a system-to-system assertion, not something a buyer's own credential is scoped to
   make, hence the previously-unused `context:resolve`-scoped workload client.
 - **`requiredInProduction` from the outset.** Rejected per Section 3.
