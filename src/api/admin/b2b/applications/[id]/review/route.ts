@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
 import { buyerApplicationView } from "../../../../../../baobab/b2b/application-view"
+import { assertVerifiedBuyerKybPackage } from "../../../../../../baobab/b2b/kyb-evidence"
 import {
   assertBuyerApplicationTransition,
   principalIdFromAuthContext,
@@ -147,6 +148,10 @@ export const POST = async (req: AuthenticatedMedusaRequest<ReviewBody>, res: Med
       MedusaError.Types.NOT_ALLOWED,
       `cannot transition buyer application from ${application.status} to ${nextStatus}`,
     )
+  }
+
+  if (nextStatus === "UNDER_REVIEW") {
+    await assertVerifiedBuyerKybPackage(b2b, application.id, tenantId)
   }
 
   const nextRevision = Number(application.revision) + 1

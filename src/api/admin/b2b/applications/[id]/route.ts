@@ -19,10 +19,33 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     { order: { application_revision: "ASC" } },
   )
 
+  const evidence = await b2b.listBuyerApplicationEvidences(
+    { application_id: application.id, tenant_id: tenantId },
+    { order: { submitted_at: "ASC" } },
+  )
+  const evidenceDecisions = await b2b.listBuyerApplicationEvidenceDecisions({
+    application_id: application.id,
+    tenant_id: tenantId,
+  })
+
   res.status(200).json({
     application: buyerApplicationView(
       application as unknown as Record<string, unknown>,
     ),
+    evidence: evidence.map((item) => ({
+      id: item.id,
+      evidence_type: item.evidence_type,
+      canonical_document_id: item.canonical_document_id,
+      document_version: item.document_version,
+      content_sha256: item.content_sha256,
+      media_type: item.media_type,
+      size_bytes: item.size_bytes,
+      issued_at: item.issued_at,
+      expires_at: item.expires_at,
+      status: item.status,
+      submitted_at: item.submitted_at,
+      decision: evidenceDecisions.find((decision) => decision.evidence_id === item.id) ?? null,
+    })),
     review_actions: reviewActions.map((action) => ({
       id: action.id,
       from_status: action.from_status,
