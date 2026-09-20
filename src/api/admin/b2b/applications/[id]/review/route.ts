@@ -74,7 +74,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<ReviewBody>, res: Med
       ? null
       : requiredText(req.body.note, "note", 2_000)
   const expectedRevision = req.body?.expected_revision
-  if (!Number.isSafeInteger(expectedRevision) || Number(expectedRevision) < 1) {
+  if (typeof expectedRevision !== "number" || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
       "expected_revision must be a positive integer",
@@ -132,7 +132,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<ReviewBody>, res: Med
   }
   if (application.revision !== expectedRevision) {
     throw new MedusaError(
-      MedusaError.Types.CONFLICT,
+      MedusaError.Types.DUPLICATE_ERROR,
       "buyer application changed; reload before reviewing",
     )
   }
