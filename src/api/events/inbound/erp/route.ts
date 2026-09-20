@@ -60,7 +60,7 @@ const normalize = (body: unknown) => {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "currency_code must be ISO 4217")
   }
   const limit = data.credit_limit_minor
-  if (limit !== null && limit !== undefined && (!Number.isSafeInteger(limit) || Number(limit) < 0)) {
+  if (limit !== null && limit !== undefined && (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 0)) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "credit_limit_minor must be a non-negative safe integer")
   }
   const paymentTerm = data.payment_term_code == null ? null : requiredText(data.payment_term_code, "payment_term_code")
@@ -71,11 +71,19 @@ const normalize = (body: unknown) => {
   if (Number.isNaN(observedAt.valueOf())) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "as_of must be an ISO timestamp")
   }
+  const tenantId = requiredText(event.tenantid ?? event.tenant_id ?? data.tenant_id, "tenantid")
+  const legalEntityId = requiredText(event.entityid ?? event.entity_id ?? data.legal_entity_id, "entityid")
+  if (
+    (data.tenant_id !== undefined && data.tenant_id !== tenantId) ||
+    (data.legal_entity_id !== undefined && data.legal_entity_id !== legalEntityId)
+  ) {
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "ERP event envelope and data scope mismatch")
+  }
   return {
     eventId: requiredText(event.id ?? event.event_id, "id"),
     correlationId: requiredText(event.correlationid ?? event.correlation_id, "correlationid"),
-    tenantId: requiredText(event.tenantid ?? event.tenant_id ?? data.tenant_id, "tenantid"),
-    legalEntityId: requiredText(event.entityid ?? event.entity_id ?? data.legal_entity_id, "entityid"),
+    tenantId,
+    legalEntityId,
     buyerOrganisationId: requiredText(data.buyer_organisation_id, "buyer_organisation_id"),
     businessPartnerId: requiredText(data.business_partner_id, "business_partner_id"),
     profileReference: requiredText(data.profile_reference, "profile_reference"),
