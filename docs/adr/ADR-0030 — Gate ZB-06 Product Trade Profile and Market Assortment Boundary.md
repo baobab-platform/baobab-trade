@@ -36,17 +36,25 @@ Product Exists ≠ Listed ≠ Offered ≠ Qualified ≠ Importable ≠ Exportabl
    suggestions start as `PROPOSED` and must not auto-authorise trade.
 4. **Trade UOM** is an open set of string codes validated at the API (BAG, CARTON,
    KG, TONNE, LITRE, BOTTLE, PALLET, OTHER, …). Core code SHALL NOT branch on
-   product name (“if coffee”).
+   product name (“if coffee”). Purchase constraints use the **same** UOM vocabulary.
 5. **No universal product master** in Trade (ADR-0011 §16). ERP valuation, CMS
    copy, and CP identity stay outside this module.
 6. Admin HTTP under Medusa staff auth manages profiles and market eligibility;
    store catalogue sellability must compose Medusa publication + assortment
-   ACTIVE + non-blocking regulatory state (helper only in this slice).
+   ACTIVE + non-blocking regulatory state.
+7. **Store assortment filter** (`GET /store/b2b/assortment?market_key=`) returns
+   sellable product ids for a market. Estates filter stock Medusa catalogue with
+   this list — Trade does not fork `/store/products`.
+8. **CP external-reference wiring (Trade side):**
+   `POST /admin/b2b/product-trade-profiles/{id}/canonical-link` updates
+   `canonical_product_key` after an operator has registered the matching
+   CanonicalEntity external reference in baobab-cp. Symmetric to organisation
+   canonical-link (ZB-03.3). CP remains authority for the entity itself.
 
 ## Explicit non-goals (this slice)
 
 - Creating Medusa products/variants (stock Medusa admin remains source)
-- Control Plane CanonicalEntity registration automation
+- Control Plane CanonicalEntity registration automation (CP APIs remain source)
 - ERP item projection
 - Provider-backed regulatory resolve (ADR-0021)
 - Lot-level origin / batch eligibility
@@ -58,5 +66,7 @@ Product Exists ≠ Listed ≠ Offered ≠ Qualified ≠ Importable ≠ Exportabl
   a second product catalogue.
 - Regulatory `INELIGIBLE` can coexist with commercial `ACTIVE` (fail closed in
   sellability helper).
+- Estates and storefronts can query market-sellable product ids without treating
+  Medusa publication alone as market eligibility.
 - Future ZB-07+ consumption must call the sellability composition, not assume
   profile existence equals tradeable.

@@ -56,4 +56,10 @@ describe("product-assortment-policy", () => {
     expect(isKnownTradeUom("LITRE")).toBe(true)
     expect(isKnownTradeUom("WIDGET")).toBe(false)
   })
+
+  it("supports purchase-constraint UOM codes used for wine and coffee packaging", () => {
+    for (const uom of ["BAG", "CARTON", "BOTTLE", "LITRE", "TONNE", "PALLET"]) {
+      expect(isKnownTradeUom(uom)).toBe(true)
+    }
+  })
 })
