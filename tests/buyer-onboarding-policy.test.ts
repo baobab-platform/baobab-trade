@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   assertBuyerApplicationTransition,
   BuyerOnboardingPolicyError,
+  principalIdFromAuthContext,
   resolveBuyerTenantId,
 } from "../src/baobab/b2b/onboarding-policy"
 
@@ -47,5 +48,21 @@ describe("Gate ZB-04 buyer onboarding policy", () => {
     expect(() => resolveBuyerTenantId({})).toThrowError(
       expect.objectContaining({ code: "TENANT_NOT_CONFIGURED" }),
     )
+  })
+
+  it("keeps canonical Principal and Medusa customer identities distinct", () => {
+    expect(
+      principalIdFromAuthContext({
+        actor_id: "cus_1",
+        app_metadata: { baobab_principal_id: "prn_1" },
+      }),
+    ).toBe("prn_1")
+    expect(principalIdFromAuthContext({ actor_id: "cus_1", app_metadata: {} })).toBeNull()
+    expect(() =>
+      principalIdFromAuthContext({
+        actor_id: "cus_1",
+        app_metadata: { baobab_principal_id: "cus_1" },
+      }),
+    ).toThrowError(expect.objectContaining({ code: "INVALID_IDENTITY_MAPPING" }))
   })
 })
