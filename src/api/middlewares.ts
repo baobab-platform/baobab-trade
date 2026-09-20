@@ -45,6 +45,21 @@ export default defineMiddlewares({
       middlewares: [authenticate("customer", ["session", "bearer"])],
     },
     {
+      matcher: "/admin/b2b/applications",
+      methods: ["GET"],
+      middlewares: [authenticate("user", ["session", "bearer"])],
+    },
+    {
+      matcher: "/admin/b2b/applications/:id",
+      methods: ["GET"],
+      middlewares: [authenticate("user", ["session", "bearer"])],
+    },
+    {
+      matcher: "/admin/b2b/applications/:id/review",
+      methods: ["POST"],
+      middlewares: [authenticate("user", ["session", "bearer"])],
+    },
+    {
       matcher: "/admin/b2b/organisations",
       methods: ["GET"],
       middlewares: [authenticate("user", ["session", "bearer"])],
