@@ -3,6 +3,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { MedusaError } from "@medusajs/framework/utils"
 import {
   CANONICAL_ORGANISATION_VERIFIER,
+  getCanonicalOrganisationVerifier,
   type CanonicalOrganisationVerifier,
 } from "../../../../../../baobab/b2b/canonical-organisation-verifier"
 import {
@@ -165,12 +166,15 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
         "applicant canonical Principal mapping is required before approval",
       )
     }
-    let verifier: CanonicalOrganisationVerifier
+    let verifier: CanonicalOrganisationVerifier | null = null
     try {
       verifier = req.scope.resolve<CanonicalOrganisationVerifier>(
         CANONICAL_ORGANISATION_VERIFIER,
       )
     } catch {
+      verifier = getCanonicalOrganisationVerifier()
+    }
+    if (!verifier) {
       throw new MedusaError(
         MedusaError.Types.NOT_ALLOWED,
         "canonical organisation verification is not configured",
