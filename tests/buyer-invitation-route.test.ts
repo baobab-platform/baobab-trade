@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { Modules } from "@medusajs/framework/utils"
 import { POST as acceptInvitation } from "../src/api/store/b2b/invitations/accept/route"
-import { POST as inviteMember } from "../src/api/store/b2b/organisations/[id]/members/route"
+import { GET as listMembers, POST as inviteMember } from "../src/api/store/b2b/organisations/[id]/members/route"
 import { B2B_MODULE } from "../src/modules/b2b"
 
 const originalPublicUrl = process.env.ZURIBEANS_PUBLIC_URL
@@ -28,6 +28,48 @@ const response = () => {
 }
 
 describe("buyer organisation invitations", () => {
+  it("lists members without evaluating invitation-only request fields", async () => {
+    const b2b = {
+      listBuyerMemberships: vi
+        .fn()
+        .mockResolvedValueOnce([{ id: "b2bmem_admin", status: "ACTIVE" }])
+        .mockResolvedValueOnce([
+          {
+            id: "b2bmem_invited",
+            customer_id: null,
+            principal_id: null,
+            status: "INVITED",
+            invited_email: "buyer@example.com",
+            invitation_accepted_at: null,
+          },
+        ]),
+      listBuyerRoles: vi.fn(async () => [
+        { membership_id: "b2bmem_invited", role: "BUYER" },
+      ]),
+    }
+    const req = {
+      auth_context: { actor_id: "cus_admin" },
+      params: { id: "b2borg_1" },
+      scope: { resolve: () => b2b },
+    }
+    const res = response()
+
+    await listMembers(req as never, res as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toEqual({
+      organisation_id: "b2borg_1",
+      members: [
+        expect.objectContaining({
+          customer_id: null,
+          principal_id: null,
+          status: "INVITED",
+          roles: ["BUYER"],
+        }),
+      ],
+    })
+  })
+
   it("requires an independently mapped canonical Principal before acceptance", async () => {
     const service = { listBuyerMemberships: vi.fn() }
     const req = {
