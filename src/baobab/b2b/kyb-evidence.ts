@@ -33,7 +33,12 @@ export const assertVerifiedBuyerKybPackage = async (
     tenant_id: tenantId,
     status: "VERIFIED",
   })
-  const verified = new Set(evidence.map((item) => item.evidence_type))
+  const now = Date.now()
+  const verified = new Set(
+    evidence
+      .filter((item) => !item.expires_at || new Date(item.expires_at).valueOf() > now)
+      .map((item) => item.evidence_type),
+  )
   const missing = REQUIRED_BUYER_KYB_EVIDENCE.filter((type) => !verified.has(type))
   if (missing.length) {
     throw new MedusaError(
