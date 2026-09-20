@@ -80,7 +80,8 @@
     "test:watch": "vitest",
     "verify:core-modules": "medusa exec ./src/scripts/verify-core-modules.ts",
     "verify:infrastructure": "medusa exec ./src/scripts/verify-infrastructure.ts",
-    "verify:observability": "medusa exec ./src/scripts/verify-observability.ts"
+    "verify:observability": "medusa exec ./src/scripts/verify-observability.ts",
+    "test:zb04": "vitest run tests/buyer-application-route.test.ts tests/buyer-application-staff-review.test.ts tests/buyer-kyb-evidence.test.ts tests/buyer-admission-decision.test.ts tests/buyer-erp-projection-request.test.ts tests/buyer-commercial-profile-consumer.test.ts tests/buyer-organisation-status-route.test.ts tests/buyer-invitation-route.test.ts tests/buyer-invitation-lifecycle.test.ts tests/zb04-certification.test.ts"
   },
   "dependencies": {
     "@medusajs/auth-oidc": "2.20.1",
