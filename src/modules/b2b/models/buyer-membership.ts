@@ -6,8 +6,8 @@ const BuyerMembership = model
     {
       id: model.id({ prefix: "b2bmem" }).primaryKey(),
       organisation_id: model.text().index(),
-      customer_id: model.text().index(),
-      principal_id: model.text().index(),
+      customer_id: model.text().index().nullable(),
+      principal_id: model.text().index().nullable(),
       status: model.enum(["INVITED", "ACTIVE", "SUSPENDED", "REVOKED"]).default("INVITED"),
       invited_email: model.text().nullable(),
       invitation_token_hash: model.text().unique().nullable(),
