@@ -9,6 +9,8 @@ const BuyerInvitationDelivery = model
       attempt_number: model.number(),
       status: model.enum(["PENDING", "QUEUED", "FAILED"]),
       requested_by_principal_id: model.text().index(),
+      idempotency_key: model.text().unique(),
+      request_hash: model.text(),
       provider_message_id: model.text().nullable(),
       error_code: model.text().nullable(),
       attempted_at: model.dateTime(),
