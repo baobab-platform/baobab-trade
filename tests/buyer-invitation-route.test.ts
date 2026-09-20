@@ -108,6 +108,8 @@ describe("buyer organisation invitations", () => {
       createBuyerRoles: vi.fn(async (input) => ({ id: "b2brole_1", ...input })),
       deleteBuyerRoles: vi.fn(),
       deleteBuyerMemberships: vi.fn(),
+      createBuyerInvitationDeliveries: vi.fn(async (input) => ({ id: "b2binvdel_1", ...input })),
+      updateBuyerInvitationDeliveries: vi.fn(async () => ({})),
     }
     const notification = { createNotifications: vi.fn(async () => ({})) }
     const req = {
@@ -166,6 +168,8 @@ describe("buyer organisation invitations", () => {
       createBuyerRoles: vi.fn(async () => ({ id: "b2brole_1" })),
       deleteBuyerRoles,
       deleteBuyerMemberships,
+      createBuyerInvitationDeliveries: vi.fn(async (input) => ({ id: "b2binvdel_1", ...input })),
+      updateBuyerInvitationDeliveries: vi.fn(async () => ({})),
     }
     const req = {
       auth_context: {
@@ -186,7 +190,37 @@ describe("buyer organisation invitations", () => {
     await expect(inviteMember(req as never, response() as never)).rejects.toThrow(
       "delivery failed",
     )
-    expect(deleteBuyerRoles).toHaveBeenCalledWith("b2brole_1")
-    expect(deleteBuyerMemberships).toHaveBeenCalledWith("b2bmem_invite")
+    expect(b2b.updateBuyerInvitationDeliveries).toHaveBeenCalledWith("b2binvdel_1", {
+      status: "FAILED",
+      error_code: "NOTIFICATION_PROVIDER_ERROR",
+    })
+    expect(deleteBuyerRoles).not.toHaveBeenCalled()
+    expect(deleteBuyerMemberships).not.toHaveBeenCalled()
   })
+  it("binds acceptance to the authenticated customer email", async () => {
+    const b2b = {
+      listBuyerMemberships: vi.fn(async () => [{
+        id: "b2bmem_invite",
+        organisation_id: "b2borg_1",
+        invited_email: "invited@example.com",
+        invitation_expires_at: new Date(Date.now() + 60_000),
+        status: "INVITED",
+      }]),
+    }
+    const customer = { retrieveCustomer: vi.fn(async () => ({ email: "attacker@example.com" })) }
+    const req = {
+      auth_context: {
+        actor_id: "cus_attacker",
+        app_metadata: { baobab_principal_id: "prn_attacker" },
+      },
+      body: { invitation_token: "secret" },
+      scope: {
+        resolve: (key: string) => key === B2B_MODULE ? b2b : key === Modules.CUSTOMER ? customer : null,
+      },
+    }
+    await expect(acceptInvitation(req as never, response() as never)).rejects.toThrow(
+      "invitation is invalid or already used",
+    )
+  })
+
 })

@@ -7,6 +7,7 @@ import BuyerApplicationEvidenceDecision from "./models/buyer-application-evidenc
 import BuyerApplicationReviewAction from "./models/buyer-application-review-action"
 import B2BOrganisation from "./models/b2b-organisation"
 import BuyerMembership from "./models/buyer-membership"
+import BuyerInvitationDelivery from "./models/buyer-invitation-delivery"
 import BuyerRole from "./models/buyer-role"
 import CommercialTerms from "./models/commercial-terms"
 import CreditTerms from "./models/credit-terms"
@@ -30,6 +31,7 @@ class B2BModuleService extends MedusaService({
   BuyerApplicationReviewAction,
   B2BOrganisation,
   BuyerMembership,
+  BuyerInvitationDelivery,
   BuyerRole,
   CommercialTerms,
   ContractPrice,
