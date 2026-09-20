@@ -12,6 +12,8 @@ export type RawPlatformContextResolutionResponse = {
   tenant_id: string
   resolved_at: string
   expires_at?: string | null
+  organisation_id?: string
+  organisation_type?: string
 }
 
 const isNonEmptyString = (value: unknown): value is string =>
@@ -22,5 +24,7 @@ export const isValidPlatformContextResolutionResponse = (
 ): candidate is RawPlatformContextResolutionResponse => {
   if (typeof candidate !== "object" || candidate === null) return false
   const value = candidate as Partial<RawPlatformContextResolutionResponse>
-  return isNonEmptyString(value.context_id) && isNonEmptyString(value.tenant_id)
+  return isNonEmptyString(value.context_id) && isNonEmptyString(value.tenant_id) &&
+    (value.organisation_id === undefined || isNonEmptyString(value.organisation_id)) &&
+    (value.organisation_type === undefined || isNonEmptyString(value.organisation_type))
 }
