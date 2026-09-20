@@ -49,6 +49,9 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   }
 
   const organisationId = req.params.id
+  const requestHash = createHash("sha256")
+    .update(JSON.stringify({ organisation_id: organisationId, email, role }))
+    .digest("hex")
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   const callerMemberships = await b2b.listBuyerMemberships({
     organisation_id: organisationId,
@@ -141,20 +144,36 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
     )
   }
 
+  const replay = await b2b.listBuyerMemberships({
+    invitation_idempotency_key: idempotencyKey,
+  })
+  if (replay.length > 0) {
+    if (replay[0].invitation_request_hash !== requestHash) {
+      throw new MedusaError(
+        MedusaError.Types.DUPLICATE_ERROR,
+        "Idempotency-Key was already used for a different invitation",
+      )
+    }
+    res.status(200).json({
+      membership: {
+        id: replay[0].id,
+        status: replay[0].status,
+        invited_email: replay[0].invited_email,
+      },
+      delivery_status: "ALREADY_REQUESTED",
+    })
+    return
+  }
+
   const existing = await b2b.listBuyerMemberships({
     organisation_id: organisationId,
     invited_email: email,
   })
   if (existing.length > 0) {
-    res.status(200).json({
-      membership: {
-        id: existing[0].id,
-        status: existing[0].status,
-        invited_email: existing[0].invited_email,
-      },
-      delivery_status: "ALREADY_REQUESTED",
-    })
-    return
+    throw new MedusaError(
+      MedusaError.Types.DUPLICATE_ERROR,
+      "that email already has a membership or invitation for this organisation",
+    )
   }
 
   const token = randomBytes(32).toString("base64url")
@@ -167,6 +186,8 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
     status: "INVITED",
     invited_email: email,
     invitation_token_hash: tokenHash,
+    invitation_idempotency_key: idempotencyKey,
+    invitation_request_hash: requestHash,
     invitation_expires_at: expiresAt,
     invitation_accepted_at: null,
     effective_from: null,
