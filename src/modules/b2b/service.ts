@@ -1,5 +1,7 @@
 import { MedusaService } from "@medusajs/framework/utils"
 import ApprovalPolicy from "./models/approval-policy"
+import BuyerApplication from "./models/buyer-application"
+import BuyerApplicationDecision from "./models/buyer-application-decision"
 import B2BOrganisation from "./models/b2b-organisation"
 import BuyerMembership from "./models/buyer-membership"
 import BuyerRole from "./models/buyer-role"
@@ -18,6 +20,8 @@ import TaxRegistration from "./models/tax-registration"
 
 class B2BModuleService extends MedusaService({
   ApprovalPolicy,
+  BuyerApplication,
+  BuyerApplicationDecision,
   B2BOrganisation,
   BuyerMembership,
   BuyerRole,
