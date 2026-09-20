@@ -24,6 +24,16 @@ export default defineMiddlewares({
       middlewares: [authenticate("customer", ["session", "bearer"])],
     },
     {
+      matcher: "/store/b2b/organisations/:id/tax-registrations",
+      methods: ["GET", "POST"],
+      middlewares: [authenticate("customer", ["session", "bearer"])],
+    },
+    {
+      matcher: "/store/b2b/invitations/accept",
+      methods: ["POST"],
+      middlewares: [authenticate("customer", ["session", "bearer"])],
+    },
+    {
       matcher: "/store/b2b/capabilities",
       methods: ["GET"],
       middlewares: [authenticate("customer", ["session", "bearer"])],
