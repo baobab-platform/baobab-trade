@@ -60,6 +60,11 @@ export default defineMiddlewares({
       middlewares: [authenticate("user", ["session", "bearer"])],
     },
     {
+      matcher: "/admin/b2b/applications/:id/decision",
+      methods: ["POST"],
+      middlewares: [authenticate("user", ["session", "bearer"])],
+    },
+    {
       matcher: "/admin/b2b/organisations",
       methods: ["GET"],
       middlewares: [authenticate("user", ["session", "bearer"])],
