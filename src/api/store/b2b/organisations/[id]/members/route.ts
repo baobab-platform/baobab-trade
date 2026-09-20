@@ -214,6 +214,8 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
       attempt_number: 1,
       status: "PENDING",
       requested_by_principal_id: inviterPrincipalId,
+      idempotency_key: `buyer-invitation-delivery:${membership.id}:1`,
+      request_hash: requestHash,
       provider_message_id: null,
       error_code: null,
       attempted_at: new Date(),
