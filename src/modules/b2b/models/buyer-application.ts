@@ -8,6 +8,8 @@ const BuyerApplication = model
       tenant_id: model.text().index(),
       applicant_customer_id: model.text().index(),
       applicant_principal_id: model.text().index().nullable(),
+      idempotency_key: model.text().unique(),
+      request_hash: model.text(),
       legal_name: model.text(),
       trading_name: model.text().nullable(),
       registration_number: model.text().nullable(),
