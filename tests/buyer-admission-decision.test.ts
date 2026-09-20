@@ -121,7 +121,7 @@ describe("ZB-04 admission decision", () => {
     expect(b2b.createB2BOrganisations).toHaveBeenCalledWith(
       expect.objectContaining({
         tenant_id: "tn_zuribeans",
-        status: "ACTIVE",
+        status: "PENDING",
         canonical_organisation_id: "canorg_1",
       }),
     )
@@ -154,7 +154,7 @@ describe("ZB-04 admission decision", () => {
             buyer_organisation_id: "b2borg_1",
             canonical_organisation_id: "canorg_1",
             source_application_id: "b2bapp_1",
-            status: "ACTIVE",
+            status: "PENDING",
           }),
         }),
       }),
