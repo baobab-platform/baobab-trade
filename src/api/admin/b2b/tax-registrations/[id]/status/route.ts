@@ -26,20 +26,10 @@ const isTaxStatus = (value: unknown): value is TaxStatus =>
 
 export const POST = async (req: AuthenticatedMedusaRequest<StatusBody>, res: MedusaResponse) => {
   const nextStatus = req.body?.status
-  if (!isTaxStatus(nextStatus) || nextStatus === "PENDING") {
-    // PENDING is only reachable from REJECTED/EXPIRED via the ALLOWED map when
-    // staff explicitly re-open — callers use REJECTED|VERIFIED|EXPIRED primarily.
-    if (nextStatus !== "PENDING") {
-      throw new MedusaError(
-        MedusaError.Types.INVALID_DATA,
-        "status must be VERIFIED, REJECTED, EXPIRED, or PENDING",
-      )
-    }
-  }
   if (!isTaxStatus(nextStatus)) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
-      "status must be VERIFIED, REJECTED, EXPIRED, or PENDING",
+      "status must be PENDING, VERIFIED, REJECTED, or EXPIRED",
     )
   }
 
