@@ -11,6 +11,8 @@ const BuyerMembership = model
       status: model.enum(["INVITED", "ACTIVE", "SUSPENDED", "REVOKED"]).default("INVITED"),
       invited_email: model.text().nullable(),
       invitation_token_hash: model.text().unique().nullable(),
+      invitation_idempotency_key: model.text().unique().nullable(),
+      invitation_request_hash: model.text().nullable(),
       invitation_expires_at: model.dateTime().nullable(),
       invitation_accepted_at: model.dateTime().nullable(),
       effective_from: model.dateTime().nullable(),
