@@ -1,8 +1,7 @@
 // Gate ZB-04 — Buyer Onboarding (apply).
 // Creates a Trade-owned b2b_organisation in PENDING status and an ACTIVE
-// membership for the authenticated Medusa customer. Does not activate trading
-// capabilities (see GET /store/b2b/context and assertActiveBuyerContext).
-// canonical_organisation_id stays null until CP linkage (admin canonical-link).
+// membership for the authenticated Medusa customer. Assigns ACCOUNT_ADMIN
+// so the applicant can manage the account after activation.
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
 import { B2B_MODULE } from "../../../../../modules/b2b"
@@ -36,8 +35,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
   const tradingName = asOptionalString(req.body?.trading_name)
   const registrationNumber = asOptionalString(req.body?.registration_number)
   const defaultMarketKey = asOptionalString(req.body?.default_market_key)
-  // Tenant is platform context; until CP always supplies it on the request,
-  // accept an explicit body value or the deployment default for ZuriBeans.
   const tenantId =
     asOptionalString(req.body?.tenant_id) ||
     process.env.BAOBAB_DEFAULT_TENANT_ID ||
@@ -79,6 +76,12 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
     effective_until: null,
   })
 
+  const role = await b2b.createBuyerRoles({
+    membership_id: membership.id,
+    role: "ACCOUNT_ADMIN",
+    assigned_by_principal_id: customerId,
+  })
+
   res.status(201).json({
     organisation: {
       id: organisation.id,
@@ -95,5 +98,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
       status: membership.status,
       customer_id: membership.customer_id,
     },
+    roles: [role.role],
   })
 }

@@ -19,9 +19,19 @@ export default defineMiddlewares({
       middlewares: [authenticate("customer", ["session", "bearer"])],
     },
     {
+      matcher: "/store/b2b/organisations/:id/members",
+      methods: ["GET"],
+      middlewares: [authenticate("customer", ["session", "bearer"])],
+    },
+    {
       matcher: "/store/b2b/capabilities",
       methods: ["GET"],
       middlewares: [authenticate("customer", ["session", "bearer"])],
+    },
+    {
+      matcher: "/admin/b2b/organisations",
+      methods: ["GET"],
+      middlewares: [authenticate("user", ["session", "bearer"])],
     },
     {
       matcher: "/admin/b2b/organisations/:id/canonical-link",
