@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { getBaobabTradeEnvironment } from "../config/environment"
 import { HttpControlPlaneClient, type ControlPlaneClient } from "../control-plane/client"
 import {
@@ -36,7 +37,7 @@ export class ControlPlaneCanonicalOrganisationVerifier
     expectedKind: "BUYER_ORGANISATION"
   }): Promise<CanonicalOrganisationVerification> {
     const accessToken = await this.tokenProvider.getAccessToken()
-    const correlationId = crypto.randomUUID()
+    const correlationId = randomUUID()
     const attestation = await this.controlPlaneClient.resolvePlatformContext(
       input.tenantId,
       input.canonicalOrganisationId,
