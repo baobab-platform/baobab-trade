@@ -9,8 +9,11 @@ const BuyerApplicationDecision = model
       decision: model.enum(["APPROVED", "REJECTED"]),
       decided_by_principal_id: model.text().index(),
       decision_reference: model.text().unique(),
-      reason_code: model.text().nullable(),
+      reason_code: model.text(),
       canonical_organisation_id: model.text().nullable(),
+      buyer_organisation_id: model.text().nullable(),
+      idempotency_key: model.text().unique(),
+      request_hash: model.text(),
       decided_at: model.dateTime(),
     },
   )
