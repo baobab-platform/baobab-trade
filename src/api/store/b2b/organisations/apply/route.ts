@@ -1,9 +1,13 @@
-// Gate ZB-04 — Buyer Onboarding (apply).
-// Creates a Trade-owned b2b_organisation in PENDING status and an ACTIVE
-// membership for the authenticated Medusa customer. Assigns ACCOUNT_ADMIN
-// so the applicant can manage the account after activation.
+// Gate ZB-04 buyer application boundary.
+//
+// This route creates a Trade-owned application, not an approved organisation,
+// membership or role. Tenant identity is server configuration, never request
+// input. IAM authentication establishes the Medusa customer only; canonical
+// Principal linkage remains nullable until the authoritative mapping exists.
+import { createHash } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
+import { resolveBuyerTenantId } from "../../../../../baobab/b2b/onboarding-policy"
 import { B2B_MODULE } from "../../../../../modules/b2b"
 import type B2BModuleService from "../../../../../modules/b2b/service"
 
@@ -11,15 +15,33 @@ type ApplyBody = {
   legal_name?: unknown
   trading_name?: unknown
   registration_number?: unknown
-  tenant_id?: unknown
-  default_market_key?: unknown
+  country_of_registration?: unknown
+  website?: unknown
+  requested_market_keys?: unknown
 }
 
-const asOptionalString = (value: unknown): string | null => {
+const optionalString = (value: unknown, maximum = 200): string | null => {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
+  if (!trimmed) return null
+  if (trimmed.length > maximum) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "a submitted field is too long")
+  }
+  return trimmed
 }
+
+const applicationView = (application: Record<string, unknown>) => ({
+  id: application.id,
+  status: application.status,
+  legal_name: application.legal_name,
+  trading_name: application.trading_name,
+  registration_number: application.registration_number,
+  country_of_registration: application.country_of_registration,
+  website: application.website,
+  requested_market_keys: application.requested_market_keys,
+  submitted_at: application.submitted_at,
+  revision: application.revision,
+})
 
 export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: MedusaResponse) => {
   const customerId = req.auth_context.actor_id
@@ -27,77 +49,84 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
     throw new MedusaError(MedusaError.Types.UNAUTHORIZED, "customer authentication is required")
   }
 
-  const legalName = asOptionalString(req.body?.legal_name)
+  const idempotencyKey = req.headers["idempotency-key"]?.toString().trim()
+  if (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 128) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Idempotency-Key must contain between 16 and 128 characters",
+    )
+  }
+
+  const legalName = optionalString(req.body?.legal_name)
   if (!legalName) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "legal_name is required")
   }
 
-  const tradingName = asOptionalString(req.body?.trading_name)
-  const registrationNumber = asOptionalString(req.body?.registration_number)
-  const defaultMarketKey = asOptionalString(req.body?.default_market_key)
-  const tenantId =
-    asOptionalString(req.body?.tenant_id) ||
-    process.env.BAOBAB_DEFAULT_TENANT_ID ||
-    "zuribeans"
-
-  const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
-
-  const existingMemberships = await b2b.listBuyerMemberships({
-    customer_id: customerId,
-  })
-  if (existingMemberships.length > 0) {
+  const country = optionalString(req.body?.country_of_registration, 2)
+  if (country && !/^[A-Za-z]{2}$/.test(country)) {
     throw new MedusaError(
-      MedusaError.Types.DUPLICATE_ERROR,
-      "this customer already has a buyer organisation membership",
+      MedusaError.Types.INVALID_DATA,
+      "country_of_registration must be an ISO 3166-1 alpha-2 code",
     )
   }
 
-  const organisation = await b2b.createB2BOrganisations({
-    tenant_id: tenantId,
+  const requestedMarkets = Array.isArray(req.body?.requested_market_keys)
+    ? [...new Set(req.body.requested_market_keys.map((v) => optionalString(v, 64)).filter(Boolean))]
+    : []
+
+  const input = {
     legal_name: legalName,
-    trading_name: tradingName,
-    registration_number: registrationNumber,
-    status: "PENDING",
-    canonical_organisation_id: null,
-    erp_business_partner_id: null,
-    default_market_key: defaultMarketKey,
-  })
+    trading_name: optionalString(req.body?.trading_name),
+    registration_number: optionalString(req.body?.registration_number, 128),
+    country_of_registration: country?.toUpperCase() ?? null,
+    website: optionalString(req.body?.website, 2048),
+    requested_market_keys: requestedMarkets,
+  }
+  const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex")
+  const tenantId = resolveBuyerTenantId()
+  const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
 
-  const membership = await b2b.createBuyerMemberships({
-    organisation_id: organisation.id,
-    customer_id: customerId,
-    principal_id: customerId,
-    status: "ACTIVE",
-    invited_email: null,
-    invitation_token_hash: null,
-    invitation_expires_at: null,
-    invitation_accepted_at: new Date(),
-    effective_from: new Date(),
-    effective_until: null,
+  const replay = await b2b.listBuyerApplications({
+    tenant_id: tenantId,
+    idempotency_key: idempotencyKey,
   })
+  if (replay.length > 0) {
+    if (replay[0].request_hash !== requestHash) {
+      throw new MedusaError(
+        MedusaError.Types.CONFLICT,
+        "Idempotency-Key was already used for a different buyer application",
+      )
+    }
+    res.status(200).json({ application: applicationView(replay[0] as unknown as Record<string, unknown>) })
+    return
+  }
 
-  const role = await b2b.createBuyerRoles({
-    membership_id: membership.id,
-    role: "ACCOUNT_ADMIN",
-    assigned_by_principal_id: customerId,
+  const open = await b2b.listBuyerApplications({
+    tenant_id: tenantId,
+    applicant_customer_id: customerId,
+    status: ["DRAFT", "SUBMITTED", "INFORMATION_REQUIRED", "UNDER_REVIEW"],
+  })
+  if (open.length > 0) {
+    throw new MedusaError(
+      MedusaError.Types.DUPLICATE_ERROR,
+      "this customer already has an open buyer application",
+    )
+  }
+
+  const application = await b2b.createBuyerApplications({
+    tenant_id: tenantId,
+    applicant_customer_id: customerId,
+    applicant_principal_id: null,
+    idempotency_key: idempotencyKey,
+    request_hash: requestHash,
+    ...input,
+    status: "SUBMITTED",
+    revision: 1,
+    submitted_at: new Date(),
+    assigned_reviewer_principal_id: null,
   })
 
   res.status(201).json({
-    organisation: {
-      id: organisation.id,
-      legal_name: organisation.legal_name,
-      trading_name: organisation.trading_name,
-      registration_number: organisation.registration_number,
-      status: organisation.status,
-      tenant_id: organisation.tenant_id,
-      default_market_key: organisation.default_market_key,
-      canonical_organisation_id: organisation.canonical_organisation_id,
-    },
-    membership: {
-      id: membership.id,
-      status: membership.status,
-      customer_id: membership.customer_id,
-    },
-    roles: [role.role],
+    application: applicationView(application as unknown as Record<string, unknown>),
   })
 }
