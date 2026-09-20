@@ -20,7 +20,7 @@ export default defineMiddlewares({
     },
     {
       matcher: "/store/b2b/organisations/:id/members",
-      methods: ["GET"],
+      methods: ["GET", "POST"],
       middlewares: [authenticate("customer", ["session", "bearer"])],
     },
     {
@@ -30,6 +30,11 @@ export default defineMiddlewares({
     },
     {
       matcher: "/admin/b2b/organisations",
+      methods: ["GET"],
+      middlewares: [authenticate("user", ["session", "bearer"])],
+    },
+    {
+      matcher: "/admin/b2b/organisations/:id",
       methods: ["GET"],
       middlewares: [authenticate("user", ["session", "bearer"])],
     },
