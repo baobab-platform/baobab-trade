@@ -80,6 +80,11 @@ export default defineMiddlewares({
       middlewares: [authenticate("user", ["session", "bearer"])],
     },
     {
+      matcher: "/admin/b2b/organisations/:id/erp-projection",
+      methods: ["POST"],
+      middlewares: [authenticate("user", ["session", "bearer"])],
+    },
+    {
       matcher: "/admin/b2b/organisations/:id/status",
       methods: ["POST"],
       middlewares: [authenticate("user", ["session", "bearer"])],
