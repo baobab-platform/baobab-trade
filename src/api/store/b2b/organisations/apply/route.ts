@@ -93,7 +93,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
   if (replay.length > 0) {
     if (replay[0].request_hash !== requestHash) {
       throw new MedusaError(
-        MedusaError.Types.CONFLICT,
+        MedusaError.Types.DUPLICATE_ERROR,
         "Idempotency-Key was already used for a different buyer application",
       )
     }
