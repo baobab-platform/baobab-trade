@@ -2,12 +2,15 @@
 //
 // This route creates a Trade-owned application, not an approved organisation,
 // membership or role. Tenant identity is server configuration, never request
-// input. IAM authentication establishes the Medusa customer only; canonical
-// Principal linkage remains nullable until the authoritative mapping exists.
+// input. IAM authentication establishes the Medusa customer; the independently
+// mapped canonical Principal is recorded when IAM supplies it.
 import { createHash } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
-import { resolveBuyerTenantId } from "../../../../../baobab/b2b/onboarding-policy"
+import {
+  principalIdFromAuthContext,
+  resolveBuyerTenantId,
+} from "../../../../../baobab/b2b/onboarding-policy"
 import { B2B_MODULE } from "../../../../../modules/b2b"
 import type B2BModuleService from "../../../../../modules/b2b/service"
 
@@ -48,6 +51,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
   if (!customerId) {
     throw new MedusaError(MedusaError.Types.UNAUTHORIZED, "customer authentication is required")
   }
+  const principalId = principalIdFromAuthContext(req.auth_context)
 
   const idempotencyKey = req.headers["idempotency-key"]?.toString().trim()
   if (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 128) {
@@ -116,7 +120,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
   const application = await b2b.createBuyerApplications({
     tenant_id: tenantId,
     applicant_customer_id: customerId,
-    applicant_principal_id: null,
+    applicant_principal_id: principalId,
     idempotency_key: idempotencyKey,
     request_hash: requestHash,
     ...input,
