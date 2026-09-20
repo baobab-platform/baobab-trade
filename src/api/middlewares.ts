@@ -35,6 +35,16 @@ export default defineMiddlewares({
       middlewares: [authenticate("customer", ["session", "bearer"])],
     },
     {
+      matcher: "/store/b2b/organisations/:id/members/:membershipId/resend",
+      methods: ["POST"],
+      middlewares: [authenticate("customer", ["session", "bearer"])],
+    },
+    {
+      matcher: "/store/b2b/organisations/:id/members/:membershipId/revoke",
+      methods: ["POST"],
+      middlewares: [authenticate("customer", ["session", "bearer"])],
+    },
+    {
       matcher: "/store/b2b/invitations/accept",
       methods: ["POST"],
       middlewares: [authenticate("customer", ["session", "bearer"])],

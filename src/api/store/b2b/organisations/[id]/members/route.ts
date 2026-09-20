@@ -207,9 +207,26 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
     throw error
   }
 
+  let delivery: { id: string }
+  try {
+    delivery = await b2b.createBuyerInvitationDeliveries({
+      membership_id: membership.id,
+      attempt_number: 1,
+      status: "PENDING",
+      requested_by_principal_id: inviterPrincipalId,
+      provider_message_id: null,
+      error_code: null,
+      attempted_at: new Date(),
+    })
+  } catch (error) {
+    await b2b.deleteBuyerRoles(assignedRole.id)
+    await b2b.deleteBuyerMemberships(membership.id)
+    throw error
+  }
+
   try {
     const notification = req.scope.resolve<NotificationService>(Modules.NOTIFICATION)
-    await notification.createNotifications({
+    const deliveryResult = await notification.createNotifications({
       to: email,
       channel: "email",
       template,
@@ -219,9 +236,19 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
         expires_at: expiresAt.toISOString(),
       },
     })
+    const providerId =
+      deliveryResult && typeof deliveryResult === "object" && "id" in deliveryResult
+        ? String(deliveryResult.id)
+        : null
+    await b2b.updateBuyerInvitationDeliveries(delivery.id, {
+      status: "QUEUED",
+      provider_message_id: providerId,
+    })
   } catch (error) {
-    await b2b.deleteBuyerRoles(assignedRole.id)
-    await b2b.deleteBuyerMemberships(membership.id)
+    await b2b.updateBuyerInvitationDeliveries(delivery.id, {
+      status: "FAILED",
+      error_code: "NOTIFICATION_PROVIDER_ERROR",
+    }).catch(() => undefined)
     throw error
   }
 

@@ -3,7 +3,7 @@
 // Customer and canonical Principal identifiers remain distinct.
 import { createHash } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { MedusaError } from "@medusajs/framework/utils"
+import { MedusaError, Modules } from "@medusajs/framework/utils"
 import { principalIdFromAuthContext } from "../../../../../baobab/b2b/onboarding-policy"
 import { B2B_MODULE } from "../../../../../modules/b2b"
 import type B2BModuleService from "../../../../../modules/b2b/service"
@@ -41,6 +41,18 @@ export const POST = async (req: AuthenticatedMedusaRequest<AcceptBody>, res: Med
     throw new MedusaError(MedusaError.Types.NOT_FOUND, "invitation is invalid or already used")
   }
   const membership = matches[0]
+
+  const customerService = req.scope.resolve<{ retrieveCustomer(id: string): Promise<{ email?: string | null }> }>(
+    Modules.CUSTOMER,
+  )
+  const customer = await customerService.retrieveCustomer(customerId)
+  if (
+    !customer.email ||
+    !membership.invited_email ||
+    customer.email.trim().toLowerCase() !== membership.invited_email.trim().toLowerCase()
+  ) {
+    throw new MedusaError(MedusaError.Types.NOT_FOUND, "invitation is invalid or already used")
+  }
 
   if (membership.invitation_expires_at && new Date(membership.invitation_expires_at) < new Date()) {
     throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "invitation has expired")
