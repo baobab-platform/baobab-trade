@@ -49,9 +49,6 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   }
 
   const organisationId = req.params.id
-  const requestHash = createHash("sha256")
-    .update(JSON.stringify({ organisation_id: organisationId, email, role }))
-    .digest("hex")
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   const callerMemberships = await b2b.listBuyerMemberships({
     organisation_id: organisationId,
@@ -119,6 +116,11 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
     )
   }
 
+  const organisationId = req.params.id
+  const requestHash = createHash("sha256")
+    .update(JSON.stringify({ organisation_id: organisationId, email, role }))
+    .digest("hex")
+
   const publicUrl = process.env.ZURIBEANS_PUBLIC_URL?.replace(/\/$/, "")
   const template = process.env.BAOBAB_BUYER_INVITATION_TEMPLATE?.trim()
   if (!publicUrl || !template) {
@@ -128,7 +130,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
     )
   }
 
-  const organisationId = req.params.id
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   const organisation = await b2b.retrieveB2BOrganisation(organisationId)
   if (organisation.status !== "ACTIVE") {
