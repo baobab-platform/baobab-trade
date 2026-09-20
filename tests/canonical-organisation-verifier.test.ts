@@ -68,7 +68,7 @@ describe("ZB-04 Control Plane canonical organisation verifier", () => {
     }
     const verifier = new ControlPlaneCanonicalOrganisationVerifier(
       { getAccessToken: vi.fn(async () => "workload-token") },
-      client,
+      client as never,
     )
 
     const result = await verifier.verify({
