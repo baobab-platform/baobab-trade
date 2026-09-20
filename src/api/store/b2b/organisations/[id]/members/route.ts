@@ -17,6 +17,8 @@ type InviteRole = (typeof INVITE_ROLES)[number]
 const isInviteRole = (value: unknown): value is InviteRole =>
   typeof value === "string" && (INVITE_ROLES as readonly string[]).includes(value)
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 const loadCallerAdminContext = async (
   b2b: B2BModuleService,
   organisationId: string,
@@ -101,8 +103,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "email is required")
   }
   const email = emailRaw.trim().toLowerCase()
-  if (!/^[^
-\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!EMAIL_PATTERN.test(email)) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "email is invalid")
   }
 
@@ -136,7 +137,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
   const token = randomBytes(24).toString("hex")
   const tokenHash = createHash("sha256").update(token).digest("hex")
   const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-  // Placeholder until the invitee registers and accepts; unique per org+email path.
   const pendingCustomerId = `invite:${email}`
 
   const membership = await b2b.createBuyerMemberships({
@@ -166,7 +166,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
       invitation_expires_at: membership.invitation_expires_at,
       roles: [role],
     },
-    // Opaque token for future accept flow / email delivery; not a login credential.
     invitation_token: token,
   })
 }
