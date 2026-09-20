@@ -31,6 +31,10 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
   if (!customerId || !principalId) {
     throw new MedusaError(MedusaError.Types.FORBIDDEN, "canonical organisation administrator is required")
   }
+  const idempotencyKey = req.headers["idempotency-key"]?.toString().trim()
+  if (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 128) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "valid Idempotency-Key is required")
+  }
   const publicUrl = process.env.ZURIBEANS_PUBLIC_URL?.replace(/\/$/, "")
   const template = process.env.BAOBAB_BUYER_INVITATION_TEMPLATE?.trim()
   if (!publicUrl || !template) {
@@ -48,6 +52,22 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
     !membership.invited_email
   ) {
     throw new MedusaError(MedusaError.Types.NOT_FOUND, "active invitation was not found")
+  }
+
+  const requestHash = createHash("sha256")
+    .update(JSON.stringify({ organisation_id: req.params.id, membership_id: membership.id }))
+    .digest("hex")
+  const replay = await b2b.listBuyerInvitationDeliveries({ idempotency_key: idempotencyKey })
+  if (replay.length) {
+    if (replay[0].request_hash !== requestHash) {
+      throw new MedusaError(MedusaError.Types.DUPLICATE_ERROR, "Idempotency-Key payload mismatch")
+    }
+    res.status(200).json({
+      membership_id: membership.id,
+      delivery_status: replay[0].status,
+      attempt_number: replay[0].attempt_number,
+    })
+    return
   }
 
   const deliveries = await b2b.listBuyerInvitationDeliveries(
@@ -68,6 +88,8 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
     attempt_number: attemptNumber,
     status: "PENDING",
     requested_by_principal_id: principalId,
+    idempotency_key: idempotencyKey,
+    request_hash: requestHash,
     provider_message_id: null,
     error_code: null,
     attempted_at: new Date(),
