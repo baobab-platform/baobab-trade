@@ -24,7 +24,14 @@ export const isValidPlatformContextResolutionResponse = (
 ): candidate is RawPlatformContextResolutionResponse => {
   if (typeof candidate !== "object" || candidate === null) return false
   const value = candidate as Partial<RawPlatformContextResolutionResponse>
-  return isNonEmptyString(value.context_id) && isNonEmptyString(value.tenant_id) &&
-    (value.organisation_id === undefined || isNonEmptyString(value.organisation_id)) &&
-    (value.organisation_type === undefined || isNonEmptyString(value.organisation_type))
+  const hasOrganisationId = value.organisation_id !== undefined
+  const hasOrganisationType = value.organisation_type !== undefined
+  return (
+    isNonEmptyString(value.context_id) &&
+    isNonEmptyString(value.tenant_id) &&
+    hasOrganisationId === hasOrganisationType &&
+    (!hasOrganisationId ||
+      (isNonEmptyString(value.organisation_id) &&
+        isNonEmptyString(value.organisation_type)))
+  )
 }
