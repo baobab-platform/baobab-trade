@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "gate": "ZB-04",
+  "status": "IMPLEMENTED_AWAITING_ENVIRONMENT_CERTIFICATION",
+  "authorityChain": [
+    "IAM_PRINCIPAL",
+    "CP_TENANT_AND_CANONICAL_ORGANISATION",
+    "TRADE_APPLICATION_AND_KYB",
+    "ERP_BUSINESS_PARTNER_AND_COMMERCIAL_DECISION",
+    "TRADE_ACTIVATION_AND_MEMBERSHIP"
+  ],
+  "controls": [
+    {
+      "id": "ZB04-01",
+      "name": "Application isolation and idempotency",
+      "evidence": [
+        "tests/buyer-application-route.test.ts",
+        "tests/buyer-application-staff-review.test.ts"
+      ]
+    },
+    {
+      "id": "ZB04-02",
+      "name": "Verified KYB before admission",
+      "evidence": [
+        "tests/buyer-kyb-evidence.test.ts",
+        "tests/buyer-admission-decision.test.ts"
+      ]
+    },
+    {
+      "id": "ZB04-03",
+      "name": "Canonical organisation verification",
+      "evidence": [
+        "tests/canonical-organisation-verifier.test.ts",
+        "tests/buyer-admission-decision.test.ts"
+      ]
+    },
+    {
+      "id": "ZB04-04",
+      "name": "ERP projection and commercial authority",
+      "evidence": [
+        "tests/buyer-erp-projection-request.test.ts",
+        "tests/buyer-commercial-profile-consumer.test.ts"
+      ]
+    },
+    {
+      "id": "ZB04-05",
+      "name": "APPROVED-only buyer activation",
+      "evidence": [
+        "tests/buyer-commercial-profile-consumer.test.ts",
+        "tests/buyer-organisation-status-route.test.ts"
+      ]
+    },
+    {
+      "id": "ZB04-06",
+      "name": "Invitation delivery, acceptance and revocation",
+      "evidence": [
+        "tests/buyer-invitation-route.test.ts",
+        "tests/buyer-invitation-lifecycle.test.ts"
+      ]
+    },
+    {
+      "id": "ZB04-07",
+      "name": "At-least-once event safety",
+      "evidence": [
+        "tests/event-outbox.test.ts",
+        "tests/buyer-commercial-profile-consumer.test.ts"
+      ]
+    },
+    {
+      "id": "ZB04-08",
+      "name": "Pending buyer purchasing denial",
+      "evidence": [
+        "tests/b2b-policy.test.ts",
+        "tests/b2b-threat-model.test.ts"
+      ]
+    }
+  ],
+  "crossRepositoryDependencies": [
+    {
+      "repository": "baobab-platform/shared",
+      "pullRequest": 51,
+      "purpose": "ERP commercial event contracts"
+    },
+    {
+      "repository": "baobab-platform/shared",
+      "pullRequest": 52,
+      "purpose": "KYB evidence decision contract"
+    },
+    {
+      "repository": "baobab-platform/baobab-erp",
+      "pullRequest": 34,
+      "purpose": "buyer projection consumer"
+    },
+    {
+      "repository": "baobab-platform/baobab-erp",
+      "pullRequest": 35,
+      "purpose": "commercial review decision"
+    }
+  ],
+  "productionEvidence": [
+    "real IAM customer and canonical Principal token",
+    "Control Plane-verified BUYER_ORGANISATION",
+    "configured document capability with malware/quarantine evidence",
+    "real notification-provider message receipt",
+    "real iDempiere business-partner projection",
+    "signed ERP commercial-profile event receipt",
+    "database migration evidence on a production-shaped fresh database",
+    "outbox retry and replay evidence",
+    "operator sign-off with correlation IDs and timestamps"
+  ]
+}
