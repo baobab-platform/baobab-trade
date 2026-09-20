@@ -1,6 +1,18 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { Modules } from "@medusajs/framework/utils"
 import { POST as acceptInvitation } from "../src/api/store/b2b/invitations/accept/route"
 import { POST as inviteMember } from "../src/api/store/b2b/organisations/[id]/members/route"
+import { B2B_MODULE } from "../src/modules/b2b"
+
+const originalPublicUrl = process.env.ZURIBEANS_PUBLIC_URL
+const originalTemplate = process.env.BAOBAB_BUYER_INVITATION_TEMPLATE
+afterEach(() => {
+  vi.restoreAllMocks()
+  if (originalPublicUrl === undefined) delete process.env.ZURIBEANS_PUBLIC_URL
+  else process.env.ZURIBEANS_PUBLIC_URL = originalPublicUrl
+  if (originalTemplate === undefined) delete process.env.BAOBAB_BUYER_INVITATION_TEMPLATE
+  else process.env.BAOBAB_BUYER_INVITATION_TEMPLATE = originalTemplate
+})
 
 const response = () => {
   const res: { statusCode?: number; body?: unknown; status: (code: number) => typeof res } = {
@@ -30,18 +42,109 @@ describe("buyer organisation invitations", () => {
     expect(service.listBuyerMemberships).not.toHaveBeenCalled()
   })
 
-  it("does not return bearer invitation tokens before secure delivery is configured", async () => {
+  it("queues secure delivery without returning the bearer token", async () => {
+    process.env.ZURIBEANS_PUBLIC_URL = "https://zuribeans.example"
+    process.env.BAOBAB_BUYER_INVITATION_TEMPLATE = "buyer-invite"
+    const b2b = {
+      retrieveB2BOrganisation: vi.fn(async () => ({
+        id: "b2borg_1",
+        status: "ACTIVE",
+        legal_name: "Acme",
+      })),
+      listBuyerMemberships: vi
+        .fn()
+        .mockResolvedValueOnce([{ id: "b2bmem_admin", status: "ACTIVE" }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
+      listBuyerRoles: vi.fn(async () => [
+        { membership_id: "b2bmem_admin", role: "ACCOUNT_ADMIN" },
+      ]),
+      createBuyerMemberships: vi.fn(async (input) => ({
+        id: "b2bmem_invite",
+        ...input,
+      })),
+      createBuyerRoles: vi.fn(async (input) => ({ id: "b2brole_1", ...input })),
+      deleteBuyerRoles: vi.fn(),
+      deleteBuyerMemberships: vi.fn(),
+    }
+    const notification = { createNotifications: vi.fn(async () => ({})) }
     const req = {
       auth_context: {
         actor_id: "cus_admin",
         app_metadata: { baobab_principal_id: "prn_admin" },
       },
       params: { id: "b2borg_1" },
+      headers: { "idempotency-key": "buyer-invite-key-0001" },
       body: { email: "buyer@example.com", role: "BUYER" },
+      scope: {
+        resolve: (key: string) => (key === B2B_MODULE ? b2b : key === Modules.NOTIFICATION ? notification : null),
+      },
+    }
+    const res = response()
+
+    await inviteMember(req as never, res as never)
+
+    expect(notification.createNotifications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "buyer@example.com",
+        channel: "email",
+        template: "buyer-invite",
+        data: expect.objectContaining({
+          invitation_url: expect.stringContaining(
+            "https://zuribeans.example/account/invitations/accept?token=",
+          ),
+        }),
+      }),
+    )
+    expect(JSON.stringify(res.body)).not.toContain("token")
+    expect(res.statusCode).toBe(202)
+  })
+
+  it("removes invitation authority when delivery fails", async () => {
+    process.env.ZURIBEANS_PUBLIC_URL = "https://zuribeans.example"
+    process.env.BAOBAB_BUYER_INVITATION_TEMPLATE = "buyer-invite"
+    const deleteBuyerRoles = vi.fn(async () => undefined)
+    const deleteBuyerMemberships = vi.fn(async () => undefined)
+    const b2b = {
+      retrieveB2BOrganisation: vi.fn(async () => ({
+        id: "b2borg_1",
+        status: "ACTIVE",
+        legal_name: "Acme",
+      })),
+      listBuyerMemberships: vi
+        .fn()
+        .mockResolvedValueOnce([{ id: "b2bmem_admin", status: "ACTIVE" }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
+      listBuyerRoles: vi.fn(async () => [{ role: "ACCOUNT_ADMIN" }]),
+      createBuyerMemberships: vi.fn(async (input) => ({
+        id: "b2bmem_invite",
+        ...input,
+      })),
+      createBuyerRoles: vi.fn(async () => ({ id: "b2brole_1" })),
+      deleteBuyerRoles,
+      deleteBuyerMemberships,
+    }
+    const req = {
+      auth_context: {
+        actor_id: "cus_admin",
+        app_metadata: { baobab_principal_id: "prn_admin" },
+      },
+      params: { id: "b2borg_1" },
+      headers: { "idempotency-key": "buyer-invite-key-0002" },
+      body: { email: "buyer@example.com", role: "BUYER" },
+      scope: {
+        resolve: (key: string) =>
+          key === B2B_MODULE
+            ? b2b
+            : { createNotifications: vi.fn(async () => { throw new Error("delivery failed") }) },
+      },
     }
 
     await expect(inviteMember(req as never, response() as never)).rejects.toThrow(
-      "secure invitation delivery adapter",
+      "delivery failed",
     )
+    expect(deleteBuyerRoles).toHaveBeenCalledWith("b2brole_1")
+    expect(deleteBuyerMemberships).toHaveBeenCalledWith("b2bmem_invite")
   })
 })
