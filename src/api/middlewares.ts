@@ -1,4 +1,5 @@
 // Gate ZB-03.3 / ZB-04: authenticated B2B store and admin routes.
+// Delivery sites and tax verification follow ADR-0017 and zuribeans-tax.
 import { authenticate, defineMiddlewares } from "@medusajs/framework/http"
 
 export default defineMiddlewares({
@@ -29,6 +30,11 @@ export default defineMiddlewares({
       middlewares: [authenticate("customer", ["session", "bearer"])],
     },
     {
+      matcher: "/store/b2b/organisations/:id/delivery-sites",
+      methods: ["GET", "POST"],
+      middlewares: [authenticate("customer", ["session", "bearer"])],
+    },
+    {
       matcher: "/store/b2b/invitations/accept",
       methods: ["POST"],
       middlewares: [authenticate("customer", ["session", "bearer"])],
@@ -55,6 +61,11 @@ export default defineMiddlewares({
     },
     {
       matcher: "/admin/b2b/organisations/:id/status",
+      methods: ["POST"],
+      middlewares: [authenticate("user", ["session", "bearer"])],
+    },
+    {
+      matcher: "/admin/b2b/tax-registrations/:id/status",
       methods: ["POST"],
       middlewares: [authenticate("user", ["session", "bearer"])],
     },
