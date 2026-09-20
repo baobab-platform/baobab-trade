@@ -22,9 +22,8 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   ])
 
   const organisationIds = [...new Set(memberships.map((m) => m.organisation_id))]
-  const organisations = await b2b.listB2BOrganisations({
-    id: organisationIds,
-  })
+  const organisations =
+    organisationIds.length > 0 ? await b2b.listB2BOrganisations({ id: organisationIds }) : []
   const orgById = new Map(organisations.map((o) => [o.id, o]))
 
   res.status(200).json({
