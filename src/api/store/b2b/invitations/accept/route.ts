@@ -1,9 +1,10 @@
 // Gate ZB-04 — accept a buyer organisation invitation.
-// Authenticated customer presents invitation_token; membership moves INVITED → ACTIVE
-// and is bound to their Medusa customer_id. One active membership per customer.
+// Authenticated customer presents invitation_token; membership moves INVITED → ACTIVE.
+// Customer and canonical Principal identifiers remain distinct.
 import { createHash } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
+import { principalIdFromAuthContext } from "../../../../../baobab/b2b/onboarding-policy"
 import { B2B_MODULE } from "../../../../../modules/b2b"
 import type B2BModuleService from "../../../../../modules/b2b/service"
 
@@ -15,6 +16,13 @@ export const POST = async (req: AuthenticatedMedusaRequest<AcceptBody>, res: Med
   const customerId = req.auth_context.actor_id
   if (!customerId) {
     throw new MedusaError(MedusaError.Types.UNAUTHORIZED, "customer authentication is required")
+  }
+  const principalId = principalIdFromAuthContext(req.auth_context)
+  if (!principalId) {
+    throw new MedusaError(
+      MedusaError.Types.FORBIDDEN,
+      "canonical Principal mapping is required before accepting an organisation invitation",
+    )
   }
 
   const token = req.body?.invitation_token
@@ -39,26 +47,32 @@ export const POST = async (req: AuthenticatedMedusaRequest<AcceptBody>, res: Med
   }
 
   const existing = await b2b.listBuyerMemberships({
+    organisation_id: membership.organisation_id,
     customer_id: customerId,
   })
-  const blocking = existing.filter(
-    (m) => m.id !== membership.id && (m.status === "ACTIVE" || m.status === "INVITED"),
+  const duplicate = existing.some(
+    (candidate) =>
+      candidate.id !== membership.id &&
+      (candidate.status === "ACTIVE" || candidate.status === "INVITED"),
   )
-  if (blocking.length > 0) {
+  if (duplicate) {
     throw new MedusaError(
       MedusaError.Types.NOT_ALLOWED,
-      "this customer already belongs to a buyer organisation",
+      "this customer already has a membership in this buyer organisation",
     )
   }
 
   const organisation = await b2b.retrieveB2BOrganisation(membership.organisation_id)
-  if (organisation.status === "CLOSED") {
-    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "organisation is closed")
+  if (organisation.status !== "ACTIVE") {
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      "invitations can only be accepted for an ACTIVE organisation",
+    )
   }
 
   const updated = await b2b.updateBuyerMemberships(membership.id, {
     customer_id: customerId,
-    principal_id: customerId,
+    principal_id: principalId,
     status: "ACTIVE",
     invitation_accepted_at: new Date(),
     invitation_token_hash: null,
