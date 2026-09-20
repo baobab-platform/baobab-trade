@@ -199,8 +199,54 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
 
   const compensations: Array<() => Promise<unknown>> = []
   let organisationId: string | null = null
+  let initialMembershipId: string | null = null
   const occurredAt = new Date()
   const correlationId = randomUUID()
+
+  const recordLifecycleEvent = async ({
+    eventType,
+    subject,
+    dataSchema,
+    data,
+    idempotencyKey: eventIdempotencyKey,
+  }: {
+    eventType: string
+    subject: string
+    dataSchema: string
+    data: Record<string, unknown>
+    idempotencyKey: string
+  }) => {
+    const eventId = randomUUID()
+    const envelope = {
+      specversion: "1.0",
+      id: eventId,
+      type: eventType,
+      source: "urn:baobab-platform:baobab-trade",
+      subject,
+      time: occurredAt.toISOString(),
+      datacontenttype: "application/json",
+      dataschema: dataSchema,
+      baobabscope: "tenant",
+      tenantid: tenantId,
+      correlationid: correlationId,
+      idempotencykey: eventIdempotencyKey,
+      data,
+    }
+    const record = await outbox.createEventOutboxes({
+      event_id: eventId,
+      event_type: eventType,
+      subject,
+      tenant_id: tenantId,
+      correlation_id: correlationId,
+      causation_id: null,
+      idempotency_key: eventIdempotencyKey,
+      envelope,
+      status: "PENDING",
+      attempt_count: 0,
+      next_attempt_at: occurredAt,
+    })
+    compensations.push(() => outbox.deleteEventOutboxes(record.id))
+  }
 
   try {
     if (decision === "APPROVED") {
@@ -229,6 +275,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
         effective_from: occurredAt,
         effective_until: null,
       })
+      initialMembershipId = membership.id
       compensations.push(() => b2b.deleteBuyerMemberships(membership.id))
 
       const role = await b2b.createBuyerRoles({
@@ -253,23 +300,12 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
     })
     compensations.push(() => b2b.deleteBuyerApplicationDecisions(recordedDecision.id))
 
-    const eventId = randomUUID()
-    const eventType =
-      "com.baobab-platform.customer.buyer-application.decision-recorded.v1"
-    const envelope = {
-      specversion: "1.0",
-      id: eventId,
-      type: eventType,
-      source: "urn:baobab-platform:baobab-trade",
+    await recordLifecycleEvent({
+      eventType: "com.baobab-platform.customer.buyer-application.decision-recorded.v1",
       subject: `buyer-application/${application.id}`,
-      time: occurredAt.toISOString(),
-      datacontenttype: "application/json",
-      dataschema:
+      dataSchema:
         "https://contracts.baobab-platform.com/buyer-organisation/v1/events.schema.json#/$defs/buyerApplicationDecisionEventData",
-      baobabscope: "tenant",
-      tenantid: tenantId,
-      correlationid: correlationId,
-      idempotencykey: `buyer-decision:${recordedDecision.id}`,
+      idempotencyKey: `buyer-decision:${recordedDecision.id}`,
       data: {
         buyer_application_id: application.id,
         tenant_id: tenantId,
@@ -278,21 +314,42 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
         decision_reference: decisionReference,
         reason_code: reasonCode,
       },
-    }
-    const outboxRecord = await outbox.createEventOutboxes({
-      event_id: eventId,
-      event_type: eventType,
-      subject: envelope.subject,
-      tenant_id: tenantId,
-      correlation_id: correlationId,
-      causation_id: null,
-      idempotency_key: envelope.idempotencykey,
-      envelope,
-      status: "PENDING",
-      attempt_count: 0,
-      next_attempt_at: occurredAt,
     })
-    compensations.push(() => outbox.deleteEventOutboxes(outboxRecord.id))
+
+    if (decision === "APPROVED" && organisationId && initialMembershipId) {
+      await recordLifecycleEvent({
+        eventType: "com.baobab-platform.customer.buyer-organisation.registered.v1",
+        subject: `buyer-organisation/${organisationId}`,
+        dataSchema:
+          "https://contracts.baobab-platform.com/buyer-organisation/v1/events.schema.json#/$defs/buyerOrganisationRegisteredEventData",
+        idempotencyKey: `buyer-organisation-registered:${organisationId}`,
+        data: {
+          buyer_organisation_id: organisationId,
+          tenant_id: tenantId,
+          canonical_organisation_id: canonicalOrganisationId,
+          source_application_id: application.id,
+          name: application.trading_name || application.legal_name,
+          legal_name: application.legal_name,
+          status: "ACTIVE",
+        },
+      })
+      await recordLifecycleEvent({
+        eventType: "com.baobab-platform.customer.buyer-membership.changed.v1",
+        subject: `buyer-membership/${initialMembershipId}`,
+        dataSchema:
+          "https://contracts.baobab-platform.com/buyer-organisation/v1/events.schema.json#/$defs/buyerMembershipChangedEventData",
+        idempotencyKey: `buyer-membership-active:${initialMembershipId}`,
+        data: {
+          buyer_membership_id: initialMembershipId,
+          buyer_organisation_id: organisationId,
+          tenant_id: tenantId,
+          principal_id: application.applicant_principal_id,
+          customer_id: application.applicant_customer_id,
+          status: "ACTIVE",
+          roles: ["ACCOUNT_ADMIN"],
+        },
+      })
+    }
 
     await b2b.updateBuyerApplications(application.id, {
       status: decision,
