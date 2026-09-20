@@ -8,7 +8,7 @@ const BuyerApplication = model
       tenant_id: model.text().index(),
       applicant_customer_id: model.text().index(),
       applicant_principal_id: model.text().index().nullable(),
-      idempotency_key: model.text().unique(),
+      idempotency_key: model.text(),
       request_hash: model.text(),
       legal_name: model.text(),
       trading_name: model.text().nullable(),
@@ -32,6 +32,9 @@ const BuyerApplication = model
       assigned_reviewer_principal_id: model.text().nullable(),
     },
   )
-  .indexes([{ on: ["tenant_id", "applicant_customer_id"] }])
+  .indexes([
+    { on: ["tenant_id", "applicant_customer_id"] },
+    { on: ["tenant_id", "idempotency_key"], unique: true },
+  ])
 
 export default BuyerApplication
