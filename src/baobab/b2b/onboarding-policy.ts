@@ -26,7 +26,8 @@ export class BuyerOnboardingPolicyError extends Error {
       | "INVALID_TRANSITION"
       | "MISSING_DECISION_REFERENCE"
       | "MISSING_CANONICAL_LINK"
-      | "TENANT_NOT_CONFIGURED",
+      | "TENANT_NOT_CONFIGURED"
+      | "INVALID_IDENTITY_MAPPING",
     message: string,
   ) {
     super(message)
@@ -77,7 +78,7 @@ export const principalIdFromAuthContext = (
   if (typeof value !== "string" || !value.trim()) return null
   if (value === authContext.actor_id) {
     throw new BuyerOnboardingPolicyError(
-      "INVALID_TRANSITION",
+      "INVALID_IDENTITY_MAPPING",
       "canonical principal identity must not be conflated with the Medusa customer identifier",
     )
   }
