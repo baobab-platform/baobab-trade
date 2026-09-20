@@ -12,4 +12,8 @@ environment:
 package_managers:
   node: npm
 artifacts:
-  container: true
+  container:
+    enabled: true
+    dockerfile: Dockerfile
+    context: .
+    runtime: true
