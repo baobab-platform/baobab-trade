@@ -138,11 +138,38 @@ describe("ZB-04 admission decision", () => {
         assigned_by_principal_id: "prn_staff_1",
       }),
     )
+    expect(outbox.createEventOutboxes).toHaveBeenCalledTimes(3)
     expect(outbox.createEventOutboxes).toHaveBeenCalledWith(
       expect.objectContaining({
         event_type: "com.baobab-platform.customer.buyer-application.decision-recorded.v1",
         tenant_id: "tn_zuribeans",
         status: "PENDING",
+      }),
+    )
+    expect(outbox.createEventOutboxes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: "com.baobab-platform.customer.buyer-organisation.registered.v1",
+        envelope: expect.objectContaining({
+          data: expect.objectContaining({
+            buyer_organisation_id: "b2borg_1",
+            canonical_organisation_id: "canorg_1",
+            source_application_id: "b2bapp_1",
+            status: "ACTIVE",
+          }),
+        }),
+      }),
+    )
+    expect(outbox.createEventOutboxes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: "com.baobab-platform.customer.buyer-membership.changed.v1",
+        envelope: expect.objectContaining({
+          data: expect.objectContaining({
+            buyer_membership_id: "b2bmem_1",
+            principal_id: "prn_buyer_1",
+            customer_id: "cus_1",
+            roles: ["ACCOUNT_ADMIN"],
+          }),
+        }),
       }),
     )
     expect(b2b.updateBuyerApplications).toHaveBeenCalledWith(application.id, {
@@ -230,6 +257,8 @@ describe("ZB-04 admission decision", () => {
       "application update failed",
     )
     expect(deletionOrder).toEqual([
+      "outbox",
+      "outbox",
       "outbox",
       "decision",
       "role",
