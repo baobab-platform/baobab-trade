@@ -84,6 +84,9 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   if (!["SUBMITTED", "INFORMATION_REQUIRED", "UNDER_REVIEW"].includes(application.status)) {
     throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "application evidence can no longer be decided")
   }
+  if (decision === "VERIFIED" && evidence.expires_at && new Date(evidence.expires_at) <= new Date()) {
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "expired evidence cannot be verified")
+  }
   if (evidence.status !== "PENDING") {
     throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "application evidence already has a decision")
   }
@@ -108,12 +111,13 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     await b2b.updateBuyerApplicationEvidences(evidence.id, { status: decision })
     updated = true
     const eventId = randomUUID()
+    const correlationId = randomUUID()
     eventRecord = await outbox.createEventOutboxes({
       event_id: eventId,
       event_type: "com.baobab-platform.customer.buyer-application-evidence.decided.v1",
       subject: `buyer-application-evidence/${evidence.id}`,
       tenant_id: tenantId,
-      correlation_id: randomUUID(),
+      correlation_id: correlationId,
       causation_id: null,
       idempotency_key: `buyer-evidence-decision:${recorded.id}`,
       envelope: {
@@ -124,9 +128,10 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
         subject: `buyer-application-evidence/${evidence.id}`,
         time: occurredAt.toISOString(),
         datacontenttype: "application/json",
+        dataschema: "https://contracts.baobab-platform.com/buyer-organisation/v1/events.schema.json#/$defs/buyerApplicationEvidenceDecisionEventData",
         baobabscope: "tenant",
         tenantid: tenantId,
-        correlationid: randomUUID(),
+        correlationid: correlationId,
         data: {
           buyer_application_id: application.id,
           evidence_id: evidence.id,
