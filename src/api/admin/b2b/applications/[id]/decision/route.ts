@@ -255,7 +255,9 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
         legal_name: application.legal_name,
         trading_name: application.trading_name,
         registration_number: application.registration_number,
-        status: "ACTIVE",
+        // Admission creates identity and membership, not commercial authority.
+        // ERP/commercial clearance activates the organisation in a later, attributable step.
+        status: "PENDING",
         canonical_organisation_id: canonicalOrganisationId,
         erp_business_partner_id: null,
         default_market_key: null,
@@ -330,7 +332,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
           source_application_id: application.id,
           name: application.trading_name || application.legal_name,
           legal_name: application.legal_name,
-          status: "ACTIVE",
+          status: "PENDING",
         },
       })
       await recordLifecycleEvent({
