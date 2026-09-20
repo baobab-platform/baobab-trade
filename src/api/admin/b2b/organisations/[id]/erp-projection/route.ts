@@ -50,7 +50,15 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   const requestHash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex")
   const replays = await outbox.listEventOutboxes({ idempotency_key: idempotencyKey })
   if (replays.length) {
-    if (replays[0].envelope?.requesthash !== requestHash) throw new MedusaError(MedusaError.Types.DUPLICATE_ERROR, "Idempotency-Key payload mismatch")
+    const replayData = replays[0].envelope?.data ?? {}
+    const replayHash = createHash("sha256").update(JSON.stringify({
+      organisation_id: replayData.buyer_organisation_id,
+      legal_entity_id: replays[0].envelope?.entityid,
+      billing_country: replayData.billing_country,
+      default_currency: replayData.default_currency,
+      source_version: replayData.source_version,
+    })).digest("hex")
+    if (replayHash !== requestHash) throw new MedusaError(MedusaError.Types.DUPLICATE_ERROR, "Idempotency-Key payload mismatch")
     res.status(200).json({ status: "ALREADY_REQUESTED", event_id: replays[0].event_id })
     return
   }
@@ -63,7 +71,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     source: "urn:baobab-platform:baobab-trade", subject: `buyer-organisation/${organisation.id}`,
     time: occurredAt.toISOString(), datacontenttype: "application/json",
     baobabscope: "legal-entity", tenantid: tenantId, entityid: legalEntityId,
-    correlationid: randomUUID(), idempotencykey: idempotencyKey, requesthash: requestHash,
+    correlationid: randomUUID(), idempotencykey: idempotencyKey,
     data: {
       buyer_organisation_id: organisation.id,
       canonical_organisation_id: organisation.canonical_organisation_id,
