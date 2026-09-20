@@ -42,6 +42,7 @@ describe("buyer invitation lifecycle", () => {
     const req = {
       auth_context: auth,
       params: { id: "b2borg_1", membershipId: "b2bmem_invite" },
+      headers: { "idempotency-key": "buyer-invite-resend-0001" },
       scope: { resolve: (key: string) => key === B2B_MODULE ? b2b : key === Modules.NOTIFICATION ? notification : null },
     }
     const res = response()
