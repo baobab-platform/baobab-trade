@@ -32,7 +32,7 @@ describe("buyer invitation lifecycle", () => {
         invited_email: "buyer@example.com", invitation_token_hash: "old-hash",
         invitation_expires_at: new Date(Date.now() + 1000),
       })),
-      listBuyerInvitationDeliveries: vi.fn(async () => [{ attempt_number: 1 }]),
+      listBuyerInvitationDeliveries: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ attempt_number: 1 }]),
       updateBuyerMemberships: vi.fn(async () => ({})),
       createBuyerInvitationDeliveries: vi.fn(async (input) => ({ id: "delivery_2", ...input })),
       updateBuyerInvitationDeliveries: vi.fn(async () => ({})),
