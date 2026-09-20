@@ -61,6 +61,11 @@ describe("ZB-04 staff application review", () => {
     }))
     const service = {
       listBuyerApplicationReviewActions: vi.fn(async () => []),
+      listBuyerApplicationEvidences: vi.fn(async () => [
+        { evidence_type: "COMPANY_REGISTRATION" },
+        { evidence_type: "TAX_REGISTRATION" },
+        { evidence_type: "AUTHORIZED_REPRESENTATIVE" },
+      ]),
       retrieveBuyerApplication: vi.fn(async () => application),
       createBuyerApplicationReviewActions,
       updateBuyerApplications,
@@ -127,6 +132,11 @@ describe("ZB-04 staff application review", () => {
     process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tn_zuribeans"
     const service = {
       listBuyerApplicationReviewActions: vi.fn(async () => []),
+      listBuyerApplicationEvidences: vi.fn(async () => [
+        { evidence_type: "COMPANY_REGISTRATION" },
+        { evidence_type: "TAX_REGISTRATION" },
+        { evidence_type: "AUTHORIZED_REPRESENTATIVE" },
+      ]),
       retrieveBuyerApplication: vi.fn(async () => ({
         id: "b2bapp_other",
         tenant_id: "tn_other",
@@ -159,6 +169,11 @@ describe("ZB-04 staff application review", () => {
     const deleteBuyerApplicationReviewActions = vi.fn(async () => undefined)
     const service = {
       listBuyerApplicationReviewActions: vi.fn(async () => []),
+      listBuyerApplicationEvidences: vi.fn(async () => [
+        { evidence_type: "COMPANY_REGISTRATION" },
+        { evidence_type: "TAX_REGISTRATION" },
+        { evidence_type: "AUTHORIZED_REPRESENTATIVE" },
+      ]),
       retrieveBuyerApplication: vi.fn(async () => ({
         id: "b2bapp_1",
         tenant_id: "tn_zuribeans",

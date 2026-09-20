@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
+import { assertVerifiedBuyerKybPackage } from "../../../../../../baobab/b2b/kyb-evidence"
 import {
   CANONICAL_ORGANISATION_VERIFIER,
   getCanonicalOrganisationVerifier,
@@ -160,6 +161,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
   })
 
   if (decision === "APPROVED") {
+    await assertVerifiedBuyerKybPackage(b2b, application.id, tenantId)
     if (!application.applicant_principal_id) {
       throw new MedusaError(
         MedusaError.Types.NOT_ALLOWED,

@@ -58,6 +58,11 @@ describe("ZB-04 admission decision", () => {
     process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tn_zuribeans"
     const b2b = {
       listBuyerApplicationDecisions: vi.fn(async () => []),
+      listBuyerApplicationEvidences: vi.fn(async () => [
+        { evidence_type: "COMPANY_REGISTRATION" },
+        { evidence_type: "TAX_REGISTRATION" },
+        { evidence_type: "AUTHORIZED_REPRESENTATIVE" },
+      ]),
       retrieveBuyerApplication: vi.fn(async () => application),
     }
     const scope = {
@@ -78,6 +83,11 @@ describe("ZB-04 admission decision", () => {
     process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tn_zuribeans"
     const b2b = {
       listBuyerApplicationDecisions: vi.fn(async () => []),
+      listBuyerApplicationEvidences: vi.fn(async () => [
+        { evidence_type: "COMPANY_REGISTRATION" },
+        { evidence_type: "TAX_REGISTRATION" },
+        { evidence_type: "AUTHORIZED_REPRESENTATIVE" },
+      ]),
       retrieveBuyerApplication: vi.fn(async () => application),
       createB2BOrganisations: vi.fn(async (input) => ({ id: "b2borg_1", ...input })),
       createBuyerMemberships: vi.fn(async (input) => ({ id: "b2bmem_1", ...input })),
@@ -183,6 +193,11 @@ describe("ZB-04 admission decision", () => {
     process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tn_zuribeans"
     const b2b = {
       listBuyerApplicationDecisions: vi.fn(async () => []),
+      listBuyerApplicationEvidences: vi.fn(async () => [
+        { evidence_type: "COMPANY_REGISTRATION" },
+        { evidence_type: "TAX_REGISTRATION" },
+        { evidence_type: "AUTHORIZED_REPRESENTATIVE" },
+      ]),
       retrieveBuyerApplication: vi.fn(async () => application),
       createB2BOrganisations: vi.fn(),
       createBuyerMemberships: vi.fn(),
@@ -219,6 +234,11 @@ describe("ZB-04 admission decision", () => {
     const deletionOrder: string[] = []
     const b2b = {
       listBuyerApplicationDecisions: vi.fn(async () => []),
+      listBuyerApplicationEvidences: vi.fn(async () => [
+        { evidence_type: "COMPANY_REGISTRATION" },
+        { evidence_type: "TAX_REGISTRATION" },
+        { evidence_type: "AUTHORIZED_REPRESENTATIVE" },
+      ]),
       retrieveBuyerApplication: vi.fn(async () => application),
       createB2BOrganisations: vi.fn(async () => ({ id: "b2borg_1" })),
       createBuyerMemberships: vi.fn(async () => ({ id: "b2bmem_1" })),
