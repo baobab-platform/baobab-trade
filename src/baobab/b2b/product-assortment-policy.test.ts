@@ -177,11 +177,9 @@ describe("product-assortment-policy", () => {
     expect(partition.blocked).toEqual([
       {
         product_id: "prod_bad",
-        status: "SUSPENDED".replace("SUSPENDED", "ACTIVE"),
+        status: "ACTIVE",
         regulatory_eligibility: "INELIGIBLE",
       },
     ])
-    // blocked row keeps original status ACTIVE
-    expect(partition.blocked[0].status).toBe("ACTIVE")
   })
 })
