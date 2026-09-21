@@ -3,64 +3,26 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { MedusaError } from "@medusajs/framework/utils"
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
-import type {
-  CommercialAssortmentStatus,
-  RegulatoryEligibility,
+import { validateMarketEligibilityBody } from "../../../../baobab/b2b/product-assortment-admin-validation"
+import {
+  isMarketAssortmentSellable,
+  type CommercialAssortmentStatus,
+  type RegulatoryEligibility,
 } from "../../../../baobab/b2b/product-assortment-policy"
-import { isMarketAssortmentSellable } from "../../../../baobab/b2b/product-assortment-policy"
 
-type Body = {
-  product_id?: unknown
-  market_key?: unknown
-  status?: unknown
-  regulatory_eligibility?: unknown
-  policy_reference?: unknown
-  effective_from?: unknown
-  effective_until?: unknown
-}
-
-const STATUSES: CommercialAssortmentStatus[] = ["ACTIVE", "SUSPENDED", "WITHDRAWN"]
-const REGS: RegulatoryEligibility[] = [
-  "NOT_EVALUATED",
-  "PENDING",
-  "ELIGIBLE",
-  "ELIGIBLE_WITH_CONDITIONS",
-  "REVIEW_REQUIRED",
-  "INELIGIBLE",
-  "SUSPENDED",
-  "EXPIRED",
-  "ERROR",
-]
-
-const requireString = (value: unknown, field: string): string => {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new MedusaError(MedusaError.Types.INVALID_DATA, `${field} is required`)
-  }
-  return value.trim()
-}
+type Body = Record<string, unknown>
 
 export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaResponse) => {
-  const productId = requireString(req.body?.product_id, "product_id")
-  const marketKey = requireString(req.body?.market_key, "market_key")
-
-  let status: CommercialAssortmentStatus = "ACTIVE"
-  if (req.body?.status !== undefined) {
-    if (typeof req.body.status !== "string" || !STATUSES.includes(req.body.status as CommercialAssortmentStatus)) {
-      throw new MedusaError(MedusaError.Types.INVALID_DATA, "invalid status")
-    }
-    status = req.body.status as CommercialAssortmentStatus
+  const validated = validateMarketEligibilityBody((req.body ?? {}) as Record<string, unknown>)
+  if (!validated.ok) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, validated.error.message)
   }
 
-  let regulatory: RegulatoryEligibility = "NOT_EVALUATED"
-  if (req.body?.regulatory_eligibility !== undefined) {
-    if (
-      typeof req.body.regulatory_eligibility !== "string" ||
-      !REGS.includes(req.body.regulatory_eligibility as RegulatoryEligibility)
-    ) {
-      throw new MedusaError(MedusaError.Types.INVALID_DATA, "invalid regulatory_eligibility")
-    }
-    regulatory = req.body.regulatory_eligibility as RegulatoryEligibility
-  }
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const productId = validated.data.product_id as string
+  const marketKey = validated.data.market_key as string
+  const status = validated.data.status as CommercialAssortmentStatus
+  const regulatory = validated.data.regulatory_eligibility as RegulatoryEligibility
 
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   const existing = await b2b.listMarketProductEligibilitys(
@@ -73,12 +35,10 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     market_key: marketKey,
     status,
     regulatory_eligibility: regulatory,
-    policy_reference:
-      typeof req.body?.policy_reference === "string" ? req.body.policy_reference : null,
-    effective_from:
-      typeof req.body?.effective_from === "string" ? new Date(req.body.effective_from) : null,
+    policy_reference: typeof body.policy_reference === "string" ? body.policy_reference : null,
+    effective_from: typeof body.effective_from === "string" ? new Date(body.effective_from) : null,
     effective_until:
-      typeof req.body?.effective_until === "string" ? new Date(req.body.effective_until) : null,
+      typeof body.effective_until === "string" ? new Date(body.effective_until) : null,
   }
 
   const row =

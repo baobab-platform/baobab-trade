@@ -3,45 +3,21 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { MedusaError } from "@medusajs/framework/utils"
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
-import {
-  isKnownTradeUom,
-  normalizeTradeUom,
-} from "../../../../baobab/b2b/product-assortment-policy"
+import { validatePurchaseConstraintBody } from "../../../../baobab/b2b/product-assortment-admin-validation"
 
-type Body = {
-  variant_id?: unknown
-  market_key?: unknown
-  minimum_order_quantity?: unknown
-  order_multiple?: unknown
-  trade_uom?: unknown
-}
-
-const requireString = (value: unknown, field: string): string => {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new MedusaError(MedusaError.Types.INVALID_DATA, `${field} is required`)
-  }
-  return value.trim()
-}
-
-const requirePositiveInt = (value: unknown, field: string): number => {
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    throw new MedusaError(MedusaError.Types.INVALID_DATA, `${field} must be a positive integer`)
-  }
-  return value
-}
+type Body = Record<string, unknown>
 
 export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaResponse) => {
-  const variantId = requireString(req.body?.variant_id, "variant_id")
-  const marketKey = requireString(req.body?.market_key, "market_key")
-  const moq = requirePositiveInt(req.body?.minimum_order_quantity, "minimum_order_quantity")
-  const multiple = requirePositiveInt(req.body?.order_multiple, "order_multiple")
-  const tradeUom = normalizeTradeUom(requireString(req.body?.trade_uom, "trade_uom"))
-  if (!isKnownTradeUom(tradeUom)) {
-    throw new MedusaError(
-      MedusaError.Types.INVALID_DATA,
-      `trade_uom "${tradeUom}" is not a recognised trade unit code`,
-    )
+  const validated = validatePurchaseConstraintBody((req.body ?? {}) as Record<string, unknown>)
+  if (!validated.ok) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, validated.error.message)
   }
+
+  const variantId = validated.data.variant_id as string
+  const marketKey = validated.data.market_key as string
+  const moq = validated.data.minimum_order_quantity as number
+  const multiple = validated.data.order_multiple as number
+  const tradeUom = validated.data.trade_uom as string
 
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   const existing = await b2b.listPurchaseConstraints(

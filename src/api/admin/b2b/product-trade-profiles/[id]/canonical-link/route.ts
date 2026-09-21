@@ -5,14 +5,13 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { MedusaError } from "@medusajs/framework/utils"
 import { B2B_MODULE } from "../../../../../../modules/b2b"
 import type B2BModuleService from "../../../../../../modules/b2b/service"
+import { validateCanonicalLinkBody } from "../../../../../../baobab/b2b/product-assortment-admin-validation"
 
-type Body = {
-  canonical_product_key?: unknown
-}
+type Body = Record<string, unknown>
 
 export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaResponse) => {
-  const canonicalProductKey = req.body?.canonical_product_key
-  if (typeof canonicalProductKey !== "string" || canonicalProductKey.trim() === "") {
+  const validated = validateCanonicalLinkBody((req.body ?? {}) as Record<string, unknown>)
+  if (!validated.ok) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
       "canonical_product_key is required in the request body",
@@ -23,7 +22,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   await b2b.retrieveProductTradeProfile(req.params.id)
 
   const updated = await b2b.updateProductTradeProfiles(req.params.id, {
-    canonical_product_key: canonicalProductKey.trim(),
+    canonical_product_key: validated.canonical_product_key,
   })
 
   res.status(200).json({

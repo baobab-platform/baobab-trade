@@ -3,100 +3,46 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { MedusaError } from "@medusajs/framework/utils"
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
-import {
-  isKnownTradeUom,
-  normalizeTradeUom,
-  type ClassificationConfidence,
-} from "../../../../baobab/b2b/product-assortment-policy"
+import { validateTradeProfileBody } from "../../../../baobab/b2b/product-assortment-admin-validation"
 
-type Body = {
-  product_id?: unknown
-  canonical_product_key?: unknown
-  country_of_origin?: unknown
-  hs_classification_reference?: unknown
-  classification_system?: unknown
-  classification_confidence?: unknown
-  commodity_category?: unknown
-  trade_uom?: unknown
-  net_weight_kg?: unknown
-  gross_weight_kg?: unknown
-  packaging?: unknown
-  lot_controlled?: unknown
-  batch_controlled?: unknown
-  export_eligibility_reference?: unknown
-  commodity_attributes?: unknown
-}
-
-const CONFIDENCES: ClassificationConfidence[] = [
-  "PROPOSED",
-  "UNDER_REVIEW",
-  "VERIFIED",
-  "AUTHORITATIVE",
-  "DISPUTED",
-  "EXPIRED",
-]
-
-const requireString = (value: unknown, field: string): string => {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new MedusaError(MedusaError.Types.INVALID_DATA, `${field} is required`)
-  }
-  return value.trim()
-}
+type Body = Record<string, unknown>
 
 export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaResponse) => {
-  const productId = requireString(req.body?.product_id, "product_id")
-  const canonicalKey = requireString(req.body?.canonical_product_key, "canonical_product_key")
-  const country = requireString(req.body?.country_of_origin, "country_of_origin")
-  const hs = requireString(req.body?.hs_classification_reference, "hs_classification_reference")
-  const category = requireString(req.body?.commodity_category, "commodity_category")
-  const uomRaw = requireString(req.body?.trade_uom, "trade_uom")
-  const tradeUom = normalizeTradeUom(uomRaw)
-  if (!isKnownTradeUom(tradeUom)) {
-    throw new MedusaError(
-      MedusaError.Types.INVALID_DATA,
-      `trade_uom "${tradeUom}" is not a recognised trade unit code`,
-    )
+  const validated = validateTradeProfileBody((req.body ?? {}) as Record<string, unknown>)
+  if (!validated.ok) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, validated.error.message)
   }
 
-  let confidence: ClassificationConfidence = "PROPOSED"
-  if (req.body?.classification_confidence !== undefined) {
-    if (
-      typeof req.body.classification_confidence !== "string" ||
-      !CONFIDENCES.includes(req.body.classification_confidence as ClassificationConfidence)
-    ) {
-      throw new MedusaError(MedusaError.Types.INVALID_DATA, "invalid classification_confidence")
-    }
-    confidence = req.body.classification_confidence as ClassificationConfidence
-  }
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const productId = validated.data.product_id as string
 
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   const existing = await b2b.listProductTradeProfiles({ product_id: productId }, { take: 1 })
 
   const payload = {
     product_id: productId,
-    canonical_product_key: canonicalKey,
-    country_of_origin: country,
-    hs_classification_reference: hs,
+    canonical_product_key: validated.data.canonical_product_key as string,
+    country_of_origin: validated.data.country_of_origin as string,
+    hs_classification_reference: validated.data.hs_classification_reference as string,
     classification_system:
-      typeof req.body?.classification_system === "string" && req.body.classification_system.trim()
-        ? req.body.classification_system.trim()
+      typeof body.classification_system === "string" && body.classification_system.trim()
+        ? body.classification_system.trim()
         : "HS",
-    classification_confidence: confidence,
-    commodity_category: category,
-    trade_uom: tradeUom,
-    net_weight_kg: typeof req.body?.net_weight_kg === "number" ? req.body.net_weight_kg : null,
-    gross_weight_kg: typeof req.body?.gross_weight_kg === "number" ? req.body.gross_weight_kg : null,
-    packaging: typeof req.body?.packaging === "string" ? req.body.packaging : null,
-    lot_controlled: typeof req.body?.lot_controlled === "boolean" ? req.body.lot_controlled : true,
-    batch_controlled:
-      typeof req.body?.batch_controlled === "boolean" ? req.body.batch_controlled : true,
+    classification_confidence: validated.data.classification_confidence,
+    commodity_category: validated.data.commodity_category as string,
+    trade_uom: validated.data.trade_uom as string,
+    net_weight_kg: typeof body.net_weight_kg === "number" ? body.net_weight_kg : null,
+    gross_weight_kg: typeof body.gross_weight_kg === "number" ? body.gross_weight_kg : null,
+    packaging: typeof body.packaging === "string" ? body.packaging : null,
+    lot_controlled: typeof body.lot_controlled === "boolean" ? body.lot_controlled : true,
+    batch_controlled: typeof body.batch_controlled === "boolean" ? body.batch_controlled : true,
     export_eligibility_reference:
-      typeof req.body?.export_eligibility_reference === "string"
-        ? req.body.export_eligibility_reference
+      typeof body.export_eligibility_reference === "string"
+        ? body.export_eligibility_reference
         : null,
     commodity_attributes:
-      req.body?.commodity_attributes && typeof req.body.commodity_attributes === "object"
-        ? req.body.commodity_attributes
+      body.commodity_attributes && typeof body.commodity_attributes === "object"
+        ? body.commodity_attributes
         : null,
   }
 
