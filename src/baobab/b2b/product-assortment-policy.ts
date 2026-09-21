@@ -55,10 +55,64 @@ export const isMarketAssortmentSellable = (input: {
 }): boolean => {
   if (!isAssortmentActive(input.assortmentStatus)) return false
   if (input.requireRegulatoryClearance === false) {
-    return !isRegulatoryBlocking(input.regulatoryEligibility) ||
+    // Soft mode: still block hard negatives; allow NOT_EVALUATED for ops preview.
+    return (
+      !isRegulatoryBlocking(input.regulatoryEligibility) ||
       input.regulatoryEligibility === "NOT_EVALUATED"
+    )
   }
   return isRegulatoryPermissive(input.regulatoryEligibility)
+}
+
+export type MarketAssortmentRow = {
+  product_id: string
+  status: CommercialAssortmentStatus | string
+  regulatory_eligibility: RegulatoryEligibility | string
+}
+
+/**
+ * Partition market eligibility rows into sellable product ids and blocked diagnostics
+ * (store assortment filter pure core — ADR-0030 §7).
+ */
+export const partitionMarketAssortment = (
+  rows: MarketAssortmentRow[],
+  options?: { requireRegulatoryClearance?: boolean },
+): {
+  sellable_product_ids: string[]
+  blocked: Array<{
+    product_id: string
+    status: string
+    regulatory_eligibility: string
+  }>
+  counts: { evaluated: number; sellable: number; blocked: number }
+} => {
+  const requireRegulatoryClearance = options?.requireRegulatoryClearance !== false
+  const sellable: MarketAssortmentRow[] = []
+  const blocked: MarketAssortmentRow[] = []
+
+  for (const row of rows) {
+    const ok = isMarketAssortmentSellable({
+      assortmentStatus: row.status as CommercialAssortmentStatus,
+      regulatoryEligibility: row.regulatory_eligibility as RegulatoryEligibility,
+      requireRegulatoryClearance,
+    })
+    if (ok) sellable.push(row)
+    else blocked.push(row)
+  }
+
+  return {
+    sellable_product_ids: sellable.map((r) => r.product_id),
+    blocked: blocked.map((r) => ({
+      product_id: r.product_id,
+      status: String(r.status),
+      regulatory_eligibility: String(r.regulatory_eligibility),
+    })),
+    counts: {
+      evaluated: rows.length,
+      sellable: sellable.length,
+      blocked: blocked.length,
+    },
+  }
 }
 
 /** HS / classification reference is never by itself trade permission. */

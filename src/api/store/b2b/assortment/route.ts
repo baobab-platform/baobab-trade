@@ -5,11 +5,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
-import {
-  isMarketAssortmentSellable,
-  type CommercialAssortmentStatus,
-  type RegulatoryEligibility,
-} from "../../../../baobab/b2b/product-assortment-policy"
+import { partitionMarketAssortment } from "../../../../baobab/b2b/product-assortment-policy"
 
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const marketKey = req.query.market_key
@@ -31,36 +27,13 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     { take: 500 },
   )
 
-  const sellable = rows.filter((row) =>
-    isMarketAssortmentSellable({
-      assortmentStatus: row.status as CommercialAssortmentStatus,
-      regulatoryEligibility: row.regulatory_eligibility as RegulatoryEligibility,
-      requireRegulatoryClearance: requireRegulatory,
-    }),
-  )
-
-  const blocked = rows.filter(
-    (row) =>
-      !isMarketAssortmentSellable({
-        assortmentStatus: row.status as CommercialAssortmentStatus,
-        regulatoryEligibility: row.regulatory_eligibility as RegulatoryEligibility,
-        requireRegulatoryClearance: requireRegulatory,
-      }),
-  )
+  const partition = partitionMarketAssortment(rows, {
+    requireRegulatoryClearance: requireRegulatory,
+  })
 
   res.status(200).json({
     market_key: marketKey.trim(),
     require_regulatory_clearance: requireRegulatory,
-    sellable_product_ids: sellable.map((r) => r.product_id),
-    blocked: blocked.map((r) => ({
-      product_id: r.product_id,
-      status: r.status,
-      regulatory_eligibility: r.regulatory_eligibility,
-    })),
-    counts: {
-      evaluated: rows.length,
-      sellable: sellable.length,
-      blocked: blocked.length,
-    },
+    ...partition,
   })
 }
