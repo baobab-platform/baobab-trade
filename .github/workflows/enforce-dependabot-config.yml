@@ -17,4 +17,4 @@ jobs:
   check:
     permissions:
       contents: read
-    uses: nabhold/shared/.github/workflows/enforce-dependabot-config.yml@ad5cdb028023cd6b9c48cd8d7e6151ef4ab0cd73 # v1.0.0
+    uses: baobab-platform/shared/.github/workflows/enforce-dependabot-config.yml@ad5cdb028023cd6b9c48cd8d7e6151ef4ab0cd73 # v1.0.0
