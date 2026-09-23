@@ -116,9 +116,8 @@ export const partitionMarketAssortment = (
 }
 
 /** HS / classification reference is never by itself trade permission. */
-export const classificationAllowsAutomatedTrade = (
-  confidence: ClassificationConfidence,
-): boolean => confidence === "VERIFIED" || confidence === "AUTHORITATIVE"
+export const classificationAllowsAutomatedTrade = (confidence: ClassificationConfidence): boolean =>
+  confidence === "VERIFIED" || confidence === "AUTHORITATIVE"
 
 const KNOWN_TRADE_UOMS = new Set([
   "BAG",
