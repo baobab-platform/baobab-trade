@@ -28,11 +28,11 @@ ZuriBeans intersects Medusa `/store/products` with assortment ids when
 
 ## Fail closed (ADR-0024)
 
-| Assortment | Regulatory | Sellable (strict) |
-|------------|------------|-------------------|
-| ACTIVE | ELIGIBLE | Yes |
-| ACTIVE | NOT_EVALUATED | No |
-| SUSPENDED | ELIGIBLE | No |
+| Assortment | Regulatory    | Sellable (strict) |
+| ---------- | ------------- | ----------------- |
+| ACTIVE     | ELIGIBLE      | Yes               |
+| ACTIVE     | NOT_EVALUATED | No                |
+| SUSPENDED  | ELIGIBLE      | No                |
 
 ## Non-goals
 

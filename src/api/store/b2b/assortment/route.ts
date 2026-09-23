@@ -10,10 +10,7 @@ import { partitionMarketAssortment } from "../../../../baobab/b2b/product-assort
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const marketKey = req.query.market_key
   if (typeof marketKey !== "string" || marketKey.trim() === "") {
-    throw new MedusaError(
-      MedusaError.Types.INVALID_DATA,
-      "market_key query parameter is required",
-    )
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "market_key query parameter is required")
   }
 
   const requireRegulatory =

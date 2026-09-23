@@ -110,7 +110,10 @@ export const validateMarketEligibilityBody = (
 
   let status: CommercialAssortmentStatus = "ACTIVE"
   if (body.status !== undefined) {
-    if (typeof body.status !== "string" || !STATUSES.includes(body.status as CommercialAssortmentStatus)) {
+    if (
+      typeof body.status !== "string" ||
+      !STATUSES.includes(body.status as CommercialAssortmentStatus)
+    ) {
       return { ok: false, error: { field: "status", message: "invalid status" } }
     }
     status = body.status as CommercialAssortmentStatus

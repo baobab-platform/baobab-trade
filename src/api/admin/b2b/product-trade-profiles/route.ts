@@ -57,9 +57,8 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
 export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) => {
   const productId = typeof req.query.product_id === "string" ? req.query.product_id : undefined
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
-  const rows = await b2b.listProductTradeProfiles(
-    productId ? { product_id: productId } : {},
-    { take: 100 },
-  )
+  const rows = await b2b.listProductTradeProfiles(productId ? { product_id: productId } : {}, {
+    take: 100,
+  })
   res.status(200).json({ product_trade_profiles: rows })
 }
