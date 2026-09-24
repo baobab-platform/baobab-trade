@@ -17,3 +17,5 @@ artifacts:
     dockerfile: Dockerfile
     context: .
     runtime: true
+security:
+  sast_provider: fallback
