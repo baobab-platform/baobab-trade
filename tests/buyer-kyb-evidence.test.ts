@@ -10,8 +10,13 @@ afterEach(() => {
 
 const response = () => {
   const res: any = {
-    status(code: number) { this.statusCode = code; return this },
-    json(body: unknown) { this.body = body },
+    status(code: number) {
+      this.statusCode = code
+      return this
+    },
+    json(body: unknown) {
+      this.body = body
+    },
   }
   return res
 }
@@ -49,14 +54,16 @@ describe("ZB-04 buyer KYB evidence", () => {
     }
     const res = response()
     await POST(req as never, res)
-    expect(createBuyerApplicationEvidences).toHaveBeenCalledWith(expect.objectContaining({
-      tenant_id: "tn_zuribeans",
-      application_id: "b2bapp_1",
-      canonical_document_id: "doc_01K5REGISTRATION",
-      content_sha256: "a".repeat(64),
-      status: "PENDING",
-      submitted_by_customer_id: "cus_1",
-    }))
+    expect(createBuyerApplicationEvidences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant_id: "tn_zuribeans",
+        application_id: "b2bapp_1",
+        canonical_document_id: "doc_01K5REGISTRATION",
+        content_sha256: "a".repeat(64),
+        status: "PENDING",
+        submitted_by_customer_id: "cus_1",
+      }),
+    )
     expect(res.statusCode).toBe(201)
   })
 
@@ -92,9 +99,7 @@ describe("ZB-04 buyer KYB evidence", () => {
 
   it("blocks review when the verified baseline package is incomplete", async () => {
     const b2b = {
-      listBuyerApplicationEvidences: vi.fn(async () => [
-        { evidence_type: "COMPANY_REGISTRATION" },
-      ]),
+      listBuyerApplicationEvidences: vi.fn(async () => [{ evidence_type: "COMPANY_REGISTRATION" }]),
     }
     await expect(
       assertVerifiedBuyerKybPackage(b2b as never, "b2bapp_1", "tn_zuribeans"),

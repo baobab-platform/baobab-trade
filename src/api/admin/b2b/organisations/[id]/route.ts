@@ -12,9 +12,7 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   })
   const membershipIds = memberships.map((m) => m.id)
   const roles =
-    membershipIds.length > 0
-      ? await b2b.listBuyerRoles({ membership_id: membershipIds })
-      : []
+    membershipIds.length > 0 ? await b2b.listBuyerRoles({ membership_id: membershipIds }) : []
 
   const rolesByMembership = new Map<string, string[]>()
   for (const role of roles) {

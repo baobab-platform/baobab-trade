@@ -29,7 +29,10 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
   const customerId = req.auth_context.actor_id
   const principalId = principalIdFromAuthContext(req.auth_context)
   if (!customerId || !principalId) {
-    throw new MedusaError(MedusaError.Types.FORBIDDEN, "canonical organisation administrator is required")
+    throw new MedusaError(
+      MedusaError.Types.FORBIDDEN,
+      "canonical organisation administrator is required",
+    )
   }
   const idempotencyKey = req.headers["idempotency-key"]?.toString().trim()
   if (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 128) {
@@ -38,12 +41,18 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
   const publicUrl = process.env.ZURIBEANS_PUBLIC_URL?.replace(/\/$/, "")
   const template = process.env.BAOBAB_BUYER_INVITATION_TEMPLATE?.trim()
   if (!publicUrl || !template) {
-    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "secure invitation delivery is not configured")
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      "secure invitation delivery is not configured",
+    )
   }
 
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   if (!(await activeAdmin(b2b, req.params.id, customerId))) {
-    throw new MedusaError(MedusaError.Types.FORBIDDEN, "only an ACCOUNT_ADMIN can resend invitations")
+    throw new MedusaError(
+      MedusaError.Types.FORBIDDEN,
+      "only an ACCOUNT_ADMIN can resend invitations",
+    )
   }
   const membership = await b2b.retrieveBuyerMembership(req.params.membershipId)
   if (
@@ -113,14 +122,18 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
       provider_message_id: providerId,
     })
   } catch (error) {
-    await b2b.updateBuyerMemberships(membership.id, {
-      invitation_token_hash: originalHash,
-      invitation_expires_at: originalExpiry,
-    }).catch(() => undefined)
-    await b2b.updateBuyerInvitationDeliveries(delivery.id, {
-      status: "FAILED",
-      error_code: "NOTIFICATION_PROVIDER_ERROR",
-    }).catch(() => undefined)
+    await b2b
+      .updateBuyerMemberships(membership.id, {
+        invitation_token_hash: originalHash,
+        invitation_expires_at: originalExpiry,
+      })
+      .catch(() => undefined)
+    await b2b
+      .updateBuyerInvitationDeliveries(delivery.id, {
+        status: "FAILED",
+        error_code: "NOTIFICATION_PROVIDER_ERROR",
+      })
+      .catch(() => undefined)
     throw error
   }
   res.status(202).json({

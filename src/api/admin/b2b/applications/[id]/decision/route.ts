@@ -25,8 +25,6 @@ type DecisionBody = {
   expected_revision?: unknown
 }
 
-type Decision = "APPROVED" | "REJECTED"
-
 const requiredText = (value: unknown, name: string, maximum = 128): string => {
   if (typeof value !== "string" || !value.trim()) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, `${name} is required`)
@@ -60,15 +58,9 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
 
   const decision = req.body?.decision
   if (decision !== "APPROVED" && decision !== "REJECTED") {
-    throw new MedusaError(
-      MedusaError.Types.INVALID_DATA,
-      "decision must be APPROVED or REJECTED",
-    )
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "decision must be APPROVED or REJECTED")
   }
-  const decisionReference = requiredText(
-    req.body?.decision_reference,
-    "decision_reference",
-  )
+  const decisionReference = requiredText(req.body?.decision_reference, "decision_reference")
   const reasonCode = requiredText(req.body?.reason_code, "reason_code", 64)
   if (!/^[A-Z][A-Z0-9_]*$/.test(reasonCode)) {
     throw new MedusaError(
@@ -89,11 +81,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
   }
   const canonicalOrganisationId =
     decision === "APPROVED"
-      ? requiredText(
-          req.body?.canonical_organisation_id,
-          "canonical_organisation_id",
-          256,
-        )
+      ? requiredText(req.body?.canonical_organisation_id, "canonical_organisation_id", 256)
       : null
   const idempotencyKey = req.headers["idempotency-key"]?.toString().trim()
   if (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 128) {
@@ -170,9 +158,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
     }
     let verifier: CanonicalOrganisationVerifier | null = null
     try {
-      verifier = req.scope.resolve<CanonicalOrganisationVerifier>(
-        CANONICAL_ORGANISATION_VERIFIER,
-      )
+      verifier = req.scope.resolve<CanonicalOrganisationVerifier>(CANONICAL_ORGANISATION_VERIFIER)
     } catch {
       verifier = getCanonicalOrganisationVerifier()
     }

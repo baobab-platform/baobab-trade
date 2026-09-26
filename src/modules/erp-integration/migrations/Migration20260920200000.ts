@@ -24,10 +24,18 @@ export class Migration20260920200000 extends Migration {
         constraint "erp_buyer_commercial_profile_projection_pkey" primary key ("id")
       );
     `)
-    this.addSql('create unique index if not exists "IDX_erpbcp_source_event" on "erp_buyer_commercial_profile_projection" ("source_event_id") where "deleted_at" is null;')
-    this.addSql('create unique index if not exists "IDX_erpbcp_identity" on "erp_buyer_commercial_profile_projection" ("buyer_organisation_id", "profile_reference", "source_event_id") where "deleted_at" is null;')
-    this.addSql('create index if not exists "IDX_erpbcp_buyer" on "erp_buyer_commercial_profile_projection" ("buyer_organisation_id") where "deleted_at" is null;')
-    this.addSql('create index if not exists "IDX_erpbcp_tenant" on "erp_buyer_commercial_profile_projection" ("tenant_id") where "deleted_at" is null;')
+    this.addSql(
+      'create unique index if not exists "IDX_erpbcp_source_event" on "erp_buyer_commercial_profile_projection" ("source_event_id") where "deleted_at" is null;',
+    )
+    this.addSql(
+      'create unique index if not exists "IDX_erpbcp_identity" on "erp_buyer_commercial_profile_projection" ("buyer_organisation_id", "profile_reference", "source_event_id") where "deleted_at" is null;',
+    )
+    this.addSql(
+      'create index if not exists "IDX_erpbcp_buyer" on "erp_buyer_commercial_profile_projection" ("buyer_organisation_id") where "deleted_at" is null;',
+    )
+    this.addSql(
+      'create index if not exists "IDX_erpbcp_tenant" on "erp_buyer_commercial_profile_projection" ("tenant_id") where "deleted_at" is null;',
+    )
   }
 
   async down(): Promise<void> {

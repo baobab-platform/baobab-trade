@@ -3,8 +3,8 @@
 // GET: any ACTIVE member. POST: ACCOUNT_ADMIN on ACTIVE organisation.
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
-import { B2B_MODULE } from "../../../../../modules/b2b"
-import type B2BModuleService from "../../../../../modules/b2b/service"
+import { B2B_MODULE } from "../../../../../../modules/b2b"
+import type B2BModuleService from "../../../../../../modules/b2b/service"
 
 type SiteBody = {
   market_key?: unknown
@@ -133,8 +133,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<SiteBody>, res: Medus
 
   const allowShipping =
     typeof req.body?.allow_shipping === "boolean" ? req.body.allow_shipping : true
-  const allowBilling =
-    typeof req.body?.allow_billing === "boolean" ? req.body.allow_billing : false
+  const allowBilling = typeof req.body?.allow_billing === "boolean" ? req.body.allow_billing : false
 
   const created = await b2b.createDeliverySites({
     organisation_id: organisationId,

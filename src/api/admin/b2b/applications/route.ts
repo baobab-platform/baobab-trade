@@ -10,8 +10,7 @@ import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
 
 const isApplicationStatus = (value: unknown): value is BuyerApplicationStatus =>
-  typeof value === "string" &&
-  (BUYER_APPLICATION_STATUSES as readonly string[]).includes(value)
+  typeof value === "string" && (BUYER_APPLICATION_STATUSES as readonly string[]).includes(value)
 
 const boundedInteger = (
   value: unknown,

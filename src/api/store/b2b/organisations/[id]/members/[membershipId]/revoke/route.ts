@@ -18,11 +18,17 @@ const activeAdmin = async (b2b: B2BModuleService, organisationId: string, custom
 export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) => {
   const customerId = req.auth_context.actor_id
   if (!customerId || !principalIdFromAuthContext(req.auth_context)) {
-    throw new MedusaError(MedusaError.Types.FORBIDDEN, "canonical organisation administrator is required")
+    throw new MedusaError(
+      MedusaError.Types.FORBIDDEN,
+      "canonical organisation administrator is required",
+    )
   }
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   if (!(await activeAdmin(b2b, req.params.id, customerId))) {
-    throw new MedusaError(MedusaError.Types.FORBIDDEN, "only an ACCOUNT_ADMIN can revoke invitations")
+    throw new MedusaError(
+      MedusaError.Types.FORBIDDEN,
+      "only an ACCOUNT_ADMIN can revoke invitations",
+    )
   }
   const membership = await b2b.retrieveBuyerMembership(req.params.membershipId)
   if (membership.organisation_id !== req.params.id || membership.status !== "INVITED") {

@@ -43,9 +43,7 @@ describe("POST /admin/b2b/organisations/:id/status", () => {
       scope: { resolve: () => service },
     }
 
-    await expect(POST(req as never, response() as never)).rejects.toThrow(
-      "reason is required",
-    )
+    await expect(POST(req as never, response() as never)).rejects.toThrow("reason is required")
     expect(service.retrieveB2BOrganisation).not.toHaveBeenCalled()
   })
 })

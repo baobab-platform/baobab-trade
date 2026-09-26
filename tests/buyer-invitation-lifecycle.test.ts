@@ -14,7 +14,15 @@ afterEach(() => {
 })
 
 const response = () => {
-  const res: any = { status(code: number) { this.statusCode = code; return this }, json(body: unknown) { this.body = body } }
+  const res: any = {
+    status(code: number) {
+      this.statusCode = code
+      return this
+    },
+    json(body: unknown) {
+      this.body = body
+    },
+  }
   return res
 }
 
@@ -28,11 +36,17 @@ describe("buyer invitation lifecycle", () => {
       listBuyerMemberships: vi.fn(async () => [{ id: "b2bmem_admin" }]),
       listBuyerRoles: vi.fn(async () => [{ role: "ACCOUNT_ADMIN" }]),
       retrieveBuyerMembership: vi.fn(async () => ({
-        id: "b2bmem_invite", organisation_id: "b2borg_1", status: "INVITED",
-        invited_email: "buyer@example.com", invitation_token_hash: "old-hash",
+        id: "b2bmem_invite",
+        organisation_id: "b2borg_1",
+        status: "INVITED",
+        invited_email: "buyer@example.com",
+        invitation_token_hash: "old-hash",
         invitation_expires_at: new Date(Date.now() + 1000),
       })),
-      listBuyerInvitationDeliveries: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ attempt_number: 1 }]),
+      listBuyerInvitationDeliveries: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ attempt_number: 1 }]),
       updateBuyerMemberships: vi.fn(async () => ({})),
       createBuyerInvitationDeliveries: vi.fn(async (input) => ({ id: "delivery_2", ...input })),
       updateBuyerInvitationDeliveries: vi.fn(async () => ({})),
@@ -43,15 +57,23 @@ describe("buyer invitation lifecycle", () => {
       auth_context: auth,
       params: { id: "b2borg_1", membershipId: "b2bmem_invite" },
       headers: { "idempotency-key": "buyer-invite-resend-0001" },
-      scope: { resolve: (key: string) => key === B2B_MODULE ? b2b : key === Modules.NOTIFICATION ? notification : null },
+      scope: {
+        resolve: (key: string) =>
+          key === B2B_MODULE ? b2b : key === Modules.NOTIFICATION ? notification : null,
+      },
     }
     const res = response()
     await resend(req as never, res)
-    expect(b2b.createBuyerInvitationDeliveries).toHaveBeenCalledWith(expect.objectContaining({
-      membership_id: "b2bmem_invite", attempt_number: 2, status: "PENDING",
-    }))
+    expect(b2b.createBuyerInvitationDeliveries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        membership_id: "b2bmem_invite",
+        attempt_number: 2,
+        status: "PENDING",
+      }),
+    )
     expect(b2b.updateBuyerInvitationDeliveries).toHaveBeenCalledWith("delivery_2", {
-      status: "QUEUED", provider_message_id: "msg_2",
+      status: "QUEUED",
+      provider_message_id: "msg_2",
     })
     expect(JSON.stringify(res.body)).not.toContain("token")
     expect(res.statusCode).toBe(202)
@@ -62,7 +84,9 @@ describe("buyer invitation lifecycle", () => {
       listBuyerMemberships: vi.fn(async () => [{ id: "b2bmem_admin" }]),
       listBuyerRoles: vi.fn(async () => [{ role: "ACCOUNT_ADMIN" }]),
       retrieveBuyerMembership: vi.fn(async () => ({
-        id: "b2bmem_invite", organisation_id: "b2borg_1", status: "INVITED",
+        id: "b2bmem_invite",
+        organisation_id: "b2borg_1",
+        status: "INVITED",
       })),
       updateBuyerMemberships: vi.fn(async (_id, patch) => ({ id: "b2bmem_invite", ...patch })),
     }
@@ -73,9 +97,14 @@ describe("buyer invitation lifecycle", () => {
     }
     const res = response()
     await revoke(req as never, res)
-    expect(b2b.updateBuyerMemberships).toHaveBeenCalledWith("b2bmem_invite", expect.objectContaining({
-      status: "REVOKED", invitation_token_hash: null, invitation_expires_at: null,
-    }))
+    expect(b2b.updateBuyerMemberships).toHaveBeenCalledWith(
+      "b2bmem_invite",
+      expect.objectContaining({
+        status: "REVOKED",
+        invitation_token_hash: null,
+        invitation_expires_at: null,
+      }),
+    )
     expect(res.body).toEqual({ membership_id: "b2bmem_invite", status: "REVOKED" })
   })
 })

@@ -8,7 +8,8 @@ describe("ZB-04 end-to-end certification controls", () => {
     for (const control of certification.controls) {
       expect(control.id).toMatch(/^ZB04-[0-9]{2}$/)
       expect(control.evidence.length).toBeGreaterThan(0)
-      for (const path of control.evidence) expect(existsSync(path), `${control.id}: ${path}`).toBe(true)
+      for (const path of control.evidence)
+        expect(existsSync(path), `${control.id}: ${path}`).toBe(true)
     }
   })
 
@@ -26,7 +27,9 @@ describe("ZB-04 end-to-end certification controls", () => {
     expect(certification.status).toBe("IMPLEMENTED_AWAITING_ENVIRONMENT_CERTIFICATION")
     expect(certification.productionEvidence).toContain("real iDempiere business-partner projection")
     expect(certification.productionEvidence).toContain("real notification-provider message receipt")
-    expect(certification.productionEvidence).toContain("operator sign-off with correlation IDs and timestamps")
+    expect(certification.productionEvidence).toContain(
+      "operator sign-off with correlation IDs and timestamps",
+    )
   })
 
   it("keeps the CI certification pack enabled", () => {

@@ -29,9 +29,7 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   })
 
   res.status(200).json({
-    application: buyerApplicationView(
-      application as unknown as Record<string, unknown>,
-    ),
+    application: buyerApplicationView(application as unknown as Record<string, unknown>),
     evidence: evidence.map((item) => ({
       id: item.id,
       evidence_type: item.evidence_type,

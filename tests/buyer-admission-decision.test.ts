@@ -36,7 +36,10 @@ const application = {
   revision: 2,
 }
 
-const request = (decision: "APPROVED" | "REJECTED", scope: { resolve: (key: string) => unknown }) => ({
+const request = (
+  decision: "APPROVED" | "REJECTED",
+  scope: { resolve: (key: string) => unknown },
+) => ({
   auth_context: {
     actor_id: "user_1",
     app_metadata: { baobab_principal_id: "prn_staff_1" },

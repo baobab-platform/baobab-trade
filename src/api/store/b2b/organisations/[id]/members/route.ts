@@ -2,9 +2,9 @@
 import { createHash, randomBytes } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError, Modules } from "@medusajs/framework/utils"
-import { principalIdFromAuthContext } from "../../../../../baobab/b2b/onboarding-policy"
-import { B2B_MODULE } from "../../../../../modules/b2b"
-import type B2BModuleService from "../../../../../modules/b2b/service"
+import { principalIdFromAuthContext } from "../../../../../../baobab/b2b/onboarding-policy"
+import { B2B_MODULE } from "../../../../../../modules/b2b"
+import type B2BModuleService from "../../../../../../modules/b2b/service"
 
 type InviteBody = {
   email?: unknown
@@ -27,11 +27,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const isInviteRole = (value: unknown): value is InviteRole =>
   typeof value === "string" && (INVITE_ROLES as readonly string[]).includes(value)
 
-const activeAdmin = async (
-  b2b: B2BModuleService,
-  organisationId: string,
-  customerId: string,
-) => {
+const activeAdmin = async (b2b: B2BModuleService, organisationId: string, customerId: string) => {
   const memberships = await b2b.listBuyerMemberships({
     organisation_id: organisationId,
     customer_id: customerId,
@@ -64,9 +60,7 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   const memberships = await b2b.listBuyerMemberships({ organisation_id: organisationId })
   const membershipIds = memberships.map((membership) => membership.id)
   const roles =
-    membershipIds.length > 0
-      ? await b2b.listBuyerRoles({ membership_id: membershipIds })
-      : []
+    membershipIds.length > 0 ? await b2b.listBuyerRoles({ membership_id: membershipIds }) : []
 
   const rolesByMembership = new Map<string, string[]>()
   for (const role of roles) {
@@ -139,10 +133,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
     )
   }
   if (!(await activeAdmin(b2b, organisationId, customerId))) {
-    throw new MedusaError(
-      MedusaError.Types.FORBIDDEN,
-      "only an ACCOUNT_ADMIN can invite members",
-    )
+    throw new MedusaError(MedusaError.Types.FORBIDDEN, "only an ACCOUNT_ADMIN can invite members")
   }
 
   const replay = await b2b.listBuyerMemberships({
@@ -247,10 +238,12 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
       provider_message_id: providerId,
     })
   } catch (error) {
-    await b2b.updateBuyerInvitationDeliveries(delivery.id, {
-      status: "FAILED",
-      error_code: "NOTIFICATION_PROVIDER_ERROR",
-    }).catch(() => undefined)
+    await b2b
+      .updateBuyerInvitationDeliveries(delivery.id, {
+        status: "FAILED",
+        error_code: "NOTIFICATION_PROVIDER_ERROR",
+      })
+      .catch(() => undefined)
     throw error
   }
 

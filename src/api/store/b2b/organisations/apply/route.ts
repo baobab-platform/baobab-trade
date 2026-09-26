@@ -101,7 +101,9 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
         "Idempotency-Key was already used for a different buyer application",
       )
     }
-    res.status(200).json({ application: applicationView(replay[0] as unknown as Record<string, unknown>) })
+    res
+      .status(200)
+      .json({ application: applicationView(replay[0] as unknown as Record<string, unknown>) })
     return
   }
 

@@ -2,8 +2,8 @@
 // GET: any member. POST: ACCOUNT_ADMIN on ACTIVE org.
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
-import { B2B_MODULE } from "../../../../../modules/b2b"
-import type B2BModuleService from "../../../../../modules/b2b/service"
+import { B2B_MODULE } from "../../../../../../modules/b2b"
+import type B2BModuleService from "../../../../../../modules/b2b/service"
 
 type TaxBody = {
   market_key?: unknown
@@ -24,11 +24,7 @@ const asString = (value: unknown): string | null => {
   return t.length > 0 ? t : null
 }
 
-const requireMember = async (
-  b2b: B2BModuleService,
-  organisationId: string,
-  customerId: string,
-) => {
+const requireMember = async (b2b: B2BModuleService, organisationId: string, customerId: string) => {
   const memberships = await b2b.listBuyerMemberships({
     organisation_id: organisationId,
     customer_id: customerId,
@@ -42,15 +38,14 @@ const requireMember = async (
   return memberships[0]
 }
 
-const requireAdmin = async (
-  b2b: B2BModuleService,
-  organisationId: string,
-  customerId: string,
-) => {
+const requireAdmin = async (b2b: B2BModuleService, organisationId: string, customerId: string) => {
   const membership = await requireMember(b2b, organisationId, customerId)
   const roles = await b2b.listBuyerRoles({ membership_id: membership.id })
   if (!roles.some((r) => r.role === "ACCOUNT_ADMIN")) {
-    throw new MedusaError(MedusaError.Types.FORBIDDEN, "only an ACCOUNT_ADMIN can update tax profile")
+    throw new MedusaError(
+      MedusaError.Types.FORBIDDEN,
+      "only an ACCOUNT_ADMIN can update tax profile",
+    )
   }
   return membership
 }

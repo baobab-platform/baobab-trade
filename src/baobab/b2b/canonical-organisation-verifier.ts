@@ -23,9 +23,7 @@ export interface CanonicalOrganisationVerifier {
   }): Promise<CanonicalOrganisationVerification>
 }
 
-export class ControlPlaneCanonicalOrganisationVerifier
-  implements CanonicalOrganisationVerifier
-{
+export class ControlPlaneCanonicalOrganisationVerifier implements CanonicalOrganisationVerifier {
   constructor(
     private readonly tokenProvider: WorkloadTokenProvider,
     private readonly controlPlaneClient: ControlPlaneClient,
@@ -62,39 +60,31 @@ export class ControlPlaneCanonicalOrganisationVerifier
 
 let singleton: CanonicalOrganisationVerifier | null | undefined
 
-export const getCanonicalOrganisationVerifier =
-  (): CanonicalOrganisationVerifier | null => {
-    if (singleton !== undefined) return singleton
+export const getCanonicalOrganisationVerifier = (): CanonicalOrganisationVerifier | null => {
+  if (singleton !== undefined) return singleton
 
-    const env = getBaobabTradeEnvironment()
-    if (
-      !env.iamWorkloadTokenUrl ||
-      !env.iamWorkloadClientSecret ||
-      !env.controlPlaneBaseUrl
-    ) {
-      singleton = null
-      return singleton
-    }
-
-    const tokenProvider = new ClientCredentialsWorkloadTokenProvider({
-      tokenUrl: env.iamWorkloadTokenUrl,
-      clientId: env.iamWorkloadClientId,
-      clientSecret: env.iamWorkloadClientSecret,
-    })
-    const client = new HttpControlPlaneClient({
-      baseUrl: env.controlPlaneBaseUrl,
-      contextPath: env.controlPlaneContextPath,
-      productId: env.controlPlaneProductId,
-      marketPathTemplate: env.controlPlaneMarketPathTemplate,
-      mappingResolutionPath: env.controlPlaneMappingResolutionPath,
-      platformContextPath: env.controlPlanePlatformContextPath,
-    })
-    singleton = new ControlPlaneCanonicalOrganisationVerifier(
-      tokenProvider,
-      client,
-    )
+  const env = getBaobabTradeEnvironment()
+  if (!env.iamWorkloadTokenUrl || !env.iamWorkloadClientSecret || !env.controlPlaneBaseUrl) {
+    singleton = null
     return singleton
   }
+
+  const tokenProvider = new ClientCredentialsWorkloadTokenProvider({
+    tokenUrl: env.iamWorkloadTokenUrl,
+    clientId: env.iamWorkloadClientId,
+    clientSecret: env.iamWorkloadClientSecret,
+  })
+  const client = new HttpControlPlaneClient({
+    baseUrl: env.controlPlaneBaseUrl,
+    contextPath: env.controlPlaneContextPath,
+    productId: env.controlPlaneProductId,
+    marketPathTemplate: env.controlPlaneMarketPathTemplate,
+    mappingResolutionPath: env.controlPlaneMappingResolutionPath,
+    platformContextPath: env.controlPlanePlatformContextPath,
+  })
+  singleton = new ControlPlaneCanonicalOrganisationVerifier(tokenProvider, client)
+  return singleton
+}
 
 export const resetCanonicalOrganisationVerifierForTests = (): void => {
   singleton = undefined

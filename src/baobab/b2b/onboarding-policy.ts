@@ -71,9 +71,10 @@ export const resolveBuyerTenantId = (environment: NodeJS.ProcessEnv = process.en
   return tenantId
 }
 
-export const principalIdFromAuthContext = (
-  authContext: { actor_id?: string; app_metadata?: Record<string, unknown> },
-): string | null => {
+export const principalIdFromAuthContext = (authContext: {
+  actor_id?: string
+  app_metadata?: Record<string, unknown>
+}): string | null => {
   const value = authContext.app_metadata?.baobab_principal_id
   if (typeof value !== "string" || !value.trim()) return null
   if (value === authContext.actor_id) {

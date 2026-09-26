@@ -2,8 +2,8 @@
 // Membership alone grants no tax treatment; VERIFIED is staff-attested only.
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
-import { B2B_MODULE } from "../../../../../modules/b2b"
-import type B2BModuleService from "../../../../../modules/b2b/service"
+import { B2B_MODULE } from "../../../../../../modules/b2b"
+import type B2BModuleService from "../../../../../../modules/b2b/service"
 
 type StatusBody = {
   status?: unknown
@@ -19,10 +19,7 @@ const ALLOWED: Record<TaxStatus, readonly TaxStatus[]> = {
 }
 
 const isTaxStatus = (value: unknown): value is TaxStatus =>
-  value === "PENDING" ||
-  value === "VERIFIED" ||
-  value === "REJECTED" ||
-  value === "EXPIRED"
+  value === "PENDING" || value === "VERIFIED" || value === "REJECTED" || value === "EXPIRED"
 
 export const POST = async (req: AuthenticatedMedusaRequest<StatusBody>, res: MedusaResponse) => {
   const nextStatus = req.body?.status

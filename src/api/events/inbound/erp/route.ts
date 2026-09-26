@@ -60,24 +60,43 @@ const normalize = (body: unknown) => {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "currency_code must be ISO 4217")
   }
   const limit = data.credit_limit_minor
-  if (limit !== null && limit !== undefined && (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 0)) {
-    throw new MedusaError(MedusaError.Types.INVALID_DATA, "credit_limit_minor must be a non-negative safe integer")
+  if (
+    limit !== null &&
+    limit !== undefined &&
+    (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 0)
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "credit_limit_minor must be a non-negative safe integer",
+    )
   }
-  const paymentTerm = data.payment_term_code == null ? null : requiredText(data.payment_term_code, "payment_term_code")
+  const paymentTerm =
+    data.payment_term_code == null
+      ? null
+      : requiredText(data.payment_term_code, "payment_term_code")
   if (creditStatus === "APPROVED" && !paymentTerm) {
-    throw new MedusaError(MedusaError.Types.INVALID_DATA, "approved profile requires payment_term_code")
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "approved profile requires payment_term_code",
+    )
   }
   const observedAt = new Date(requiredText(data.as_of ?? event.time ?? event.occurred_at, "as_of"))
   if (Number.isNaN(observedAt.valueOf())) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "as_of must be an ISO timestamp")
   }
   const tenantId = requiredText(event.tenantid ?? event.tenant_id ?? data.tenant_id, "tenantid")
-  const legalEntityId = requiredText(event.entityid ?? event.entity_id ?? data.legal_entity_id, "entityid")
+  const legalEntityId = requiredText(
+    event.entityid ?? event.entity_id ?? data.legal_entity_id,
+    "entityid",
+  )
   if (
     (data.tenant_id !== undefined && data.tenant_id !== tenantId) ||
     (data.legal_entity_id !== undefined && data.legal_entity_id !== legalEntityId)
   ) {
-    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "ERP event envelope and data scope mismatch")
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      "ERP event envelope and data scope mismatch",
+    )
   }
   return {
     eventId: requiredText(event.id ?? event.event_id, "id"),
@@ -122,7 +141,10 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     !organisation.canonical_organisation_id ||
     organisation.status === "CLOSED"
   ) {
-    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "buyer organisation is not eligible for ERP projection")
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      "buyer organisation is not eligible for ERP projection",
+    )
   }
 
   const projection = await erp.createBuyerCommercialProfileProjections({
@@ -201,10 +223,12 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   } catch (error) {
     if (receipt) await events.deleteEventConsumerReceipts(receipt.id).catch(() => undefined)
     if (activated) {
-      await b2b.updateB2BOrganisations(organisation.id, {
-        status: "PENDING",
-        erp_business_partner_id: organisation.erp_business_partner_id ?? null,
-      }).catch(() => undefined)
+      await b2b
+        .updateB2BOrganisations(organisation.id, {
+          status: "PENDING",
+          erp_business_partner_id: organisation.erp_business_partner_id ?? null,
+        })
+        .catch(() => undefined)
     }
     await erp.deleteBuyerCommercialProfileProjections(projection.id).catch(() => undefined)
     throw error

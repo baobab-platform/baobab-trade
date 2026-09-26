@@ -11,9 +11,15 @@ export class Migration20260920230000 extends Migration {
       "deleted_at" timestamptz null, constraint "b2b_buyer_invitation_delivery_pkey" primary key ("id"),
       constraint "b2b_buyer_invitation_delivery_attempt_check" check ("attempt_number" > 0)
     );`)
-    this.addSql('create unique index if not exists "IDX_b2binvdel_attempt" on "b2b_buyer_invitation_delivery" ("membership_id","attempt_number") where "deleted_at" is null;')
-    this.addSql('create unique index if not exists "IDX_b2binvdel_idempotency" on "b2b_buyer_invitation_delivery" ("idempotency_key") where "deleted_at" is null;')
-    this.addSql('create index if not exists "IDX_b2binvdel_status" on "b2b_buyer_invitation_delivery" ("status") where "deleted_at" is null;')
+    this.addSql(
+      'create unique index if not exists "IDX_b2binvdel_attempt" on "b2b_buyer_invitation_delivery" ("membership_id","attempt_number") where "deleted_at" is null;',
+    )
+    this.addSql(
+      'create unique index if not exists "IDX_b2binvdel_idempotency" on "b2b_buyer_invitation_delivery" ("idempotency_key") where "deleted_at" is null;',
+    )
+    this.addSql(
+      'create index if not exists "IDX_b2binvdel_status" on "b2b_buyer_invitation_delivery" ("status") where "deleted_at" is null;',
+    )
   }
 
   async down(): Promise<void> {

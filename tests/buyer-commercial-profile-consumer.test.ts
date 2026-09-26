@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { POST } from "../src/api/events/inbound/erp/route"
 import { B2B_MODULE } from "../src/modules/b2b"
 import { ERP_INTEGRATION_MODULE } from "../src/modules/erp-integration"
-import { EVENT_OUTBOX_MODULE } from "../src/modules/event-outbox"
 
 const previousTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
 const previousSecret = process.env.BAOBAB_WEBHOOK_SIGNING_SECRET
@@ -42,8 +41,13 @@ const event = (status: "APPROVED" | "ON_HOLD" | "REJECTED" = "APPROVED") => ({
 
 const response = () => {
   const res: any = {
-    status(code: number) { this.statusCode = code; return this },
-    json(body: unknown) { this.body = body },
+    status(code: number) {
+      this.statusCode = code
+      return this
+    },
+    json(body: unknown) {
+      this.body = body
+    },
   }
   return res
 }
@@ -66,7 +70,7 @@ const request = (body: ReturnType<typeof event>, organisationStatus = "PENDING")
     deleteBuyerCommercialProfileProjections: vi.fn(),
   }
   const events = {
-    listEventConsumerReceipts: vi.fn(async () => []),
+    listEventConsumerReceipts: vi.fn(async (): Promise<Array<{ id: string }>> => []),
     createEventConsumerReceipts: vi.fn(async () => ({ id: "evtrec_1" })),
     deleteEventConsumerReceipts: vi.fn(),
     createEventOutboxes: vi.fn(async () => ({ id: "evtout_1" })),
@@ -76,8 +80,10 @@ const request = (body: ReturnType<typeof event>, organisationStatus = "PENDING")
     req: {
       body,
       headers: { "x-baobab-signature": `sha256=${signature}` },
-      scope: { resolve: (key: string) =>
-        key === B2B_MODULE ? b2b : key === ERP_INTEGRATION_MODULE ? erp : events },
+      scope: {
+        resolve: (key: string) =>
+          key === B2B_MODULE ? b2b : key === ERP_INTEGRATION_MODULE ? erp : events,
+      },
     },
     b2b,
     erp,
@@ -96,10 +102,12 @@ describe("ZB-04 ERP commercial profile consumer", () => {
       erp_business_partner_id: "BP-10001",
     })
     expect(fixture.events.createEventConsumerReceipts).toHaveBeenCalled()
-    expect(fixture.events.createEventOutboxes).toHaveBeenCalledWith(expect.objectContaining({
-      causation_id: event().id,
-      idempotency_key: `buyer-activation:${event().id}`,
-    }))
+    expect(fixture.events.createEventOutboxes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        causation_id: event().id,
+        idempotency_key: `buyer-activation:${event().id}`,
+      }),
+    )
     expect(res.statusCode).toBe(202)
   })
 
@@ -116,7 +124,9 @@ describe("ZB-04 ERP commercial profile consumer", () => {
   it("rejects an invalid signature before applying effects", async () => {
     const fixture = request(event())
     fixture.req.headers["x-baobab-signature"] = "sha256=" + "0".repeat(64)
-    await expect(POST(fixture.req as never, response())).rejects.toThrow("invalid ERP event signature")
+    await expect(POST(fixture.req as never, response())).rejects.toThrow(
+      "invalid ERP event signature",
+    )
     expect(fixture.erp.createBuyerCommercialProfileProjections).not.toHaveBeenCalled()
   })
 

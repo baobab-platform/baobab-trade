@@ -84,7 +84,10 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     req.body.size_bytes < 1 ||
     req.body.size_bytes > 25 * 1024 * 1024
   ) {
-    throw new MedusaError(MedusaError.Types.INVALID_DATA, "size_bytes must be between 1 and 26214400")
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "size_bytes must be between 1 and 26214400",
+    )
   }
   const issuedAt = date(req.body.issued_at, "issued_at")
   const expiresAt = date(req.body.expires_at, "expires_at")

@@ -82,13 +82,23 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     throw new MedusaError(MedusaError.Types.NOT_FOUND, "application evidence was not found")
   }
   if (!["SUBMITTED", "INFORMATION_REQUIRED", "UNDER_REVIEW"].includes(application.status)) {
-    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "application evidence can no longer be decided")
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      "application evidence can no longer be decided",
+    )
   }
-  if (decision === "VERIFIED" && evidence.expires_at && new Date(evidence.expires_at) <= new Date()) {
+  if (
+    decision === "VERIFIED" &&
+    evidence.expires_at &&
+    new Date(evidence.expires_at) <= new Date()
+  ) {
     throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "expired evidence cannot be verified")
   }
   if (evidence.status !== "PENDING") {
-    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "application evidence already has a decision")
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      "application evidence already has a decision",
+    )
   }
 
   const occurredAt = new Date()
@@ -128,7 +138,8 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
         subject: `buyer-application-evidence/${evidence.id}`,
         time: occurredAt.toISOString(),
         datacontenttype: "application/json",
-        dataschema: "https://contracts.baobab-platform.com/buyer-organisation/v1/events.schema.json#/$defs/buyerApplicationEvidenceDecisionEventData",
+        dataschema:
+          "https://contracts.baobab-platform.com/buyer-organisation/v1/events.schema.json#/$defs/buyerApplicationEvidenceDecisionEventData",
         baobabscope: "tenant",
         tenantid: tenantId,
         correlationid: correlationId,
@@ -151,7 +162,10 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     })
   } catch (error) {
     if (eventRecord) await outbox.deleteEventOutboxes(eventRecord.id).catch(() => undefined)
-    if (updated) await b2b.updateBuyerApplicationEvidences(evidence.id, { status: "PENDING" }).catch(() => undefined)
+    if (updated)
+      await b2b
+        .updateBuyerApplicationEvidences(evidence.id, { status: "PENDING" })
+        .catch(() => undefined)
     await b2b.deleteBuyerApplicationEvidenceDecisions(recorded.id).catch(() => undefined)
     throw error
   }

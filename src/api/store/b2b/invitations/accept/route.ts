@@ -42,9 +42,9 @@ export const POST = async (req: AuthenticatedMedusaRequest<AcceptBody>, res: Med
   }
   const membership = matches[0]
 
-  const customerService = req.scope.resolve<{ retrieveCustomer(id: string): Promise<{ email?: string | null }> }>(
-    Modules.CUSTOMER,
-  )
+  const customerService = req.scope.resolve<{
+    retrieveCustomer(id: string): Promise<{ email?: string | null }>
+  }>(Modules.CUSTOMER)
   const customer = await customerService.retrieveCustomer(customerId)
   if (
     !customer.email ||

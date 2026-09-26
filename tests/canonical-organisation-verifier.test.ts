@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import {
-  ControlPlaneCanonicalOrganisationVerifier,
-} from "../src/baobab/b2b/canonical-organisation-verifier"
+import { ControlPlaneCanonicalOrganisationVerifier } from "../src/baobab/b2b/canonical-organisation-verifier"
 import { HttpControlPlaneClient } from "../src/baobab/control-plane/client"
 
 const jsonResponse = (status: number, body: unknown) =>

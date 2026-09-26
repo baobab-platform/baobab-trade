@@ -21,10 +21,7 @@
     {
       "id": "ZB04-02",
       "name": "Verified KYB before admission",
-      "evidence": [
-        "tests/buyer-kyb-evidence.test.ts",
-        "tests/buyer-admission-decision.test.ts"
-      ]
+      "evidence": ["tests/buyer-kyb-evidence.test.ts", "tests/buyer-admission-decision.test.ts"]
     },
     {
       "id": "ZB04-03",
@@ -61,18 +58,12 @@
     {
       "id": "ZB04-07",
       "name": "At-least-once event safety",
-      "evidence": [
-        "tests/event-outbox.test.ts",
-        "tests/buyer-commercial-profile-consumer.test.ts"
-      ]
+      "evidence": ["tests/event-outbox.test.ts", "tests/buyer-commercial-profile-consumer.test.ts"]
     },
     {
       "id": "ZB04-08",
       "name": "Pending buyer purchasing denial",
-      "evidence": [
-        "tests/b2b-policy.test.ts",
-        "tests/b2b-threat-model.test.ts"
-      ]
+      "evidence": ["tests/b2b-policy.test.ts", "tests/b2b-threat-model.test.ts"]
     }
   ],
   "crossRepositoryDependencies": [

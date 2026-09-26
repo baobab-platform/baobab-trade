@@ -75,7 +75,11 @@ export const POST = async (req: AuthenticatedMedusaRequest<ReviewBody>, res: Med
       ? null
       : requiredText(req.body.note, "note", 2_000)
   const expectedRevision = req.body?.expected_revision
-  if (typeof expectedRevision !== "number" || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+  if (
+    typeof expectedRevision !== "number" ||
+    !Number.isSafeInteger(expectedRevision) ||
+    expectedRevision < 1
+  ) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
       "expected_revision must be a positive integer",
@@ -117,12 +121,8 @@ export const POST = async (req: AuthenticatedMedusaRequest<ReviewBody>, res: Med
       throw new MedusaError(MedusaError.Types.NOT_FOUND, "buyer application was not found")
     }
     res.status(200).json({
-      application: buyerApplicationView(
-        replayApplication as unknown as Record<string, unknown>,
-      ),
-      review_action: reviewActionView(
-        replay[0] as unknown as Record<string, unknown>,
-      ),
+      application: buyerApplicationView(replayApplication as unknown as Record<string, unknown>),
+      review_action: reviewActionView(replay[0] as unknown as Record<string, unknown>),
     })
     return
   }
@@ -139,10 +139,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<ReviewBody>, res: Med
   }
 
   try {
-    assertBuyerApplicationTransition(
-      application.status as BuyerApplicationStatus,
-      nextStatus,
-    )
+    assertBuyerApplicationTransition(application.status as BuyerApplicationStatus, nextStatus)
   } catch {
     throw new MedusaError(
       MedusaError.Types.NOT_ALLOWED,
@@ -183,8 +180,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<ReviewBody>, res: Med
 
   res.status(200).json({
     application: buyerApplicationView(updated as unknown as Record<string, unknown>),
-    review_action: reviewActionView(
-      reviewAction as unknown as Record<string, unknown>,
-    ),
+    review_action: reviewActionView(reviewAction as unknown as Record<string, unknown>),
   })
 }

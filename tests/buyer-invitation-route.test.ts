@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { Modules } from "@medusajs/framework/utils"
 import { POST as acceptInvitation } from "../src/api/store/b2b/invitations/accept/route"
-import { GET as listMembers, POST as inviteMember } from "../src/api/store/b2b/organisations/[id]/members/route"
+import {
+  GET as listMembers,
+  POST as inviteMember,
+} from "../src/api/store/b2b/organisations/[id]/members/route"
 import { B2B_MODULE } from "../src/modules/b2b"
 
 const originalPublicUrl = process.env.ZURIBEANS_PUBLIC_URL
@@ -43,9 +46,7 @@ describe("buyer organisation invitations", () => {
             invitation_accepted_at: null,
           },
         ]),
-      listBuyerRoles: vi.fn(async () => [
-        { membership_id: "b2bmem_invited", role: "BUYER" },
-      ]),
+      listBuyerRoles: vi.fn(async () => [{ membership_id: "b2bmem_invited", role: "BUYER" }]),
     }
     const req = {
       auth_context: { actor_id: "cus_admin" },
@@ -98,9 +99,7 @@ describe("buyer organisation invitations", () => {
         .mockResolvedValueOnce([{ id: "b2bmem_admin", status: "ACTIVE" }])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]),
-      listBuyerRoles: vi.fn(async () => [
-        { membership_id: "b2bmem_admin", role: "ACCOUNT_ADMIN" },
-      ]),
+      listBuyerRoles: vi.fn(async () => [{ membership_id: "b2bmem_admin", role: "ACCOUNT_ADMIN" }]),
       createBuyerMemberships: vi.fn(async (input) => ({
         id: "b2bmem_invite",
         ...input,
@@ -121,7 +120,8 @@ describe("buyer organisation invitations", () => {
       headers: { "idempotency-key": "buyer-invite-key-0001" },
       body: { email: "buyer@example.com", role: "BUYER" },
       scope: {
-        resolve: (key: string) => (key === B2B_MODULE ? b2b : key === Modules.NOTIFICATION ? notification : null),
+        resolve: (key: string) =>
+          key === B2B_MODULE ? b2b : key === Modules.NOTIFICATION ? notification : null,
       },
     }
     const res = response()
@@ -183,13 +183,15 @@ describe("buyer organisation invitations", () => {
         resolve: (key: string) =>
           key === B2B_MODULE
             ? b2b
-            : { createNotifications: vi.fn(async () => { throw new Error("delivery failed") }) },
+            : {
+                createNotifications: vi.fn(async () => {
+                  throw new Error("delivery failed")
+                }),
+              },
       },
     }
 
-    await expect(inviteMember(req as never, response() as never)).rejects.toThrow(
-      "delivery failed",
-    )
+    await expect(inviteMember(req as never, response() as never)).rejects.toThrow("delivery failed")
     expect(b2b.updateBuyerInvitationDeliveries).toHaveBeenCalledWith("b2binvdel_1", {
       status: "FAILED",
       error_code: "NOTIFICATION_PROVIDER_ERROR",
@@ -199,13 +201,15 @@ describe("buyer organisation invitations", () => {
   })
   it("binds acceptance to the authenticated customer email", async () => {
     const b2b = {
-      listBuyerMemberships: vi.fn(async () => [{
-        id: "b2bmem_invite",
-        organisation_id: "b2borg_1",
-        invited_email: "invited@example.com",
-        invitation_expires_at: new Date(Date.now() + 60_000),
-        status: "INVITED",
-      }]),
+      listBuyerMemberships: vi.fn(async () => [
+        {
+          id: "b2bmem_invite",
+          organisation_id: "b2borg_1",
+          invited_email: "invited@example.com",
+          invitation_expires_at: new Date(Date.now() + 60_000),
+          status: "INVITED",
+        },
+      ]),
     }
     const customer = { retrieveCustomer: vi.fn(async () => ({ email: "attacker@example.com" })) }
     const req = {
@@ -215,12 +219,12 @@ describe("buyer organisation invitations", () => {
       },
       body: { invitation_token: "secret" },
       scope: {
-        resolve: (key: string) => key === B2B_MODULE ? b2b : key === Modules.CUSTOMER ? customer : null,
+        resolve: (key: string) =>
+          key === B2B_MODULE ? b2b : key === Modules.CUSTOMER ? customer : null,
       },
     }
     await expect(acceptInvitation(req as never, response() as never)).rejects.toThrow(
       "invitation is invalid or already used",
     )
   })
-
 })

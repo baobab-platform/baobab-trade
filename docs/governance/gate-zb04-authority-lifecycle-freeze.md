@@ -14,15 +14,15 @@ remains a counterparty inside the already-authorised ZuriBeans tenant.
 
 ## Authority matrix
 
-| Concern | Authority |
-| --- | --- |
-| Human authentication and canonical principal | IAM / Control Plane identity mapping |
-| Tenant, legal entity and verified organisation context | Control Plane |
-| Buyer application and commercial relationship | Trade |
-| Buyer membership, roles and purchasing authority | Trade |
-| Credit decision and accounting consequence | ERP |
-| Documents and evidence binaries | approved document/object-storage capability |
-| Buyer-facing presentation | ZuriBeans estate |
+| Concern                                                | Authority                                   |
+| ------------------------------------------------------ | ------------------------------------------- |
+| Human authentication and canonical principal           | IAM / Control Plane identity mapping        |
+| Tenant, legal entity and verified organisation context | Control Plane                               |
+| Buyer application and commercial relationship          | Trade                                       |
+| Buyer membership, roles and purchasing authority       | Trade                                       |
+| Credit decision and accounting consequence             | ERP                                         |
+| Documents and evidence binaries                        | approved document/object-storage capability |
+| Buyer-facing presentation                              | ZuriBeans estate                            |
 
 ## ZB-04 lifecycle decision
 

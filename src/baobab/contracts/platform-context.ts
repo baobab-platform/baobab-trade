@@ -31,7 +31,6 @@ export const isValidPlatformContextResolutionResponse = (
     isNonEmptyString(value.tenant_id) &&
     hasOrganisationId === hasOrganisationType &&
     (!hasOrganisationId ||
-      (isNonEmptyString(value.organisation_id) &&
-        isNonEmptyString(value.organisation_type)))
+      (isNonEmptyString(value.organisation_id) && isNonEmptyString(value.organisation_type)))
   )
 }

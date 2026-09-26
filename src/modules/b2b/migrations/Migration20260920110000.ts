@@ -42,11 +42,21 @@ export class Migration20260920110000 extends Migration {
       constraint "b2b_buyer_application_decision_application_fk" foreign key ("application_id") references "b2b_buyer_application" ("id") on delete restrict
     );`)
 
-    this.addSql(`create unique index if not exists "IDX_b2b_buyer_application_idempotency" on "b2b_buyer_application" ("tenant_id", "idempotency_key") where "deleted_at" is null;`)
-    this.addSql(`create index if not exists "IDX_b2b_buyer_application_tenant_customer" on "b2b_buyer_application" ("tenant_id", "applicant_customer_id") where "deleted_at" is null;`)
-    this.addSql(`create unique index if not exists "IDX_b2b_buyer_application_open" on "b2b_buyer_application" ("tenant_id", "applicant_customer_id") where "deleted_at" is null and "status" in ('DRAFT','SUBMITTED','INFORMATION_REQUIRED','UNDER_REVIEW');`)
-    this.addSql(`create unique index if not exists "IDX_b2b_buyer_application_decision_application" on "b2b_buyer_application_decision" ("application_id") where "deleted_at" is null;`)
-    this.addSql(`create unique index if not exists "IDX_b2b_buyer_application_decision_reference" on "b2b_buyer_application_decision" ("decision_reference") where "deleted_at" is null;`)
+    this.addSql(
+      `create unique index if not exists "IDX_b2b_buyer_application_idempotency" on "b2b_buyer_application" ("tenant_id", "idempotency_key") where "deleted_at" is null;`,
+    )
+    this.addSql(
+      `create index if not exists "IDX_b2b_buyer_application_tenant_customer" on "b2b_buyer_application" ("tenant_id", "applicant_customer_id") where "deleted_at" is null;`,
+    )
+    this.addSql(
+      `create unique index if not exists "IDX_b2b_buyer_application_open" on "b2b_buyer_application" ("tenant_id", "applicant_customer_id") where "deleted_at" is null and "status" in ('DRAFT','SUBMITTED','INFORMATION_REQUIRED','UNDER_REVIEW');`,
+    )
+    this.addSql(
+      `create unique index if not exists "IDX_b2b_buyer_application_decision_application" on "b2b_buyer_application_decision" ("application_id") where "deleted_at" is null;`,
+    )
+    this.addSql(
+      `create unique index if not exists "IDX_b2b_buyer_application_decision_reference" on "b2b_buyer_application_decision" ("decision_reference") where "deleted_at" is null;`,
+    )
   }
 
   async down(): Promise<void> {

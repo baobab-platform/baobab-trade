@@ -16,8 +16,12 @@ export class Migration20260920220000 extends Migration {
       constraint "b2b_buyer_application_evidence_size_check" check ("size_bytes" > 0 and "size_bytes" <= 26214400),
       constraint "b2b_buyer_application_evidence_sha_check" check ("content_sha256" ~ '^[0-9a-f]{64}$')
     );`)
-    this.addSql('create unique index if not exists "IDX_b2bevd_idempotency" on "b2b_buyer_application_evidence" ("tenant_id","idempotency_key") where "deleted_at" is null;')
-    this.addSql('create unique index if not exists "IDX_b2bevd_document_version" on "b2b_buyer_application_evidence" ("application_id","canonical_document_id","document_version") where "deleted_at" is null;')
+    this.addSql(
+      'create unique index if not exists "IDX_b2bevd_idempotency" on "b2b_buyer_application_evidence" ("tenant_id","idempotency_key") where "deleted_at" is null;',
+    )
+    this.addSql(
+      'create unique index if not exists "IDX_b2bevd_document_version" on "b2b_buyer_application_evidence" ("application_id","canonical_document_id","document_version") where "deleted_at" is null;',
+    )
     this.addSql(`create table if not exists "b2b_buyer_application_evidence_decision" (
       "id" text not null, "application_id" text not null, "evidence_id" text not null,
       "tenant_id" text not null, "decision" text check ("decision" in ('VERIFIED','REJECTED')) not null,
@@ -27,8 +31,12 @@ export class Migration20260920220000 extends Migration {
       "created_at" timestamptz not null default now(), "updated_at" timestamptz not null default now(), "deleted_at" timestamptz null,
       constraint "b2b_buyer_application_evidence_decision_pkey" primary key ("id")
     );`)
-    this.addSql('create unique index if not exists "IDX_b2bevdec_evidence" on "b2b_buyer_application_evidence_decision" ("evidence_id") where "deleted_at" is null;')
-    this.addSql('create unique index if not exists "IDX_b2bevdec_idempotency" on "b2b_buyer_application_evidence_decision" ("tenant_id","idempotency_key") where "deleted_at" is null;')
+    this.addSql(
+      'create unique index if not exists "IDX_b2bevdec_evidence" on "b2b_buyer_application_evidence_decision" ("evidence_id") where "deleted_at" is null;',
+    )
+    this.addSql(
+      'create unique index if not exists "IDX_b2bevdec_idempotency" on "b2b_buyer_application_evidence_decision" ("tenant_id","idempotency_key") where "deleted_at" is null;',
+    )
   }
 
   async down(): Promise<void> {
