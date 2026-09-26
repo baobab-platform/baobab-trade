@@ -1,0 +1,22 @@
+# gitleaks false-positive allowlist.
+#
+# Each entry is a verified false positive from gitleaks' generic-api-key
+# heuristic, not credential material. Never add an entry without first
+# confirming the flagged value is not a secret.
+
+# Test-only Idempotency-Key header values ("buyer-invite-key-0001",
+# "application-key-0001", ...) in route tests.
+01916cbdb2d90139195b60c89cbf60513a0c756d:tests/buyer-invitation-route.test.ts:generic-api-key:77
+01916cbdb2d90139195b60c89cbf60513a0c756d:tests/buyer-invitation-route.test.ts:generic-api-key:134
+c77ab458d835f988a31bbe9f9aa707f8679965d6:tests/buyer-application-route.test.ts:generic-api-key:37
+c77ab458d835f988a31bbe9f9aa707f8679965d6:tests/buyer-application-route.test.ts:generic-api-key:93
+
+# Medusa resource keys (stock location "thamani_ug_kla_01", price list
+# "zuribeans_b2b_volume_v1") - identifiers, not credentials.
+248ae07945a48566b8fb9a4a94134d12c846eedf:src/baobab/market/thamani-market-config.ts:generic-api-key:35
+dd6e1c4d380a9be7c1377d899395dd767de208fe:src/baobab/catalogue/catalogue-config.ts:generic-api-key:314
+
+# CI-only integration-test JWT secrets ("gate-1-integration-jwt-secret",
+# "gate-2-integration-jwt-secret") for ephemeral service containers.
+5b3a319750882d1f9fa63ef0f4e8cf0451f7e727:.github/workflows/ci.yml:generic-api-key:69
+5e2397c3976c5930f549d6445cca71c750a3cc70:.github/workflows/ci.yml:generic-api-key:117

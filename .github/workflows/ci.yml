@@ -43,7 +43,7 @@ jobs:
         run: |
           test -f contracts.lock.yaml
           test -f runtime/requirements.yaml
-          test -f .nabhold/environment.yaml
+          test -f .baobab/environment.yaml
 
   core-module-integration:
     runs-on: ubuntu-26.04
