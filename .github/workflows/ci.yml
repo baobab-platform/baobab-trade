@@ -37,6 +37,8 @@ jobs:
         run: npm run test:isolation
       - name: Production conformance tests
         run: npm run test:conformance
+      - name: ZB-04 buyer onboarding certification pack
+        run: npm run test:zb04
       - name: Build
         run: npm run build
       - name: Validate architecture declarations

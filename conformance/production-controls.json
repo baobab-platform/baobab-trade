@@ -1,6 +1,10 @@
 {
   "version": 1,
-  "runtime": { "nodeMajor": 24, "postgresMinimumMajor": 17, "redisMinimumMajor": 7 },
+  "runtime": {
+    "nodeMajor": 24,
+    "postgresMinimumMajor": 17,
+    "redisMinimumMajor": 7
+  },
   "architecture": {
     "tenantContextFailClosed": true,
     "crossEngineDatabaseAccess": false,
@@ -22,7 +26,8 @@
     "production-provider-migrations",
     "codeql",
     "container-scan",
-    "release-manifest"
+    "release-manifest",
+    "zb04-certification"
   ],
   "requiredDocumentation": [
     "docs/architecture/zuribeans-b2b-commerce.md",
@@ -32,6 +37,7 @@
     "docs/operations/observability.md",
     "docs/operations/production-infrastructure.md",
     "docs/operations/runbooks/payments.md",
-    "docs/operations/runbooks/migrations.md"
+    "docs/operations/runbooks/migrations.md",
+    "docs/governance/zb04-end-to-end-certification.md"
   ]
 }
