@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
+import { TRADE_EVENT_SOURCE } from "../../../../../../../../baobab/events"
 import {
   principalIdFromAuthContext,
   resolveBuyerTenantId,
@@ -134,7 +135,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
         specversion: "1.0",
         id: eventId,
         type: "com.baobab-platform.customer.buyer-application-evidence.decided.v1",
-        source: "urn:baobab-platform:baobab-trade",
+        source: TRADE_EVENT_SOURCE,
         subject: `buyer-application-evidence/${evidence.id}`,
         time: occurredAt.toISOString(),
         datacontenttype: "application/json",

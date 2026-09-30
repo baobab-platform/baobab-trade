@@ -1,81 +1,58 @@
 import type { ExecArgs } from "@medusajs/framework/types"
-import { isValidCloudEvent, THAMANI_EVENT_TYPES, type BaobabCloudEvent } from "../baobab/events"
+import { isValidCloudEvent, type BaobabCloudEvent } from "../baobab/events"
 import { assertNoPersonalData, assertNoSensitiveEventData } from "../baobab/security"
+import { ERP_INTEGRATION_MODULE } from "../modules/erp-integration"
+import type ErpIntegrationModuleService from "../modules/erp-integration/service"
 import type EventOutboxModuleService from "../modules/event-outbox/service"
 
+/**
+ * ADR-SHARED-018 §8.5: the Thamani ERP projection commands
+ * (com.nabhold.commerce.thamani-*.projection-requested.v1) are retired.
+ * Thamani ERP projections are still recorded, and the erp_projection
+ * trigger still enforces their invariants, but no command event is
+ * enqueued. Any Thamani-scoped outbox row that remains must be a canonical,
+ * scope-correct, privacy-safe event, and every retired command that was
+ * still unpublished is dead-lettered, never published.
+ */
 export default async function ({ container }: ExecArgs) {
+  const erp = container.resolve<ErpIntegrationModuleService>(ERP_INTEGRATION_MODULE)
+  const projections = (await erp.listErpProjections({})).filter((projection) =>
+    String(projection.source_idempotency_key).startsWith("thamani:erp:"),
+  )
+  if (projections.length === 0)
+    throw new Error("No Thamani ERP projections found; run bootstrap:thamani-erp-integration first")
+
   const service = container.resolve<EventOutboxModuleService>("eventOutbox")
   const rows = await service.listEventOutboxes({
     tenant_id: "tenant-thamani",
     owner_legal_entity_id: "canonical:legal-entity:thamani",
     digital_estate: "estate:thamani-b2c",
   })
-  const expectedTypes = new Set(
-    Object.values(THAMANI_EVENT_TYPES).filter((type) => !type.includes("reconciliation-required")),
-  )
-  const projectionRows = rows.filter((row) => expectedTypes.has(row.event_type as never))
-  if (projectionRows.length !== 8)
-    throw new Error(
-      `Expected exactly eight Thamani projection events, found ${projectionRows.length}`,
-    )
-  if (new Set(projectionRows.map((row) => row.event_type)).size !== 8)
-    throw new Error("Thamani projection event families are incomplete")
-  if (
-    new Set(projectionRows.map((row) => row.event_id)).size !== 8 ||
-    new Set(projectionRows.map((row) => row.idempotency_key)).size !== 8
-  )
-    throw new Error("Thamani event or idempotency identity is not unique")
 
-  for (const row of projectionRows) {
+  for (const row of rows) {
+    if (String(row.event_type).startsWith("com.nabhold.")) {
+      if (row.status !== "PUBLISHED" && row.status !== "DEAD_LETTER")
+        throw new Error(`Retired legacy command ${row.event_id} is still queued (${row.status})`)
+      if (row.status === "DEAD_LETTER" && row.last_error_code !== "RETIRED_ADR_SHARED_018")
+        throw new Error(
+          `Retired legacy command ${row.event_id} was dead-lettered for another reason`,
+        )
+      continue
+    }
     const envelope = row.envelope as BaobabCloudEvent
     if (!isValidCloudEvent(envelope)) throw new Error(`Invalid canonical envelope ${row.event_id}`)
     if (envelope.baobabscope !== "tenant" || envelope.tenantid !== "tenant-thamani")
       throw new Error("Cross-tenant envelope detected")
-    if (
-      row.market_key !== envelope.data.market_key ||
-      row.owner_legal_entity_id !== "canonical:legal-entity:thamani" ||
-      row.digital_estate !== "estate:thamani-b2c"
-    )
-      throw new Error("Outbox scope columns and canonical envelope disagree")
-    if (row.market_key === "thamani_ug" && envelope.data.legal_seller_key !== "thamani-uganda")
-      throw new Error("Uganda event has the wrong legal seller")
-    if (
-      row.market_key === "thamani_za" &&
-      envelope.data.legal_seller_key !== "thamani-south-africa"
-    )
-      throw new Error("South Africa event has the wrong legal seller")
+    if (/thamani-[a-z-]+\.projection-requested/.test(envelope.type))
+      throw new Error(`Estate-named projection command ${envelope.type} must not be emitted`)
     assertNoPersonalData(envelope.data)
     assertNoSensitiveEventData(envelope.data)
-
-    const receiptKey = { consumer_name: "thamani-idempiere", event_id: row.event_id }
-    const existingReceipts = await service.listEventConsumerReceipts(receiptKey)
-    if (!existingReceipts[0])
-      await service.createEventConsumerReceipts({
-        ...receiptKey,
-        event_type: row.event_type,
-        correlation_id: row.correlation_id,
-        processed_at: new Date(),
-      })
-    if ((await service.listEventConsumerReceipts(receiptKey)).length !== 1)
-      throw new Error("Consumer receipt replay is not idempotent")
-
-    const reconciliationKey = `thamani:event-reconciliation:${row.event_id}`
-    const existingReconciliations = await service.listEventReconciliations({
-      source_idempotency_key: reconciliationKey,
-    })
-    if (!existingReconciliations[0])
-      await service.createEventReconciliations({
-        outbox_id: row.id,
-        event_id: row.event_id,
-        status: "PENDING",
-        reason: "AWAITING_ERP_ACKNOWLEDGEMENT",
-        source_idempotency_key: reconciliationKey,
-        observed_at: new Date(),
-      })
   }
+
+  const retired = rows.filter((row) => String(row.event_type).startsWith("com.nabhold."))
   container
     .resolve("logger")
     .info(
-      "Verified Gate 16 Thamani legal-entity isolation, eight atomic projection events, privacy, receipts, and reconciliation",
+      `Verified ADR-SHARED-018 §8.5: ${projections.length} Thamani ERP projections recorded without projection commands (${retired.length} retired legacy rows kept as history)`,
     )
 }

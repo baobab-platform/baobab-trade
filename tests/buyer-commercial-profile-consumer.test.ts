@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { POST } from "../src/api/events/inbound/erp/route"
 import { B2B_MODULE } from "../src/modules/b2b"
 import { ERP_INTEGRATION_MODULE } from "../src/modules/erp-integration"
+import { TRADE_EVENT_SOURCE } from "../src/baobab/events"
 
 const previousTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
 const previousSecret = process.env.BAOBAB_WEBHOOK_SIGNING_SECRET
@@ -128,6 +129,36 @@ describe("ZB-04 ERP commercial profile consumer", () => {
       "invalid ERP event signature",
     )
     expect(fixture.erp.createBuyerCommercialProfileProjections).not.toHaveBeenCalled()
+  })
+
+  it("accepts ERP's canonical service URN during the ADR-SHARED-018 migration", async () => {
+    const fixture = request({
+      ...event("APPROVED"),
+      source: "urn:baobab-platform:service:baobab-erp",
+    })
+    const res = response()
+    await POST(fixture.req as never, res)
+    expect(res.statusCode).toBe(202)
+    expect(fixture.b2b.updateB2BOrganisations).toHaveBeenCalled()
+  })
+
+  it("rejects an event from any other source before applying effects", async () => {
+    const fixture = request({
+      ...event("APPROVED"),
+      source: "urn:baobab-platform:service:baobab-cms",
+    })
+    await expect(POST(fixture.req as never, response())).rejects.toThrow("unsupported ERP event")
+    expect(fixture.erp.createBuyerCommercialProfileProjections).not.toHaveBeenCalled()
+  })
+
+  it("publishes the activation under Trade's canonical source URN", async () => {
+    const fixture = request(event("APPROVED"))
+    await POST(fixture.req as never, response())
+    expect(fixture.events.createEventOutboxes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envelope: expect.objectContaining({ source: TRADE_EVENT_SOURCE }),
+      }),
+    )
   })
 
   it("deduplicates a redelivered event", async () => {

@@ -1,6 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto"
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
+import { TRADE_EVENT_SOURCE } from "../../../../baobab/events"
 import { resolveBuyerTenantId } from "../../../../baobab/b2b/onboarding-policy"
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
@@ -11,7 +12,15 @@ import type EventOutboxModuleService from "../../../../modules/event-outbox/serv
 
 const CONSUMER = "trade-buyer-commercial-profile-v1"
 const EVENT_TYPE = "com.baobab-platform.customer.buyer-commercial-profile.changed.v1"
-const ERP_SOURCE = "urn:baobab-platform:baobab-erp"
+/**
+ * ERP event-source URIs accepted during the ADR-SHARED-018 §3.7 migration
+ * window (consumers first): the canonical urn:baobab-platform:service:<engine>
+ * form and the form ERP has used so far.
+ */
+const ERP_SOURCES: ReadonlySet<string> = new Set([
+  "urn:baobab-platform:service:baobab-erp",
+  "urn:baobab-platform:baobab-erp",
+])
 
 type CreditStatus = "APPROVED" | "ON_HOLD" | "REJECTED"
 type RecordLike = Record<string, unknown>
@@ -48,7 +57,7 @@ const normalize = (body: unknown) => {
   const data = dataValue as RecordLike
   const type = requiredText(event.type ?? event.event_type, "type")
   const source = requiredText(event.source, "source")
-  if (type !== EVENT_TYPE || source !== ERP_SOURCE) {
+  if (type !== EVENT_TYPE || !ERP_SOURCES.has(source)) {
     throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "unsupported ERP event")
   }
   const creditStatus = requiredText(data.credit_status, "credit_status") as CreditStatus
@@ -199,7 +208,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
           specversion: "1.0",
           id: eventId,
           type: "com.baobab-platform.customer.buyer-organisation.status-changed.v1",
-          source: "urn:baobab-platform:baobab-trade",
+          source: TRADE_EVENT_SOURCE,
           subject: `buyer-organisation/${organisation.id}`,
           time: emittedAt.toISOString(),
           datacontenttype: "application/json",
