@@ -1,7 +1,23 @@
 import type { ControlPlaneClient } from "../control-plane/client"
-import { isCanonicalEntityId, type MappingResolutionResponse } from "../contracts/canonical-mapping"
+import {
+  isCanonicalEntityId,
+  isExternalReferenceResolution,
+  type ExternalReferenceResolution,
+} from "../contracts/canonical-mapping"
 import { assertMarketTransactable, type BaobabMarket } from "../contracts/market"
-import { toContextResolutionResponse, type BaobabTenantContext } from "../contracts/tenant-context"
+import type { BaobabTenantContext } from "../contracts/tenant-context"
+
+/**
+ * Where Trade's Medusa projections live in the Control Plane's mapping
+ * registry: the registered (system_namespace, engine_id) pair for Medusa
+ * objects held by baobab-trade (Shared control-plane/v1 external-systems.yaml).
+ * Mapping resolution has no capability argument (ADR-SHARED-014 section 3), so
+ * a canonical entity is resolved to its one mapping into this system.
+ */
+export const TRADE_MEDUSA_TARGET = {
+  target_system_namespace: "medusa",
+  target_engine_id: "baobab-trade",
+} as const
 
 export type CommerceContextSelection = {
   marketId: string
@@ -10,34 +26,45 @@ export type CommerceContextSelection = {
 
 export type BaobabCommerceContext = {
   tenant: BaobabTenantContext
+  /** The stored Control Plane context every mapping below was resolved in (ADR-SHARED-014). */
+  contextId: string
   market: BaobabMarket
   legalSellerCanonicalId: string
   digitalEstateCanonicalId: string
   externalReferences: {
-    market: MappingResolutionResponse
-    legalSeller: MappingResolutionResponse
-    digitalEstate: MappingResolutionResponse
+    market: ExternalReferenceResolution
+    legalSeller: ExternalReferenceResolution
+    digitalEstate: ExternalReferenceResolution
   }
 }
 
-const resolveExternalReference = (
+const resolveExternalReference = async (
   client: ControlPlaneClient,
   canonicalEntityId: string,
-  capability: string,
-  context: BaobabTenantContext,
+  contextId: string,
+  tenantId: string,
   accessToken: string,
   correlationId: string,
-) =>
-  client.resolveMapping(
+): Promise<ExternalReferenceResolution> => {
+  const resolution = await client.resolveMapping(
     {
+      context_id: contextId,
       canonical_entity_id: canonicalEntityId,
-      target_capability: capability,
-      target_system: "medusa",
-      context: toContextResolutionResponse(context),
+      ...TRADE_MEDUSA_TARGET,
     },
     accessToken,
     correlationId,
   )
+  if (resolution.tenant_id !== tenantId) {
+    throw new Error("Mapping resolved in a tenant other than the authenticated tenant")
+  }
+  if (!isExternalReferenceResolution(resolution)) {
+    throw new Error(
+      `Canonical entity ${canonicalEntityId} resolves to another canonical entity, not a Medusa object`,
+    )
+  }
+  return resolution
+}
 
 /**
  * Builds the complete governed context used by later commerce workflows.
@@ -69,28 +96,45 @@ export const resolveCommerceContext = async (
     throw new Error("Resolved Market has no valid Legal Seller canonical ID")
   }
 
+  // Mapping resolution redeems a context the Control Plane resolved and stored
+  // itself; Trade never asserts tenant, market or legal entity to it
+  // (ADR-SHARED-014, Canonical Mapping Model section 17.3). The Market's own
+  // country picks the tenant's market participation when it has several.
+  const stored = await client.resolveStoredContext(accessToken, correlationId, {
+    tenantId: tenant.tenantId,
+    ...(market.default_country && /^[A-Z]{2}$/.test(market.default_country)
+      ? { countryCode: market.default_country }
+      : {}),
+  })
+  if (stored.tenant_id !== tenant.tenantId) {
+    throw new Error("Stored context belongs to a tenant other than the authenticated tenant")
+  }
+  if (stored.market_id !== undefined && stored.market_id !== market.market_id) {
+    throw new Error("Selected Market is not the Market of the Control Plane's resolved context")
+  }
+
   const [marketReference, legalSellerReference, digitalEstateReference] = await Promise.all([
     resolveExternalReference(
       client,
       market.market_id,
-      "commerce.market",
-      tenant,
+      stored.context_id,
+      tenant.tenantId,
       accessToken,
       correlationId,
     ),
     resolveExternalReference(
       client,
       market.legal_entity_id,
-      "commerce.legal-seller",
-      tenant,
+      stored.context_id,
+      tenant.tenantId,
       accessToken,
       correlationId,
     ),
     resolveExternalReference(
       client,
       selection.digitalEstateCanonicalId,
-      "commerce.digital-estate",
-      tenant,
+      stored.context_id,
+      tenant.tenantId,
       accessToken,
       correlationId,
     ),
@@ -98,6 +142,7 @@ export const resolveCommerceContext = async (
 
   return {
     tenant,
+    contextId: stored.context_id,
     market,
     legalSellerCanonicalId: market.legal_entity_id,
     digitalEstateCanonicalId: selection.digitalEstateCanonicalId,

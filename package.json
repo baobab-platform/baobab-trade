@@ -77,6 +77,7 @@
     "test:thamani-events": "vitest run tests/thamani-events.test.ts tests/event-outbox.test.ts",
     "test:security": "vitest run tests/b2b-policy.test.ts tests/b2b-threat-model.test.ts tests/event-contracts.test.ts tests/pii-guard.test.ts tests/thamani-customer-authorization.test.ts tests/thamani-customer-anonymisation.test.ts tests/rate-limit.test.ts",
     "test:conformance": "vitest run tests/production-conformance.test.ts",
+    "test:shared-conformance": "vitest run --config vitest.shared-conformance.config.ts",
     "test:watch": "vitest",
     "verify:core-modules": "medusa exec ./src/scripts/verify-core-modules.ts",
     "verify:infrastructure": "medusa exec ./src/scripts/verify-infrastructure.ts",
@@ -97,13 +98,16 @@
     "@types/node": "20.17.10",
     "@typescript-eslint/eslint-plugin": "8.18.2",
     "@typescript-eslint/parser": "8.18.2",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^2.1.1",
     "eslint": "9.39.5",
     "eslint-config-prettier": "9.1.0",
     "jsonwebtoken": "^9.0.3",
     "prettier": "3.4.2",
     "ts-node": "10.9.2",
     "typescript": "5.7.2",
-    "vitest": "3.2.7"
+    "vitest": "3.2.7",
+    "yaml": "^2.9.0"
   },
   "overrides": {
     "lodash": "4.18.1"
