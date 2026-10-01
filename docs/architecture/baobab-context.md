@@ -77,10 +77,15 @@ in production today. Each needs a decision outside Trade:
   `context:resolve` and `provider-migration:task`. Granting a scope is an
   authority decision (Shared registry, the IAM client, the Control Plane).
   The conformance suite pins this gap.
-- **Entity IDs.** The Control Plane creates mappings for any contract-valid
-  `canonical_entity_id` but resolves only UUIDs, so a mapping for a Market
-  (`mkt_...`) cannot be resolved. This is a Control Plane defect against the
-  contract; Trade follows the contract.
+- **Which entities can be mapped.** The Control Plane maps only registered
+  canonical entities, whose identifiers are UUIDs (`registry.canonical_entity`),
+  and answers `POST /resolution/mappings` with 400 for any other identifier,
+  although the contract's `canonical_entity_id` grammar is broader. A Market's
+  `market_id` (`mkt_...`) is not a canonical entity, so the Market step of
+  `resolveCommerceContext` cannot succeed against the Control Plane as served.
+  Whether a Market is a mapping subject, and which identifier to resolve, is a
+  Mapping Model decision. Trade follows the contract and passes the identifier
+  it has.
 - **One reference per canonical entity.** Mapping resolution has no capability
   or native-type argument (ADR-SHARED-014 section 3). A Market that maps to a
   Medusa Region, Sales Channel and Stock Location resolves ambiguously
