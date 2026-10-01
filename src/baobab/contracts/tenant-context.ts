@@ -38,7 +38,7 @@ export type BaobabTenantContext = {
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0
 
-const lifecycleStatuses: readonly TenantLifecycleStatus[] = [
+export const lifecycleStatuses: readonly TenantLifecycleStatus[] = [
   "provisioning",
   "active",
   "suspended",

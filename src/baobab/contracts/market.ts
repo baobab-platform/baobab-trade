@@ -9,25 +9,29 @@
  * tracked back to it through an engine-native mapping (see
  * src/baobab/market/mapping.ts), never treated as identical to it.
  */
-export type MarketStatus =
-  | "DRAFT"
-  | "VALIDATED"
-  | "ACTIVE"
-  | "DEPRECATED"
-  | "SUSPENDED"
-  | "MIGRATING"
-  | "RETIRED"
+export const MARKET_STATUSES = [
+  "DRAFT",
+  "VALIDATED",
+  "ACTIVE",
+  "DEPRECATED",
+  "SUSPENDED",
+  "MIGRATING",
+  "RETIRED",
+] as const
+export type MarketStatus = (typeof MARKET_STATUSES)[number]
 
-export type MarketType =
-  | "B2B"
-  | "B2C"
-  | "WHOLESALE"
-  | "DISTRIBUTOR"
-  | "INSTITUTIONAL"
-  | "CORPORATE"
-  | "RETAIL"
-  | "MARKETPLACE"
-  | "OTHER"
+export const MARKET_TYPES = [
+  "B2B",
+  "B2C",
+  "WHOLESALE",
+  "DISTRIBUTOR",
+  "INSTITUTIONAL",
+  "CORPORATE",
+  "RETAIL",
+  "MARKETPLACE",
+  "OTHER",
+] as const
+export type MarketType = (typeof MARKET_TYPES)[number]
 
 export type BaobabMarket = {
   market_id: string

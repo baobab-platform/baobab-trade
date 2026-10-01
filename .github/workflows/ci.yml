@@ -47,6 +47,37 @@ jobs:
           test -f runtime/requirements.yaml
           test -f .baobab/environment.yaml
 
+  shared-conformance:
+    name: Conformance against the pinned Shared contracts
+    runs-on: ubuntu-26.04
+    # EA-01 / ADR-SHARED-018 T-COMPAT-07: Trade's validators, Control Plane
+    # client requests, event envelopes and workload authority are checked
+    # against the real files at the commit contracts.lock.yaml pins. The suite
+    # itself asserts that the checkout is exactly that commit.
+    env:
+      BAOBAB_SHARED_PATH: ${{ github.workspace }}/.shared-contracts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read pinned baobab-platform/shared commit
+        id: pin
+        run: echo "commit=$(grep -m1 'commit:' contracts.lock.yaml | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Checkout baobab-platform/shared at the pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: baobab-platform/shared
+          ref: ${{ steps.pin.outputs.commit }}
+          path: .shared-contracts
+      - name: Set up Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Shared conformance
+        run: npm run test:shared-conformance
+
   core-module-integration:
     runs-on: ubuntu-26.04
     services:
