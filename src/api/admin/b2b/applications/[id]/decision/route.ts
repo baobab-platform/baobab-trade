@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
+import { TRADE_EVENT_SOURCE } from "../../../../../../baobab/events"
 import { assertVerifiedBuyerKybPackage } from "../../../../../../baobab/b2b/kyb-evidence"
 import {
   CANONICAL_ORGANISATION_VERIFIER,
@@ -209,7 +210,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
       specversion: "1.0",
       id: eventId,
       type: eventType,
-      source: "urn:baobab-platform:baobab-trade",
+      source: TRADE_EVENT_SOURCE,
       subject,
       time: occurredAt.toISOString(),
       datacontenttype: "application/json",

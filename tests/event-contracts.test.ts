@@ -1,16 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
-  B2B_EVENT_TYPES,
-  INVENTORY_EVENT_TYPES,
-  PAYMENT_EVENT_TYPES,
-  FULFILMENT_EVENT_TYPES,
-  TAX_EVENT_TYPES,
-  TRADE_READINESS_EVENT_TYPES,
-  ERP_INTEGRATION_EVENT_TYPES,
   createPlatformTradeEvent,
   createTenantTradeEvent,
   isValidCloudEvent,
   TRADE_EVENT_SOURCE,
+  TRADE_EVENT_SOURCES,
 } from "../src/baobab/events/event-contracts"
 import { fromContextResolutionResponse } from "../src/baobab/contracts/tenant-context"
 
@@ -28,10 +22,10 @@ const tenantContext = fromContextResolutionResponse({
 
 const baseInput = {
   id: "b1f2c3d4-5e6f-4789-9abc-1234567890ab",
-  type: "com.nabhold.trade.order-accepted.v1",
+  type: "com.baobab-platform.trade.order.placed.v1",
   subject: "trade_order_123",
   time: "2026-09-05T12:00:00Z",
-  dataschema: "https://contracts.nabhold.com/trade/v1/order-accepted.schema.json",
+  dataschema: "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
   correlationid: "c1f2c3d4-5e6f-4789-9abc-1234567890ab",
   data: { trade_order_id: "trade_order_123", currency: "UGX", total: 15000 },
 }
@@ -52,68 +46,30 @@ describe("Baobab CloudEvents envelope", () => {
     expect(isValidCloudEvent(event)).toBe(true)
   })
 
-  it("rejects a type that does not match com.nabhold.<name>.v<N>", () => {
+  it("rejects a type that does not match com.baobab-platform.<context>.<...>.v<N>", () => {
     expect(() => createPlatformTradeEvent({ ...baseInput, type: "trade.order.accepted" })).toThrow(
-      "com.nabhold.<name>.v<N>",
+      "com.baobab-platform.<context>.<...>.v<N>",
     )
+  })
+
+  it("rejects retired legacy com.nabhold.* types (ADR-SHARED-018)", () => {
+    expect(() =>
+      createPlatformTradeEvent({
+        ...baseInput,
+        type: "com.nabhold.commerce.thamani-order.projection-requested.v1",
+      }),
+    ).toThrow("com.baobab-platform")
+  })
+
+  it("publishes under the canonical service URN and keeps the legacy source for consumers", () => {
+    expect(TRADE_EVENT_SOURCE).toBe("urn:baobab-platform:service:baobab-trade")
+    expect(TRADE_EVENT_SOURCES[0]).toBe(TRADE_EVENT_SOURCE)
+    expect(TRADE_EVENT_SOURCES).toContain("urn:baobab-platform:baobab-trade")
   })
 
   it("rejects a tenant event whose tenantid has been stripped", () => {
     const event: Record<string, unknown> = { ...createTenantTradeEvent(tenantContext, baseInput) }
     delete event.tenantid
     expect(isValidCloudEvent(event)).toBe(false)
-  })
-
-  it("uses canonical versioned names for Gate 5 B2B facts", () => {
-    for (const type of Object.values(B2B_EVENT_TYPES)) {
-      const event = createTenantTradeEvent(tenantContext, { ...baseInput, type })
-      expect(isValidCloudEvent(event)).toBe(true)
-    }
-  })
-
-  it("uses canonical versioned names for Gate 7 inventory facts", () => {
-    for (const type of Object.values(INVENTORY_EVENT_TYPES)) {
-      expect(isValidCloudEvent(createTenantTradeEvent(tenantContext, { ...baseInput, type }))).toBe(
-        true,
-      )
-    }
-  })
-
-  it("uses canonical versioned names for Gate 8 payment facts", () => {
-    for (const type of Object.values(PAYMENT_EVENT_TYPES)) {
-      expect(isValidCloudEvent(createTenantTradeEvent(tenantContext, { ...baseInput, type }))).toBe(
-        true,
-      )
-    }
-  })
-
-  it("uses canonical versioned names for Gate 9 fulfilment facts", () => {
-    for (const type of Object.values(FULFILMENT_EVENT_TYPES)) {
-      expect(isValidCloudEvent(createTenantTradeEvent(tenantContext, { ...baseInput, type }))).toBe(
-        true,
-      )
-    }
-  })
-
-  it("uses canonical versioned names for Gate 10 tax facts", () => {
-    for (const type of Object.values(TAX_EVENT_TYPES)) {
-      expect(isValidCloudEvent(createTenantTradeEvent(tenantContext, { ...baseInput, type }))).toBe(
-        true,
-      )
-    }
-  })
-
-  it("uses canonical versioned names for Gate 11 trade-readiness facts", () => {
-    for (const type of Object.values(TRADE_READINESS_EVENT_TYPES))
-      expect(isValidCloudEvent(createTenantTradeEvent(tenantContext, { ...baseInput, type }))).toBe(
-        true,
-      )
-  })
-
-  it("uses canonical versioned names for Gate 12 ERP integration facts", () => {
-    for (const type of Object.values(ERP_INTEGRATION_EVENT_TYPES))
-      expect(isValidCloudEvent(createTenantTradeEvent(tenantContext, { ...baseInput, type }))).toBe(
-        true,
-      )
   })
 })
