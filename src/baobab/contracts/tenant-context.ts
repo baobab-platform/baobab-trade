@@ -1,5 +1,5 @@
 /**
- * Mirrors nabhold/shared contracts/control-plane/v1/context-resolution.schema.json
+ * Mirrors baobab-platform/shared contracts/control-plane/v1/context-resolution.schema.json
  * (`#/$defs/response`). This is a compatibility adapter, not a competing
  * definition: field names, enums and the fail-closed shape below must track
  * the pinned commit in contracts.lock.yaml.

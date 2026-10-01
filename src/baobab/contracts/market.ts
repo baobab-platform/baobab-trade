@@ -1,5 +1,5 @@
 /**
- * Mirrors nabhold/shared contracts/control-plane/v1/market.schema.json.
+ * Mirrors baobab-platform/shared contracts/control-plane/v1/market.schema.json.
  *
  * Baobab Market is a Control Plane canonical concept (ADR-0010, "MedusaJS
  * Commerce Market, Region, Currency, Sales Channel and Legal Seller Model").
@@ -52,6 +52,11 @@ export type BaobabMarket = {
   effective_from: string
   effective_to?: string | null
   revision: number
+  /** Set by the Control Plane when it activates the Market (market.schema.json, additive since Shared 2da1a42). */
+  activated_at?: string | null
+  activated_by?: string | null
+  /** Findings from the last Market validation (additive since Shared 2da1a42); informational for Trade. */
+  validation_findings?: ReadonlyArray<{ code: string; message: string; field?: string }> | null
 }
 
 const isNonEmptyString = (value: unknown): value is string =>

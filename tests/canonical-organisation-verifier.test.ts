@@ -17,7 +17,7 @@ describe("ZB-04 Control Plane canonical organisation verifier", () => {
   it("requests and accepts an exact BUYER_ORGANISATION attestation", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(200, {
-        context_id: "ctx_1",
+        context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
         tenant_id: "tn_zuribeans",
         organisation_id: "canorg_1",
         organisation_type: "BUYER_ORGANISATION",
@@ -54,7 +54,7 @@ describe("ZB-04 Control Plane canonical organisation verifier", () => {
   it("fails verification if the attestation does not echo the exact kind", async () => {
     const client = {
       resolvePlatformContext: vi.fn(async () => ({
-        context_id: "ctx_1",
+        context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
         tenant_id: "tn_zuribeans",
         organisation_id: "canorg_1",
         organisation_type: "SUPPLIER_ORGANISATION",
@@ -63,6 +63,7 @@ describe("ZB-04 Control Plane canonical organisation verifier", () => {
       resolveContext: vi.fn(),
       getMarket: vi.fn(),
       resolveMapping: vi.fn(),
+      resolveStoredContext: vi.fn(),
     }
     const verifier = new ControlPlaneCanonicalOrganisationVerifier(
       { getAccessToken: vi.fn(async () => "workload-token") },
@@ -83,7 +84,7 @@ describe("ZB-04 Control Plane canonical organisation verifier", () => {
       "fetch",
       vi.fn().mockResolvedValue(
         jsonResponse(200, {
-          context_id: "ctx_1",
+          context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
           tenant_id: "tn_zuribeans",
           organisation_type: "BUYER_ORGANISATION",
         }),

@@ -8,6 +8,9 @@ import { isProblemDetails, ControlPlaneProblemError } from "../contracts/problem
 import { isValidMarket, type BaobabMarket } from "../contracts/market"
 import {
   isCanonicalEntityId,
+  isEngineId,
+  isOpaqueContextId,
+  isSystemNamespace,
   isValidMappingResolutionResponse,
   type MappingResolutionRequest,
   type MappingResolutionResponse,
@@ -17,8 +20,25 @@ import {
   type RawPlatformContextResolutionResponse,
 } from "../contracts/platform-context"
 
+export type StoredContextOptions = {
+  /** Only needed when the workload token carries no tenant_id of its own. */
+  tenantId?: string
+  /** Selects among the tenant's ACTIVE market participations when it has several (ISO 3166-1 alpha-2). */
+  countryCode?: string
+}
+
 export interface ControlPlaneClient {
   resolveContext(accessToken: string, correlationId: string): Promise<BaobabTenantContext>
+  /**
+   * Resolves and stores a platform context (POST /v1/platform-context/resolve)
+   * and returns its `context_id`, which `resolveMapping` redeems. Never
+   * cached: a stored context is a trust decision made at read time.
+   */
+  resolveStoredContext(
+    accessToken: string,
+    correlationId: string,
+    options?: StoredContextOptions,
+  ): Promise<RawPlatformContextResolutionResponse>
   getMarket(marketId: string, accessToken: string, correlationId: string): Promise<BaobabMarket>
   resolveMapping(
     request: MappingResolutionRequest,
@@ -176,13 +196,69 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
     return candidate
   }
 
+  /**
+   * Resolves a platform context per POST /v1/platform-context/resolve with no
+   * organisation, so the Control Plane stores a tenant (and market) scoped
+   * context and returns its `context_id`. Workload-scoped (`context:resolve`),
+   * never cached.
+   */
+  async resolveStoredContext(
+    accessToken: string,
+    correlationId: string,
+    options: StoredContextOptions = {},
+  ): Promise<RawPlatformContextResolutionResponse> {
+    if (!accessToken.trim()) {
+      throw new Error("An access token is required to resolve a stored context")
+    }
+    if (options.countryCode !== undefined && !/^[A-Z]{2}$/.test(options.countryCode)) {
+      throw new Error("countryCode must be an ISO 3166-1 alpha-2 code")
+    }
+
+    const response = await fetch(`${this.baseUrl}${this.platformContextPath}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+        "x-correlation-id": correlationId,
+      },
+      body: JSON.stringify({
+        ...(options.tenantId ? { tenant_id: options.tenantId } : {}),
+        ...(options.countryCode ? { country_code: options.countryCode } : {}),
+      }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    })
+
+    if (!response.ok) {
+      await readProblemOrThrow(response)
+    }
+
+    const candidate: unknown = await response.json()
+    if (!isValidPlatformContextResolutionResponse(candidate)) {
+      throw new Error("Control Plane returned an invalid platform-context response")
+    }
+
+    return candidate
+  }
+
   async resolveMapping(
     request: MappingResolutionRequest,
     accessToken: string,
     correlationId: string,
   ): Promise<MappingResolutionResponse> {
+    if (!isOpaqueContextId(request.context_id)) {
+      throw new Error("A stored Control Plane context_id is required for mapping resolution")
+    }
     if (!isCanonicalEntityId(request.canonical_entity_id)) {
       throw new Error("A valid canonical entity ID is required for mapping resolution")
+    }
+    if (
+      request.target_system_namespace !== undefined &&
+      !isSystemNamespace(request.target_system_namespace)
+    ) {
+      throw new Error("target_system_namespace must be a registered system namespace")
+    }
+    if (request.target_engine_id !== undefined && !isEngineId(request.target_engine_id)) {
+      throw new Error("target_engine_id must be a registered engine id")
     }
 
     const response = await fetch(`${this.baseUrl}${this.mappingResolutionPath}`, {
@@ -203,7 +279,8 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
     const candidate: unknown = await response.json()
     if (
       !isValidMappingResolutionResponse(candidate) ||
-      candidate.canonical_entity_id !== request.canonical_entity_id
+      candidate.canonical_entity_id !== request.canonical_entity_id ||
+      candidate.context_id !== request.context_id
     ) {
       throw new Error("Control Plane returned an invalid mapping-resolution response")
     }
