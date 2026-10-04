@@ -96,8 +96,18 @@ describe("platform context (POST /platform-context/resolve)", () => {
       schema: false,
       trade: false,
     },
-    { name: "null expiry is not a Shared date-time", patch: { expires_at: null }, schema: false, trade: false },
-    { name: "omitted expiry remains valid for resolve", patch: { expires_at: undefined }, schema: true, trade: true },
+    {
+      name: "null expiry is not a Shared date-time",
+      patch: { expires_at: null },
+      schema: false,
+      trade: false,
+    },
+    {
+      name: "omitted expiry remains valid for resolve",
+      patch: { expires_at: undefined },
+      schema: true,
+      trade: true,
+    },
     // Documented divergences:
     {
       name: "organisation_id without organisation_type (Trade requires the pair)",
