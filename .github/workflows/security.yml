@@ -32,6 +32,6 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    uses: baobab-platform/shared/.github/workflows/security-codeql.yml@498c431ea7eb76eb038975bc49e7087499d30d48 # shared main, verified 2026-08-30
+    uses: baobab-platform/shared/.github/workflows/security-codeql.yml@6ae8d9ff517588866766e6d0f8591f987241b22a # shared main, verified 2026-08-30
     with:
       languages: '["javascript-typescript"]'
