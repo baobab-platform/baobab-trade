@@ -1,0 +1,67 @@
+# Baobab Capability Provider Declaration: baobab-trade
+#
+# Conforms to:
+#   baobab-platform/shared/contracts/capability/v1/provider-declaration.schema.json
+# Governing decision:
+#   baobab-platform/shared ADR-SHARED-017 (EA-02)
+#
+# Declares which canonical Baobab capabilities this engine's providers
+# implement or plan. It references Shared's catalogue.yaml; it defines no
+# capability. It does not state certification (EA-09), activation,
+# bindings, grants, engine instances or health: the Control Plane owns
+# those.
+#
+# The three .baobab contracts are distinct:
+#   repository.yaml          Foundation technical traits
+#   environment.yaml         baobab-dev toolchain
+#   capability-provider.yaml canonical capability support  <- this file
+#
+# Census (EA-02A, 2026-09-30): Shared defines three Trade capabilities
+# (trade/v1/capabilities.yaml). This repository does not yet implement their
+# canonical contracts: there is no quick-order, RFQ or quotation route, and
+# the B2B capability snapshot (src/api/store/b2b/capabilities/route.ts)
+# keeps purchasing disabled "until later gates publish purchasing and
+# document contracts". Medusa's native cart, guarded by
+# src/workflows/thamani-cart-eligibility-guard.ts, is not the canonical
+# quick-order contract, so it is not claimed as support.
+#
+# The declaration is therefore planned-only. When the MedusaJS provider
+# (baobab-trade.medusa, ADR-0007) implements a contract, move that
+# capability into a providers[].support entry with evidence.
+#
+# Validate with a Shared checkout:
+#   python3 <shared>/scripts/capability_catalogue.py validate-declaration \
+#     .baobab/capability-provider.yaml --engine-id baobab-trade --repository-root .
+
+schema:
+  name: baobab-capability-provider-declaration
+  version: "1.0"
+
+engine:
+  engine_id: baobab-trade
+
+planned_capabilities:
+  - capability_key: commerce.cart.manage
+    proposal_status: CONTRACTED
+    description: Canonical quick-order validation and B2B cart mutation in server-resolved buyer context.
+    target_provider_key: baobab-trade.medusa
+    provenance:
+      authority:
+        repository: baobab-platform/baobab-trade
+        decision: ADR-0007
+  - capability_key: commercial.rfq.manage
+    proposal_status: CONTRACTED
+    description: Buyer requests for quotation.
+    target_provider_key: baobab-trade.medusa
+    provenance:
+      authority:
+        repository: baobab-platform/baobab-trade
+        decision: ADR-0007
+  - capability_key: commercial.quotation.manage
+    proposal_status: CONTRACTED
+    description: Versioned quotations against a request for quotation.
+    target_provider_key: baobab-trade.medusa
+    provenance:
+      authority:
+        repository: baobab-platform/baobab-trade
+        decision: ADR-0007

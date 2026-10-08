@@ -4,14 +4,13 @@ import {
   AtLeastOnceOutboxDispatcher,
   canonicalEventFingerprint,
   IdempotentEventConsumer,
-  THAMANI_EVENT_TYPES,
+  createTenantTradeEvent,
   TransactionalOutbox,
   type BaobabCloudEvent,
   type ConsumerReceipt,
   type OutboxRecord,
   type OutboxRepository,
 } from "../src/baobab/events"
-import { thamaniEvents } from "../src/baobab/thamani"
 
 const context = {
   tenantId: "tenant-thamani",
@@ -25,33 +24,18 @@ const context = {
   correlationId: "11111111-1111-4111-8111-111111111111",
 }
 
-type Kind =
-  | "PRODUCT"
-  | "SUPPLIER"
-  | "WAREHOUSE"
-  | "ORDER"
-  | "SHIPMENT"
-  | "PAYMENT"
-  | "RETURN_REFUND"
-  | "CREDIT_LINE"
-const eventFor = (kind: Kind, suffix: number) =>
-  thamaniEvents.createThamaniProjectionEvent(context, {
+const eventFor = (suffix: number, sourceVersion = 1) =>
+  createTenantTradeEvent(context, {
     id: `22222222-2222-4222-8222-${String(suffix).padStart(12, "0")}`,
-    correlationId: context.correlationId,
-    causationId: "33333333-3333-4333-8333-333333333333",
-    occurredAt: "2026-09-09T00:00:00.000Z",
-    idempotencyKey: `thamani:erp:${kind.toLowerCase()}:canonical:v1`,
-    payload: {
-      owner_legal_entity_id: "canonical:legal-entity:thamani",
-      digital_estate: "estate:thamani-b2c",
-      market_key: "thamani_ug",
-      legal_seller_key: "thamani-uganda",
-      canonical_entity_id: `canonical:${kind.toLowerCase()}:1`,
-      commerce_reference: `${kind}-1`,
-      projection_kind: kind,
-      projection_status: "PENDING",
-      source_version: 1,
-    },
+    type: "com.baobab-platform.trade.order.placed.v1",
+    subject: `commerce-order/thamani-${suffix}`,
+    time: "2026-09-09T00:00:00.000Z",
+    dataschema:
+      "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
+    correlationid: context.correlationId,
+    causationid: "33333333-3333-4333-8333-333333333333",
+    idempotencykey: `thamani:event:order:${suffix}`,
+    data: { commerce_order_id: `thamani-${suffix}`, source_version: sourceVersion },
   })
 
 class MemoryOutbox implements OutboxRepository {
@@ -115,91 +99,62 @@ class MemoryOutbox implements OutboxRepository {
   }
 }
 
-describe("Thamani Gate 16 events", () => {
-  it("enforces scope and atomic outbox creation in PostgreSQL, including NULL cases", () => {
-    const migration = readFileSync(
+describe("Thamani ERP projection events (ADR-SHARED-018 §8.5)", () => {
+  const retirement = readFileSync(
+    "src/modules/event-outbox/migrations/Migration20260930210000.ts",
+    "utf8",
+  )
+
+  it("keeps migration history immutable", () => {
+    const original = readFileSync(
       "src/modules/event-outbox/migrations/Migration20260909110000.ts",
       "utf8",
     )
-    expect(migration).toContain("TRG_thamani_erp_projection_outbox")
-    expect(migration).toContain("after insert or update on")
-    expect(migration).toContain("Published Thamani projection identity and payload are immutable")
-    expect(migration).toContain('set "updated_at" = "updated_at"')
-    expect(migration).toContain("is not distinct from 'estate:thamani-b2c'")
-    expect(migration).toContain(
-      "new.owner_legal_entity_id is distinct from 'canonical:legal-entity:thamani'",
-    )
-    expect(migration).toContain("idempotency key reused with different envelope")
-    expect(migration).not.toContain("baobab_market_key: config.marketKey")
-  })
-  it("uses eight specific event facts with complete legal scope and causal lineage", () => {
-    const kinds: Kind[] = [
-      "PRODUCT",
-      "SUPPLIER",
-      "WAREHOUSE",
-      "ORDER",
-      "SHIPMENT",
-      "PAYMENT",
-      "RETURN_REFUND",
-      "CREDIT_LINE",
-    ]
-    const events = kinds.map((kind, index) => eventFor(kind, index + 1))
-    expect(new Set(events.map((event) => event.type))).toHaveLength(8)
-    expect(events.map((event) => event.type)).toContain(
-      THAMANI_EVENT_TYPES.paymentProjectionRequested,
-    )
-    expect(
-      events.every(
-        (event) =>
-          event.data.owner_legal_entity_id === "canonical:legal-entity:thamani" &&
-          event.data.digital_estate === "estate:thamani-b2c",
-      ),
-    ).toBe(true)
-    expect(
-      events.every((event) => event.correlationid === context.correlationId && event.causationid),
-    ).toBe(true)
+    expect(original).toContain("TRG_thamani_erp_projection_outbox")
+    expect(original).toContain("after insert or update on")
   })
 
-  it("rejects ZuriBeans context and Market/legal-seller crossover", () => {
-    const input = { ...eventFor("ORDER", 8), data: undefined }
-    expect(() =>
-      thamaniEvents.createThamaniProjectionEvent(
-        { ...context, tenantId: "tenant-zuribeans" },
-        {
-          id: input.id,
-          correlationId: input.correlationid,
-          causationId: "33333333-3333-4333-8333-333333333333",
-          occurredAt: input.time,
-          idempotencyKey: "thamani:erp:order:canonical:v1",
-          payload: eventFor("ORDER", 8).data,
-        },
-      ),
-    ).toThrow("another legal entity")
-    expect(() =>
-      thamaniEvents.createThamaniProjectionEvent(context, {
-        id: input.id,
-        correlationId: input.correlationid,
-        causationId: "33333333-3333-4333-8333-333333333333",
-        occurredAt: input.time,
-        idempotencyKey: "thamani:erp:order:canonical:v1",
-        payload: { ...eventFor("ORDER", 8).data, legal_seller_key: "thamani-south-africa" },
-      }),
-    ).toThrow("Market/legal-seller")
+  it("retires the estate-named projection commands by forward migration", () => {
+    const up = retirement.slice(
+      retirement.indexOf("async up()"),
+      retirement.indexOf("async down()"),
+    )
+    expect(up).toContain("create or replace function baobab_enqueue_thamani_erp_projection()")
+    expect(up).not.toContain("insert into event_outbox")
+    expect(up).not.toMatch(/'com\.nabhold\.commerce\.thamani-[a-z-]+\.projection-requested\.v1'/)
+    expect(up).not.toContain("engines.nabhold.com")
+  })
+
+  it("keeps the erp_projection invariants the trigger enforced", () => {
+    expect(retirement).toContain("Published Thamani projection identity and payload are immutable")
+    expect(retirement).toContain(
+      "new.owner_legal_entity_id is distinct from 'canonical:legal-entity:thamani'",
+    )
+    expect(retirement).toContain("Thamani projection crosses its Market/legal-seller boundary")
+    expect(retirement).toContain("Unsupported Thamani ERP projection kind %")
+  })
+
+  it("dead-letters unpublished legacy commands and leaves published history untouched", () => {
+    expect(retirement).toContain("\"status\" = 'DEAD_LETTER'")
+    expect(retirement).toContain("RETIRED_ADR_SHARED_018")
+    expect(retirement).toContain("\"status\" in ('PENDING', 'RETRY', 'PUBLISHING')")
+    expect(retirement).not.toMatch(/delete\s+from\s+"?event_outbox/i)
+    expect(retirement).not.toContain("'PUBLISHED'")
   })
 
   it("accepts exact replay but rejects key reuse with changed content", async () => {
     const repository = new MemoryOutbox()
     const outbox = new TransactionalOutbox(repository)
-    const event = eventFor("ORDER", 9)
+    const event = eventFor(9)
     expect((await outbox.enqueue(event)).id).toBe((await outbox.enqueue(event)).id)
-    const changed = { ...event, data: { ...event.data, source_version: 2 } }
+    const changed = eventFor(9, 2)
     await expect(outbox.enqueue(changed)).rejects.toThrow("Idempotency key collision")
     expect(canonicalEventFingerprint(event)).not.toBe(canonicalEventFingerprint(changed))
   })
 
   it("backs off, dead-letters poison events, and bounds each drain batch", async () => {
     const repository = new MemoryOutbox()
-    await new TransactionalOutbox(repository).enqueue(eventFor("ORDER", 10))
+    await new TransactionalOutbox(repository).enqueue(eventFor(10))
     const dispatcher = new AtLeastOnceOutboxDispatcher(
       repository,
       {
@@ -234,16 +189,12 @@ describe("Thamani Gate 16 events", () => {
         return receipt
       },
     })
-    await consumer.consume("thamani-idempiere", eventFor("PAYMENT", 11), async () => {
+    await consumer.consume("thamani-idempiere", eventFor(11), async () => {
       effects += 1
     })
-    const replay = await consumer.consume(
-      "thamani-idempiere",
-      eventFor("PAYMENT", 11),
-      async () => {
-        effects += 1
-      },
-    )
+    const replay = await consumer.consume("thamani-idempiere", eventFor(11), async () => {
+      effects += 1
+    })
     expect(replay.duplicate).toBe(true)
     expect(effects).toBe(1)
   })
