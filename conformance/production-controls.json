@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "runtime": {
+    "nodeMajor": 24,
+    "postgresMinimumMajor": 17,
+    "redisMinimumMajor": 7
+  },
+  "architecture": {
+    "tenantContextFailClosed": true,
+    "crossEngineDatabaseAccess": false,
+    "nativeMedusaAuthority": true,
+    "transactionalOutbox": true,
+    "deliverySemantics": "at-least-once"
+  },
+  "requiredChecks": [
+    "format",
+    "lint",
+    "typecheck",
+    "unit",
+    "contracts",
+    "isolation",
+    "security",
+    "conformance",
+    "build",
+    "fresh-database-migrations",
+    "production-provider-migrations",
+    "codeql",
+    "container-scan",
+    "release-manifest",
+    "zb04-certification"
+  ],
+  "requiredDocumentation": [
+    "docs/architecture/zuribeans-b2b-commerce.md",
+    "docs/architecture/engine-boundaries.md",
+    "docs/architecture/zuribeans-events-outbox.md",
+    "docs/security/zuribeans-b2b-threat-model.md",
+    "docs/operations/observability.md",
+    "docs/operations/production-infrastructure.md",
+    "docs/operations/runbooks/payments.md",
+    "docs/operations/runbooks/migrations.md",
+    "docs/governance/zb04-end-to-end-certification.md"
+  ]
+}

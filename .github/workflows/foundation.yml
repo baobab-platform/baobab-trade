@@ -1,0 +1,22 @@
+name: Foundation Repository Gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+  security-events: write
+
+jobs:
+  foundation:
+    uses: baobab-platform/shared/.github/workflows/foundation-repository-gates.yml@06c49e878ffc34cd1bc2cc3aac4b5d658f490ea3
+    with:
+      foundation_ref: "06c49e878ffc34cd1bc2cc3aac4b5d658f490ea3"
+      dependency_review_enabled: false

@@ -1,41 +1,181 @@
 import {
   assertTradeEntitlement,
-  isValidOrganisationalContext,
-  type BaobabOrganisationalContext,
-} from "../contracts/organisational-context"
+  fromContextResolutionResponse,
+  isValidContextResolutionResponse,
+  type BaobabTenantContext,
+} from "../contracts/tenant-context"
+import { isProblemDetails, ControlPlaneProblemError } from "../contracts/problem-details"
+import { isValidMarket, type BaobabMarket } from "../contracts/market"
+import {
+  isCanonicalEntityId,
+  isEngineId,
+  isOpaqueContextId,
+  isSystemNamespace,
+  isValidMappingResolutionResponse,
+  type MappingResolutionRequest,
+  type MappingResolutionResponse,
+} from "../contracts/canonical-mapping"
+import {
+  isValidPlatformContextResolutionResponse,
+  type RawPlatformContextResolutionResponse,
+} from "../contracts/platform-context"
+
+export type StoredContextOptions = {
+  /** Only needed when the workload token carries no tenant_id of its own. */
+  tenantId?: string
+  /** Selects among the tenant's ACTIVE market participations when it has several (ISO 3166-1 alpha-2). */
+  countryCode?: string
+}
 
 export interface ControlPlaneClient {
-  resolveContext(accessToken: string, correlationId: string): Promise<BaobabOrganisationalContext>
+  resolveContext(accessToken: string, correlationId: string): Promise<BaobabTenantContext>
+  /**
+   * Resolves and stores a platform context (POST /v1/platform-context/resolve)
+   * and returns its `context_id`, which `resolveMapping` redeems. Never
+   * cached: a stored context is a trust decision made at read time.
+   */
+  resolveStoredContext(
+    accessToken: string,
+    correlationId: string,
+    options?: StoredContextOptions,
+  ): Promise<RawPlatformContextResolutionResponse>
+  getMarket(marketId: string, accessToken: string, correlationId: string): Promise<BaobabMarket>
+  resolveMapping(
+    request: MappingResolutionRequest,
+    accessToken: string,
+    correlationId: string,
+  ): Promise<MappingResolutionResponse>
+  resolvePlatformContext(
+    tenantId: string,
+    organisationId: string,
+    accessToken: string,
+    correlationId: string,
+    expectedOrganisationType?: string,
+  ): Promise<RawPlatformContextResolutionResponse>
 }
 
 export type HttpControlPlaneClientOptions = {
   baseUrl: string
   contextPath: string
+  productId: string
+  marketPathTemplate?: string
+  mappingResolutionPath?: string
+  platformContextPath?: string
   timeoutMs?: number
+  now?: () => number
+}
+
+type CachedContext = { context: BaobabTenantContext; expiresAtMs: number }
+
+const MAX_CACHE_TTL_SECONDS = 60
+
+const withLeadingSlash = (path: string): string => (path.startsWith("/") ? path : `/${path}`)
+
+async function readProblemOrThrow(response: Response): Promise<never> {
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new Error(`Control Plane request failed with status ${response.status}`)
+  }
+
+  if (isProblemDetails(body)) {
+    throw new ControlPlaneProblemError(body)
+  }
+
+  throw new Error(`Control Plane request failed with status ${response.status}`)
 }
 
 export class HttpControlPlaneClient implements ControlPlaneClient {
   private readonly baseUrl: string
   private readonly contextPath: string
+  private readonly productId: string
+  private readonly marketPathTemplate: string
+  private readonly mappingResolutionPath: string
+  private readonly platformContextPath: string
   private readonly timeoutMs: number
+  private readonly now: () => number
+  private readonly contextCache = new Map<string, CachedContext>()
 
   constructor(options: HttpControlPlaneClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "")
-    this.contextPath = options.contextPath.startsWith("/")
-      ? options.contextPath
-      : `/${options.contextPath}`
+    this.contextPath = withLeadingSlash(options.contextPath)
+    this.productId = options.productId
+    this.marketPathTemplate = withLeadingSlash(
+      options.marketPathTemplate ?? "/v1/markets/{market_id}",
+    )
+    this.mappingResolutionPath = withLeadingSlash(
+      options.mappingResolutionPath ?? "/v1/resolution/mappings",
+    )
+    this.platformContextPath = withLeadingSlash(
+      options.platformContextPath ?? "/v1/platform-context/resolve",
+    )
     this.timeoutMs = options.timeoutMs ?? 3000
+    this.now = options.now ?? Date.now
   }
 
-  async resolveContext(
-    accessToken: string,
-    correlationId: string,
-  ): Promise<BaobabOrganisationalContext> {
+  /**
+   * Resolves tenant context per POST /v1/context/resolve. The Control Plane
+   * grants a maximum 15 second success cache (60 second schema ceiling); a
+   * cache miss or expiry re-resolves rather than serving a stale result
+   * (fail closed, per contracts.lock.yaml `fail_on_unresolved_tenant_context`).
+   */
+  async resolveContext(accessToken: string, correlationId: string): Promise<BaobabTenantContext> {
     if (!accessToken.trim()) {
       throw new Error("An access token is required to resolve tenant context")
     }
 
+    const cached = this.contextCache.get(accessToken)
+    if (cached && cached.expiresAtMs > this.now()) {
+      return cached.context
+    }
+
     const response = await fetch(`${this.baseUrl}${this.contextPath}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+        "x-correlation-id": correlationId,
+      },
+      body: JSON.stringify({ product_id: this.productId }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    })
+
+    if (!response.ok) {
+      this.contextCache.delete(accessToken)
+      await readProblemOrThrow(response)
+    }
+
+    const candidate: unknown = await response.json()
+    if (!isValidContextResolutionResponse(candidate)) {
+      throw new Error("Control Plane returned an invalid context-resolution response")
+    }
+
+    const context = assertTradeEntitlement(fromContextResolutionResponse(candidate))
+    const ttlSeconds = Math.min(context.cacheTtlSeconds, MAX_CACHE_TTL_SECONDS)
+    this.contextCache.set(accessToken, {
+      context,
+      expiresAtMs: this.now() + ttlSeconds * 1000,
+    })
+
+    return context
+  }
+
+  /**
+   * Resolves Market configuration per GET /v1/markets/{market_id}. Trade
+   * never invents a market_id locally; it always arrives from a trusted
+   * source (resolved tenant context, or an already-verified mapping).
+   * Returns the Market as-is regardless of lifecycle status; callers that
+   * are about to transact must additionally call `assertMarketTransactable`.
+   */
+  async getMarket(
+    marketId: string,
+    accessToken: string,
+    correlationId: string,
+  ): Promise<BaobabMarket> {
+    const path = this.marketPathTemplate.replace("{market_id}", encodeURIComponent(marketId))
+
+    const response = await fetch(`${this.baseUrl}${path}`, {
       method: "GET",
       headers: {
         authorization: `Bearer ${accessToken}`,
@@ -45,18 +185,150 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
     })
 
     if (!response.ok) {
-      throw new Error(`Control Plane context resolution failed with status ${response.status}`)
+      await readProblemOrThrow(response)
+    }
+
+    const candidate: unknown = await response.json()
+    if (!isValidMarket(candidate)) {
+      throw new Error("Control Plane returned an invalid market")
+    }
+
+    return candidate
+  }
+
+  /**
+   * Resolves a platform context per POST /v1/platform-context/resolve with no
+   * organisation, so the Control Plane stores a tenant (and market) scoped
+   * context and returns its `context_id`. Workload-scoped (`context:resolve`),
+   * never cached.
+   */
+  async resolveStoredContext(
+    accessToken: string,
+    correlationId: string,
+    options: StoredContextOptions = {},
+  ): Promise<RawPlatformContextResolutionResponse> {
+    if (!accessToken.trim()) {
+      throw new Error("An access token is required to resolve a stored context")
+    }
+    if (options.countryCode !== undefined && !/^[A-Z]{2}$/.test(options.countryCode)) {
+      throw new Error("countryCode must be an ISO 3166-1 alpha-2 code")
+    }
+
+    const response = await fetch(`${this.baseUrl}${this.platformContextPath}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+        "x-correlation-id": correlationId,
+      },
+      body: JSON.stringify({
+        ...(options.tenantId ? { tenant_id: options.tenantId } : {}),
+        ...(options.countryCode ? { country_code: options.countryCode } : {}),
+      }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    })
+
+    if (!response.ok) {
+      await readProblemOrThrow(response)
+    }
+
+    const candidate: unknown = await response.json()
+    if (!isValidPlatformContextResolutionResponse(candidate)) {
+      throw new Error("Control Plane returned an invalid platform-context response")
+    }
+
+    return candidate
+  }
+
+  async resolveMapping(
+    request: MappingResolutionRequest,
+    accessToken: string,
+    correlationId: string,
+  ): Promise<MappingResolutionResponse> {
+    if (!isOpaqueContextId(request.context_id)) {
+      throw new Error("A stored Control Plane context_id is required for mapping resolution")
+    }
+    if (!isCanonicalEntityId(request.canonical_entity_id)) {
+      throw new Error("A valid canonical entity ID is required for mapping resolution")
+    }
+    if (
+      request.target_system_namespace !== undefined &&
+      !isSystemNamespace(request.target_system_namespace)
+    ) {
+      throw new Error("target_system_namespace must be a registered system namespace")
+    }
+    if (request.target_engine_id !== undefined && !isEngineId(request.target_engine_id)) {
+      throw new Error("target_engine_id must be a registered engine id")
+    }
+
+    const response = await fetch(`${this.baseUrl}${this.mappingResolutionPath}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+        "x-correlation-id": correlationId,
+      },
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    })
+
+    if (!response.ok) {
+      await readProblemOrThrow(response)
     }
 
     const candidate: unknown = await response.json()
     if (
-      typeof candidate !== "object" ||
-      candidate === null ||
-      !isValidOrganisationalContext(candidate as Partial<BaobabOrganisationalContext>)
+      !isValidMappingResolutionResponse(candidate) ||
+      candidate.canonical_entity_id !== request.canonical_entity_id ||
+      candidate.context_id !== request.context_id
     ) {
-      throw new Error("Control Plane returned an invalid organisational context")
+      throw new Error("Control Plane returned an invalid mapping-resolution response")
     }
 
-    return assertTradeEntitlement(candidate as BaobabOrganisationalContext)
+    return candidate
+  }
+
+  /**
+   * Resolves platform (tenant + organisation) context per POST
+   * /v1/platform-context/resolve, using a workload-scoped access token
+   * rather than a buyer's own token -- see ADR for this slice. Never
+   * cached: this call exists specifically to attest a tenant_id/
+   * organisation_id pair at read time, so callers must always see a fresh
+   * result rather than a value from an unrelated earlier assertion.
+   */
+  async resolvePlatformContext(
+    tenantId: string,
+    organisationId: string,
+    accessToken: string,
+    correlationId: string,
+    expectedOrganisationType?: string,
+  ): Promise<RawPlatformContextResolutionResponse> {
+    const response = await fetch(`${this.baseUrl}${this.platformContextPath}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+        "x-correlation-id": correlationId,
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        organisation_id: organisationId,
+        ...(expectedOrganisationType
+          ? { expected_organisation_type: expectedOrganisationType }
+          : {}),
+      }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    })
+
+    if (!response.ok) {
+      await readProblemOrThrow(response)
+    }
+
+    const candidate: unknown = await response.json()
+    if (!isValidPlatformContextResolutionResponse(candidate)) {
+      throw new Error("Control Plane returned an invalid platform-context response")
+    }
+
+    return candidate
   }
 }

@@ -12,12 +12,20 @@ ownership:
 dependencies:
   postgresql:
     required: true
-    minimum_major: 16
+    minimum_major: 17
     purpose: "Medusa operational data"
   redis:
     required: true
     minimum_major: 7
     purpose: "Medusa cache, coordination and background processing"
+  object_storage:
+    required: true
+    production_provider: "s3-compatible"
+    purpose: "Commerce-owned product images and specification files"
+  notifications:
+    required: true
+    production_provider: "sendgrid"
+    purpose: "Transactional B2B email"
   control_plane:
     required: true
     purpose: "Authenticated tenant context, lifecycle and product entitlement"
@@ -32,6 +40,13 @@ secrets:
   - "BAOBAB_CONTROL_PLANE_BASE_URL"
   - "BAOBAB_CONTROL_PLANE_CONTEXT_PATH"
   - "BAOBAB_WEBHOOK_SIGNING_SECRET"
+  - "S3_FILE_URL"
+  - "S3_REGION"
+  - "S3_BUCKET"
+  - "S3_ACCESS_KEY_ID"
+  - "S3_SECRET_ACCESS_KEY"
+  - "SENDGRID_API_KEY"
+  - "SENDGRID_FROM"
 constraints:
   - "Do not share databases with Baobab ERP, Pulse or the Control Plane."
   - "Do not encode cloud accounts, networks, domains or production credentials in this repository."

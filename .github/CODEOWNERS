@@ -1,0 +1,8 @@
+* @baobab-platform/platform-engineering
+/.github/ @baobab-platform/platform-engineering @baobab-platform/security
+/.devcontainer/ @baobab-platform/platform-engineering
+/.baobab/ @baobab-platform/platform-engineering
+/Dockerfile @baobab-platform/platform-engineering @baobab-platform/security
+/src/ @baobab-platform/platform-engineering
+/contracts.lock.yaml @baobab-platform/platform-engineering
+/SECURITY.md @baobab-platform/security

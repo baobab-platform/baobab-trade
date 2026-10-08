@@ -12,11 +12,26 @@ permissions:
   contents: read
 
 jobs:
+  b2b-threat-model:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run threat-model and PII/abuse-control tests
+        run: npm run test:security
+
   codeql:
     permissions:
       contents: read
       security-events: write
       actions: read
-    uses: nabhold/shared/.github/workflows/security-codeql.yml@498c431ea7eb76eb038975bc49e7087499d30d48 # shared main, verified 2026-08-30
+    uses: baobab-platform/shared/.github/workflows/security-codeql.yml@498c431ea7eb76eb038975bc49e7087499d30d48 # shared main, verified 2026-08-30
     with:
       languages: '["javascript-typescript"]'

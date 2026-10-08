@@ -18,8 +18,9 @@ jobs:
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version-file: .nvmrc
+          cache: npm
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Check formatting
         run: npm run format:check
       - name: Lint
@@ -28,10 +29,310 @@ jobs:
         run: npm run typecheck
       - name: Test
         run: npm test
+      - name: Contract tests
+        run: npm run test:contract
+      - name: Extraction port contract tests
+        run: npm run test:ports
+      - name: Context isolation tests
+        run: npm run test:isolation
+      - name: Production conformance tests
+        run: npm run test:conformance
+      - name: ZB-04 buyer onboarding certification pack
+        run: npm run test:zb04
       - name: Build
         run: npm run build
       - name: Validate architecture declarations
         run: |
           test -f contracts.lock.yaml
           test -f runtime/requirements.yaml
-          test -f .nabhold/environment.yaml
+          test -f .baobab/environment.yaml
+
+  shared-conformance:
+    name: Conformance against the pinned Shared contracts
+    runs-on: ubuntu-26.04
+    # EA-01 / ADR-SHARED-018 T-COMPAT-07: Trade's validators, Control Plane
+    # client requests, event envelopes and workload authority are checked
+    # against the real files at the commit contracts.lock.yaml pins. The suite
+    # itself asserts that the checkout is exactly that commit.
+    env:
+      BAOBAB_SHARED_PATH: ${{ github.workspace }}/.shared-contracts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read pinned baobab-platform/shared commit
+        id: pin
+        run: echo "commit=$(grep -m1 'commit:' contracts.lock.yaml | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Checkout baobab-platform/shared at the pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: baobab-platform/shared
+          ref: ${{ steps.pin.outputs.commit }}
+          path: .shared-contracts
+      - name: Set up Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Shared conformance
+        run: npm run test:shared-conformance
+
+  core-module-integration:
+    runs-on: ubuntu-26.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: baobab_trade_test
+          POSTGRES_USER: baobab_trade
+          POSTGRES_PASSWORD: baobab_trade
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U baobab_trade -d baobab_trade_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://baobab_trade:baobab_trade@localhost:5432/baobab_trade_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: gate-1-integration-jwt-secret
+      COOKIE_SECRET: gate-1-integration-cookie-secret
+      BAOBAB_WEBHOOK_SIGNING_SECRET: gate-1-integration-webhook-secret
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Apply Medusa migrations
+        run: npm run migrate
+      - name: Apply search index migrations
+        run: npm run migrate:search
+      - name: Verify required core modules
+        run: npm run verify:core-modules
+      - name: Bootstrap Uganda and South Africa Market projections
+        run: npm run bootstrap:market
+      - name: Verify Market projection isolation
+        run: npm run verify:market-projections
+
+      - name: Verify Gate 5 B2B module persistence
+        run: npm run verify:b2b-module
+
+      - name: Bootstrap Gate 6 ZuriBeans catalogue and pricing
+        run: npm run bootstrap:catalogue
+
+      - name: Verify Gate 6 catalogue and pricing projections
+        run: npm run verify:catalogue
+
+      - name: Bootstrap Gate 7 inventory projections
+        run: npm run bootstrap:inventory
+
+      - name: Verify Gate 7 inventory and reservations
+        run: npm run verify:inventory
+
+      - name: Bootstrap Gate 8 payment policies
+        run: npm run bootstrap:payments
+
+      - name: Verify Gate 8 payment lifecycle and ERP reconciliation
+        run: npm run verify:payments
+
+      - name: Regression — payment initiate()/transition() race safety under concurrent execution (mutates this disposable database only)
+        run: npm run regression:payment-transition-concurrency
+
+      - name: Bootstrap Gate 9 fulfilment policies
+        run: npm run bootstrap:fulfilment
+
+      - name: Verify Gate 9 fulfilment, tracking, and reconciliation
+        run: npm run verify:fulfilment
+
+      - name: Regression — fulfilment request()/transition() race safety and per-fulfilment idempotency scoping (mutates this disposable database only)
+        run: npm run regression:fulfilment-transition-concurrency
+
+      - name: Bootstrap Gate 10 tax contexts
+        run: npm run bootstrap:tax
+
+      - name: Verify Gate 10 effective tax and reconciliation
+        run: npm run verify:tax
+
+      - name: Bootstrap Gate 11 trade lanes
+        run: npm run bootstrap:trade-readiness
+
+      - name: Verify Gate 11 trade-readiness metadata
+        run: npm run verify:trade-readiness
+
+      - name: Bootstrap Gate 12 ERP mappings
+        run: npm run bootstrap:erp-integration
+
+      - name: Verify Gate 12 ERP projections and reconciliation
+        run: npm run verify:erp-integration
+
+      - name: Verify Gate 13 durable events and outbox
+        run: npm run verify:event-outbox
+
+      - name: Bootstrap Thamani B2C Uganda and South Africa Market projections
+        run: npm run bootstrap:thamani-market
+
+      - name: Verify Thamani B2C Market projection isolation
+        run: npm run verify:thamani-market
+
+      - name: Bootstrap Thamani B2C retail catalogue and suppliers
+        run: npm run bootstrap:thamani-catalogue
+
+      - name: Verify Thamani B2C catalogue and supplier projections
+        run: npm run verify:thamani-catalogue
+
+      - name: Verify Gate 18 ZuriBeans Uganda-South Africa simulation
+        run: npm run verify:simulation
+
+      - name: Verify Gate 22 Thamani Uganda-South Africa simulation
+        run: npm run verify:thamani-simulation
+
+      - name: Rebuild Thamani B2C product search index
+        run: npm run bootstrap:thamani-search
+
+      - name: Verify Thamani B2C search health and Market isolation
+        run: npm run verify:thamani-search
+
+      - name: Regression — Thamani B2C eligibility suspension reaches search (mutates this disposable database only)
+        run: npm run regression:thamani-eligibility-sync
+
+      - name: Bootstrap Thamani B2C sale pricing
+        run: npm run bootstrap:thamani-pricing
+
+      - name: Verify Thamani B2C sale pricing and effective dating
+        run: npm run verify:thamani-pricing
+
+      - name: Bootstrap Thamani B2C promotions
+        run: npm run bootstrap:thamani-promotions
+
+      - name: Verify Thamani B2C promotion configuration
+        run: npm run verify:thamani-promotions
+
+      - name: Regression — Thamani B2C promotion discount computation and exclusive stacking (mutates this disposable database only)
+        run: npm run regression:thamani-promotion-application
+
+      - name: Bootstrap Thamani Gate 10 multi-location inventory
+        run: npm run bootstrap:thamani-inventory
+
+      - name: Verify Thamani Gate 10 availability, reservations, isolation, and ERP reconciliation
+        run: npm run verify:thamani-inventory
+
+      - name: Bootstrap Thamani Gate 11 regional payment policies
+        run: npm run bootstrap:thamani-payments
+
+      - name: Verify Thamani Gate 11 payment, webhook, refund, and ERP reconciliation
+        run: npm run verify:thamani-payments
+
+      - name: Bootstrap Thamani Gate 12 fulfilment policies
+        run: npm run bootstrap:thamani-fulfilment
+
+      - name: Verify Thamani Gate 12 partial allocation, tracking, returns, and reconciliation
+        run: npm run verify:thamani-fulfilment
+
+      - name: Bootstrap Thamani Gate 13 effective tax reference data
+        run: npm run bootstrap:thamani-tax
+
+      - name: Verify Thamani Gate 13 inclusive tax, provenance, and reconciliation
+        run: npm run verify:thamani-tax
+
+      - name: Regression — Thamani B2C tax provider wiring (real VAT on real carts, fail-closed for unsourced categories, ZuriBeans unaffected — mutates this disposable database only)
+        run: npm run regression:thamani-tax-provider-wiring
+
+      - name: Bootstrap Thamani Gate 14 product trade profiles
+        run: npm run bootstrap:thamani-trade-readiness
+
+      - name: Verify Thamani Gate 14 fail-closed cross-border readiness
+        run: npm run verify:thamani-trade-readiness
+
+      - name: Bootstrap Thamani Gate 15 ERP mappings
+        run: npm run bootstrap:thamani-erp-integration
+
+      - name: Verify Thamani Gate 15 projections and idempotency
+        run: npm run verify:thamani-erp-integration
+
+      - name: Verify Thamani Gate 16 transactional events and legal-entity isolation
+        run: npm run verify:thamani-events
+
+      - name: Regression Thamani Gate 17 store credit issuance
+        run: npm run regression:thamani-store-credit-issuance
+
+      - name: Regression Gate 22 Thamani simulation pack — real orders, payments, returns, stock, imports, ERP
+        run: npm run regression:thamani-simulation-pack
+
+      - name: Verify Gate 20 reconciliation sweep
+        run: npm run verify:observability
+
+  production-infrastructure-integration:
+    runs-on: ubuntu-26.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: baobab_trade_production_test
+          POSTGRES_USER: baobab_trade
+          POSTGRES_PASSWORD: baobab_trade
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U baobab_trade -d baobab_trade_production_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: production
+      DATABASE_URL: postgres://baobab_trade:baobab_trade@localhost:5432/baobab_trade_production_test
+      REDIS_URL: redis://localhost:6379
+      MEDUSA_FF_CACHING: true
+      JWT_SECRET: gate-2-integration-jwt-secret
+      COOKIE_SECRET: gate-2-integration-cookie-secret
+      BAOBAB_CONTROL_PLANE_BASE_URL: http://localhost:8080
+      BAOBAB_WEBHOOK_SIGNING_SECRET: gate-2-integration-webhook-secret
+      S3_FILE_URL: https://assets.example.invalid/baobab-trade
+      S3_REGION: auto
+      S3_BUCKET: baobab-trade-test
+      S3_ENDPOINT: https://s3.example.invalid
+      S3_ACCESS_KEY_ID: gate-2-access-key
+      S3_SECRET_ACCESS_KEY: gate-2-secret-key
+      SENDGRID_API_KEY: gate-2-sendgrid-key
+      SENDGRID_FROM: commerce@example.invalid
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --include=dev
+      - name: Apply Medusa migrations with production providers
+        run: npm run migrate
+      - name: Apply search index migrations
+        run: npm run migrate:search
+      - name: Verify production infrastructure modules
+        run: npm run verify:infrastructure

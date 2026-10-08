@@ -5,8 +5,13 @@
  */
 export const CONTRACT_PROVENANCE = {
   sharedRepository: "nabhold/shared",
-  sharedCommit: "498c431ea7eb76eb038975bc49e7087499d30d48",
+  sharedCommit: "c518b9aa7be1e67c2b9d360c75a97123ee47382f",
   tenancyPath: "contracts/tenancy/tenancy.yaml",
   legalEntityRegistryPath: "contracts/legal-entity/registry.yaml",
+  contextResolutionPath: "contracts/control-plane/v1/context-resolution.schema.json",
+  marketRegistryPath: "contracts/control-plane/v1/market.schema.json",
+  canonicalMappingPath: "contracts/control-plane/v1/canonical-mapping.schema.json",
+  problemDetailsPath: "contracts/errors/v1/problem-details.schema.json",
+  eventEnvelopePath: "contracts/events/v1/envelope.schema.json",
   tenancyVersion: "1.0",
 } as const

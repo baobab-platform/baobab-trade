@@ -1,0 +1,24 @@
+schema:
+  name: "baobab-platform-development-environment-contract"
+  version: "1.0"
+application:
+  name: "baobab-trade"
+  version: "0.2.0"
+environment:
+  provider: "baobab-dev"
+  profile: "full"
+  minimum_version: "1.4.4"
+  contract_minimum_version: "1.0"
+compatibility_policy:
+  strict_runtime_versions: false
+  allow_newer_patch_versions: true
+  allow_newer_minor_versions: false
+  allow_older_versions: false
+validation:
+  required_capabilities:
+    - "languages.node"
+    - "database.postgresql"
+    - "development.docker"
+    - "development.github_cli"
+notes:
+  - "Medusa remains the Trade runtime; this declaration only describes compatibility with nabhold/baobab-dev."

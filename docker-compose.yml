@@ -26,7 +26,7 @@ services:
       timeout: 5s
       retries: 5
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: baobab_trade
       POSTGRES_USER: baobab_trade
