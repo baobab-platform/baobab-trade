@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  assertNoPersonalData,
   assertNoSensitiveEventData,
   assertPrincipalBinding,
   authorizeB2BResource,
@@ -43,4 +44,8 @@ describe("Gate 15 B2B threat model", () => {
     expect(() =>
       assertNoSensitiveEventData({ payment: { card_number: "4111111111111111" } }),
     ).toThrow(/SENSITIVE_EVENT_FIELD/))
+  it("rejects a buyer contact's personal data anywhere in event data (Gate 19)", () =>
+    expect(() =>
+      assertNoPersonalData({ organisation: { contact: { email: "buyer@example.com" } } }),
+    ).toThrow(/PERSONAL_DATA_FIELD/))
 })

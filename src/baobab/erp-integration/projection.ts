@@ -5,7 +5,19 @@ export type ErpMappingType =
   | "SALES_ORDER"
   | "SHIPMENT"
   | "FINANCIAL_CONSEQUENCE"
-export type ProjectionKind = "ORDER" | "FULFILMENT"
+  | "SUPPLIER"
+  | "PAYMENT"
+  | "RETURN_REFUND"
+export type ProjectionKind =
+  | "PRODUCT"
+  | "SUPPLIER"
+  | "WAREHOUSE"
+  | "ORDER"
+  | "FULFILMENT"
+  | "SHIPMENT"
+  | "PAYMENT"
+  | "RETURN_REFUND"
+  | "CREDIT_LINE"
 export type ProjectionStatus =
   | "PENDING"
   | "PUBLISHED"
@@ -29,6 +41,26 @@ export type ErpProjectionCommand = {
   idempotencyKey: string
   correlationId: string
 }
+
+const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`
+  if (value && typeof value === "object")
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+      .join(",")}}`
+  return JSON.stringify(value)
+}
+
+export const erpProjectionDigest = (command: ErpProjectionCommand): string =>
+  canonicalJson({
+    kind: command.kind,
+    commerceReference: command.commerceReference,
+    canonicalEntityId: command.canonicalEntityId,
+    legalSellerKey: command.legalSellerKey,
+    marketKey: command.marketKey,
+    payload: command.payload,
+  })
 export type FinancialStatusProjection = {
   commercePaymentReference: string
   erpPaymentReference: string
@@ -73,8 +105,8 @@ export const reconcileErpProjection = (input: {
 }
 
 export interface ErpProjectionRepository {
-  findByIdempotencyKey(key: string): Promise<{ id: string } | undefined>
-  create(command: ErpProjectionCommand): Promise<{ id: string }>
+  findByIdempotencyKey(key: string): Promise<{ id: string; commandDigest: string } | undefined>
+  create(command: ErpProjectionCommand & { commandDigest: string }): Promise<{ id: string }>
 }
 export interface ErpIntegrationPort {
   queue(command: ErpProjectionCommand): Promise<{ id: string }>
@@ -88,9 +120,13 @@ export class DurableErpIntegrationAdapter implements ErpIntegrationPort {
       !Object.keys(command.payload).length
     )
       throw new Error("ERP projection requires canonical identity and payload")
-    return (
-      (await this.repository.findByIdempotencyKey(command.idempotencyKey)) ??
-      this.repository.create(command)
-    )
+    const commandDigest = erpProjectionDigest(command)
+    const existing = await this.repository.findByIdempotencyKey(command.idempotencyKey)
+    if (existing) {
+      if (existing.commandDigest !== commandDigest)
+        throw new Error("ERP idempotency key reused with different projection content")
+      return existing
+    }
+    return this.repository.create({ ...command, commandDigest })
   }
 }

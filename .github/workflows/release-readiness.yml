@@ -26,3 +26,13 @@ jobs:
         run: npm run test:conformance
       - name: Build release candidate
         run: npm run build
+      - name: Generate release manifest
+        run: npm run release:manifest
+      - name: Build immutable release image
+        run: docker build --tag "baobab-trade:${{ github.sha }}" .
+      - name: Upload release evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: release-manifest.json
+          retention-days: 15

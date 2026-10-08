@@ -1,6 +1,12 @@
+import type { ILockingModule } from "@medusajs/framework/types"
 import type EventOutboxModuleService from "../../modules/event-outbox/service"
 import type { BaobabCloudEvent } from "./event-contracts"
-import type { OutboxRecord, OutboxRepository, OutboxStatus } from "./outbox"
+import {
+  canonicalEventFingerprint,
+  type OutboxRecord,
+  type OutboxRepository,
+  type OutboxStatus,
+} from "./outbox"
 
 type ServiceRecord = Awaited<ReturnType<EventOutboxModuleService["listEventOutboxes"]>>[number]
 
@@ -23,7 +29,10 @@ const toRecord = (value: ServiceRecord): OutboxRecord => ({
 })
 
 export class EventOutboxRecordAdapter implements OutboxRepository {
-  constructor(private readonly service: EventOutboxModuleService) {}
+  constructor(
+    private readonly service: EventOutboxModuleService,
+    private readonly locking: ILockingModule,
+  ) {}
 
   async findByIdempotencyKey(key: string) {
     const [record] = await this.service.listEventOutboxes({ idempotency_key: key })
@@ -31,20 +40,34 @@ export class EventOutboxRecordAdapter implements OutboxRepository {
   }
 
   async create(event: BaobabCloudEvent, idempotencyKey: string) {
-    const record = await this.service.createEventOutboxes({
-      event_id: event.id,
-      event_type: event.type,
-      subject: event.subject,
-      tenant_id: event.baobabscope === "tenant" ? event.tenantid : null,
-      correlation_id: event.correlationid,
-      causation_id: event.causationid ?? null,
-      idempotency_key: idempotencyKey,
-      envelope: event,
-      status: "PENDING",
-      attempt_count: 0,
-      next_attempt_at: new Date(),
+    return this.locking.execute(`event-outbox-idempotency:${idempotencyKey}`, async () => {
+      const existing = await this.findByIdempotencyKey(idempotencyKey)
+      if (existing) {
+        if (canonicalEventFingerprint(existing.envelope) !== canonicalEventFingerprint(event))
+          throw new Error("Idempotency key collision: canonical event payload differs")
+        return existing
+      }
+      const data = event.data as Record<string, unknown>
+      const record = await this.service.createEventOutboxes({
+        event_id: event.id,
+        event_type: event.type,
+        subject: event.subject,
+        tenant_id: event.baobabscope === "tenant" ? event.tenantid : null,
+        owner_legal_entity_id:
+          typeof data.owner_legal_entity_id === "string" ? data.owner_legal_entity_id : null,
+        digital_estate: typeof data.digital_estate === "string" ? data.digital_estate : null,
+        market_key: typeof data.market_key === "string" ? data.market_key : null,
+        envelope_digest: canonicalEventFingerprint(event),
+        correlation_id: event.correlationid,
+        causation_id: event.causationid ?? null,
+        idempotency_key: idempotencyKey,
+        envelope: event,
+        status: "PENDING",
+        attempt_count: 0,
+        next_attempt_at: new Date(),
+      })
+      return toRecord(record)
     })
-    return toRecord(record)
   }
 
   async listDue(now: Date, limit: number) {
@@ -62,11 +85,22 @@ export class EventOutboxRecordAdapter implements OutboxRepository {
       .map(toRecord)
   }
 
-  async markPublishing(id: string, attemptCount: number, leaseExpiresAt: Date) {
-    return this.update(id, {
-      status: "PUBLISHING",
-      attempt_count: attemptCount,
-      lease_expires_at: leaseExpiresAt,
+  async claim(id: string, now: Date, attemptCount: number, leaseExpiresAt: Date) {
+    return this.locking.execute(`event-outbox-claim:${id}`, async () => {
+      const [current] = await this.service.listEventOutboxes({ id })
+      const due =
+        current &&
+        (((current.status === "PENDING" || current.status === "RETRY") &&
+          current.next_attempt_at <= now) ||
+          (current.status === "PUBLISHING" &&
+            current.lease_expires_at !== null &&
+            current.lease_expires_at <= now))
+      if (!due) return undefined
+      return this.update(id, {
+        status: "PUBLISHING",
+        attempt_count: attemptCount,
+        lease_expires_at: leaseExpiresAt,
+      })
     })
   }
 

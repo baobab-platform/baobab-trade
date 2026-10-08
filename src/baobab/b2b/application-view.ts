@@ -1,0 +1,15 @@
+export const buyerApplicationView = (application: Record<string, unknown>) => ({
+  id: application.id,
+  status: application.status,
+  legal_name: application.legal_name,
+  trading_name: application.trading_name,
+  registration_number: application.registration_number,
+  country_of_registration: application.country_of_registration,
+  website: application.website,
+  requested_market_keys: application.requested_market_keys,
+  submitted_at: application.submitted_at,
+  assigned_reviewer_principal_id: application.assigned_reviewer_principal_id,
+  revision: application.revision,
+  created_at: application.created_at,
+  updated_at: application.updated_at,
+})

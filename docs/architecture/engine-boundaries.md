@@ -61,3 +61,22 @@ Orders, Inventory, Pricing, Payments and Fulfilment native in Medusa. The
 ledger adapter is deliberately disabled: defining a port is not permission to
 invent a ledger, and routing changes remain governed by Control Plane
 CapabilityBindings.
+
+## Gate 18 port contract tests
+
+Every one of the seven ports above now has a dedicated contract test
+(`tests/order-orchestration.test.ts`, `tests/inventory-availability.test.ts`,
+`tests/pricing-decision.test.ts`, `tests/payment-orchestration.test.ts`,
+`tests/fulfilment-port.test.ts`, `tests/trade-compliance-port.test.ts`,
+`tests/ledger-evidence.test.ts`), run together as the `test:ports` CI step.
+Each test exercises the port's current binding — its Medusa-native,
+projected, or disabled adapter — against an in-memory fake of whatever it
+depends on (a repository, a policy provider, or Medusa's own module service),
+proving today's adapter honours the full port contract (idempotency,
+validation, fail-closed rejection, and — where relevant — Digital Estate
+isolation) without requiring a live Medusa container. This is what makes the
+seam real: a future extraction only has to satisfy the same contract test,
+not rediscover it. `PricingDecisionPort` previously had no implementation at
+all (unlike the other six); Gate 18 added `MedusaPricingDecisionAdapter`,
+matching the same injected-collaborator shape as `MedusaOrderOrchestrationAdapter`,
+so the port has a reference adapter to hold to its contract.

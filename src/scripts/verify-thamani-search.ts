@@ -46,7 +46,15 @@ export default async function verifyThamaniSearch({ container }: ExecArgs): Prom
   }
 
   // Market isolation (spec §36): a Uganda-only or South Africa-only SKU must
-  // never surface as purchasable when searching the other Market.
+  // never surface as purchasable when searching the other Market. Today
+  // neither surfaces for *either* Market: Gate 14's fail-closed compliance
+  // gate (see `ensureRetailProjection` in bootstrap-thamani-catalogue.ts)
+  // withholds every product's Market eligibility until its HS classification
+  // is VERIFIED, and the launch catalogue's profiles are all deliberately
+  // UNVERIFIED illustrative fixtures — so `eligible_market_keys` is empty for
+  // every indexed product. `regression-thamani-trade-compliance-gate.ts`
+  // proves eligibility (and so this isolation) genuinely activates once a
+  // profile is verified.
   const ugResults = await searchService.search({
     entity: THAMANI_PRODUCT_SEARCH_INDEX,
     fields: ["id", "handle"],
@@ -60,20 +68,15 @@ export default async function verifyThamaniSearch({ container }: ExecArgs): Prom
     pagination: { take: THAMANI_CATALOGUE.length },
   })
 
-  const ugHandles = new Set(ugResults.hits.map((hit) => hit.document.handle))
-  const zaHandles = new Set(zaResults.hits.map((hit) => hit.document.handle))
-
-  if (!ugHandles.has("thamani-reusable-cotton-tote-bag")) {
-    throw new Error("Uganda-only SKU is missing from the Uganda Market search results")
+  if (ugResults.hits.length !== 0) {
+    throw new Error(
+      `Expected no Uganda Market-eligible products pending Gate 14 review, found ${ugResults.hits.length}`,
+    )
   }
-  if (zaHandles.has("thamani-reusable-cotton-tote-bag")) {
-    throw new Error("Uganda-only SKU leaked into South Africa Market search results")
-  }
-  if (!zaHandles.has("thamani-handcrafted-ceramic-mug")) {
-    throw new Error("South Africa-only SKU is missing from the South Africa Market search results")
-  }
-  if (ugHandles.has("thamani-handcrafted-ceramic-mug")) {
-    throw new Error("South Africa-only SKU leaked into Uganda Market search results")
+  if (zaResults.hits.length !== 0) {
+    throw new Error(
+      `Expected no South Africa Market-eligible products pending Gate 14 review, found ${zaResults.hits.length}`,
+    )
   }
 
   // Free-text keyword search finds the expected products.

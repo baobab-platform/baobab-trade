@@ -26,10 +26,10 @@ const context = {
 }
 const event = createTenantTradeEvent(context, {
   id: "22222222-2222-4222-8222-222222222222",
-  type: "com.nabhold.commerce.order.accepted.v1",
+  type: "com.baobab-platform.trade.order.placed.v1",
   subject: "commerce-order/gate13-order",
   time: "2026-09-08T00:00:00.000Z",
-  dataschema: "https://contracts.nabhold.com/commerce/order/accepted/v1",
+  dataschema: "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
   correlationid: context.correlationId,
   causationid: "33333333-3333-4333-8333-333333333333",
   idempotencykey: "gate13:order:accepted",
@@ -65,7 +65,10 @@ class MemoryOutbox implements OutboxRepository {
       .filter((x) => ["PENDING", "RETRY"].includes(x.status) && x.nextAttemptAt <= now)
       .slice(0, limit)
   }
-  async markPublishing(id: string, attemptCount: number, leaseExpiresAt: Date) {
+  async claim(id: string, now: Date, attemptCount: number, leaseExpiresAt: Date) {
+    const current = this.records.find((item) => item.id === id)
+    if (!current || !["PENDING", "RETRY"].includes(current.status) || current.nextAttemptAt > now)
+      return undefined
     return this.patch(id, { status: "PUBLISHING", attemptCount, leaseExpiresAt })
   }
   async markPublished(id: string, publishedAt: Date) {

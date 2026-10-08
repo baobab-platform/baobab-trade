@@ -48,6 +48,25 @@ describe("ZuriBeans launch Market configuration", () => {
     expect(ZURIBEANS_UGANDA.tax).not.toHaveProperty("rate")
   })
 
+  it("gives every Market a distinct, positively priced shipping option", () => {
+    // completeCartWorkflow cannot succeed without a real ShippingOption on
+    // the service zone — see MarketBootstrapConfig.shipping.shippingOption's
+    // doc comment for why this amount is a placeholder, not a sourced rate.
+    expect(ZURIBEANS_UGANDA.shipping.shippingOption.amount).toBeGreaterThan(0)
+    expect(ZURIBEANS_SOUTH_AFRICA.shipping.shippingOption.amount).toBeGreaterThan(0)
+    expect(ZURIBEANS_UGANDA.shipping.shippingOption.key).not.toBe(
+      ZURIBEANS_SOUTH_AFRICA.shipping.shippingOption.key,
+    )
+    // Regression: provisioning.ts's idempotency check used to key off `name`
+    // alone. Every launch config used the same literal name, so only the
+    // first Market provisioned ever got a real shipping option — the other
+    // three silently matched that one Market's row on every later bootstrap
+    // run and skipped creating their own.
+    expect(ZURIBEANS_UGANDA.shipping.shippingOption.name).not.toBe(
+      ZURIBEANS_SOUTH_AFRICA.shipping.shippingOption.name,
+    )
+  })
+
   it("does not hardcode a UUID as a market identity", () => {
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     for (const market of ZURIBEANS_LAUNCH_MARKETS) {

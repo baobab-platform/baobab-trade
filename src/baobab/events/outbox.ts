@@ -1,5 +1,19 @@
+import { createHash } from "node:crypto"
 import { isValidCloudEvent, type BaobabCloudEvent } from "./event-contracts"
 import type { EventPublisher } from "./publisher"
+
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`
+  if (value && typeof value === "object")
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(",")}}`
+  return JSON.stringify(value)
+}
+
+export const canonicalEventFingerprint = (event: BaobabCloudEvent): string =>
+  createHash("sha256").update(stableJson(event)).digest("hex")
 
 export type OutboxStatus = "PENDING" | "PUBLISHING" | "PUBLISHED" | "RETRY" | "DEAD_LETTER"
 
@@ -25,7 +39,12 @@ export interface OutboxRepository {
   findByIdempotencyKey(key: string): Promise<OutboxRecord | undefined>
   create(event: BaobabCloudEvent, idempotencyKey: string): Promise<OutboxRecord>
   listDue(now: Date, limit: number): Promise<OutboxRecord[]>
-  markPublishing(id: string, attemptCount: number, leaseExpiresAt: Date): Promise<OutboxRecord>
+  claim(
+    id: string,
+    now: Date,
+    attemptCount: number,
+    leaseExpiresAt: Date,
+  ): Promise<OutboxRecord | undefined>
   markPublished(id: string, publishedAt: Date): Promise<OutboxRecord>
   markRetry(id: string, nextAttemptAt: Date, errorCode: string): Promise<OutboxRecord>
   markDeadLetter(id: string, errorCode: string): Promise<OutboxRecord>
@@ -58,10 +77,13 @@ export class TransactionalOutbox {
     if (!isValidCloudEvent(event))
       throw new Error("Cannot enqueue a non-conforming canonical event")
     if (!event.idempotencykey) throw new Error("Durable events require an idempotency key")
-    return (
-      (await this.repository.findByIdempotencyKey(event.idempotencykey)) ??
-      this.repository.create(event, event.idempotencykey)
-    )
+    const existing = await this.repository.findByIdempotencyKey(event.idempotencykey)
+    if (existing) {
+      if (canonicalEventFingerprint(existing.envelope) !== canonicalEventFingerprint(event))
+        throw new Error("Idempotency key collision: canonical event payload differs")
+      return existing
+    }
+    return this.repository.create(event, event.idempotencykey)
   }
 }
 
@@ -73,15 +95,17 @@ export class AtLeastOnceOutboxDispatcher {
   ) {}
 
   async dispatchDue(now = new Date(), limit = 100) {
-    const due = await this.repository.listDue(now, limit)
+    const due = await this.repository.listDue(now, Math.max(0, Math.min(limit, 500)))
     const results: OutboxRecord[] = []
     for (const candidate of due) {
       const attempt = candidate.attemptCount + 1
-      const claimed = await this.repository.markPublishing(
+      const claimed = await this.repository.claim(
         candidate.id,
+        now,
         attempt,
         new Date(now.getTime() + this.retry.leaseDurationMs),
       )
+      if (!claimed) continue
       try {
         await this.publisher.publish(claimed.envelope)
         results.push(await this.repository.markPublished(claimed.id, now))

@@ -1,7 +1,10 @@
+import { PERSONAL_DATA_KEY_PATTERN } from "../security/pii-guard"
+
 type LogLevel = "debug" | "info" | "warn" | "error"
 
 const levelOrder: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 }
-const sensitiveKey = /(?:password|secret|token|authorization|cookie|cvv|cvc|card[_-]?number)$/i
+const credentialKey = /(?:password|secret|token|authorization|cookie|cvv|cvc|card[_-]?number)$/i
+const sensitiveKey = new RegExp(`${credentialKey.source}|${PERSONAL_DATA_KEY_PATTERN.source}`, "i")
 const redact = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(redact)
   if (typeof value !== "object" || value === null) return value

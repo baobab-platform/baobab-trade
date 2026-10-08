@@ -4,6 +4,7 @@ const TaxRuleProjection = model
     { name: "tax_rule_projection", tableName: "tax_rule_projection" },
     {
       id: model.id({ prefix: "taxrule" }).primaryKey(),
+      digital_estate: model.text(),
       rule_reference: model.text(),
       rule_version: model.text(),
       jurisdiction_key: model.text().index(),
@@ -19,5 +20,5 @@ const TaxRuleProjection = model
       status: model.enum(["ACTIVE", "SUPERSEDED", "REVOKED"]).default("ACTIVE"),
     },
   )
-  .indexes([{ on: ["rule_reference", "rule_version"], unique: true }])
+  .indexes([{ on: ["digital_estate", "rule_reference", "rule_version"], unique: true }])
 export default TaxRuleProjection

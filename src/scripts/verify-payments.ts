@@ -1,4 +1,5 @@
-import type { ExecArgs } from "@medusajs/framework/types"
+import type { ExecArgs, ILockingModule } from "@medusajs/framework/types"
+import { Modules } from "@medusajs/framework/utils"
 import {
   MedusaPaymentOrchestrationAdapter,
   PaymentBridgeRecordAdapter,
@@ -10,6 +11,7 @@ import type PaymentBridgeModuleService from "../modules/payment-bridge/service"
 
 export default async function verifyPayments({ container }: ExecArgs): Promise<void> {
   const bridge = container.resolve<PaymentBridgeModuleService>("paymentBridge")
+  const locking = container.resolve<ILockingModule>(Modules.LOCKING)
   const policies = await bridge.listPaymentPolicyBindings({})
   if (policies.length !== 2)
     throw new Error(`Expected 2 payment policies, found ${policies.length}`)
@@ -17,7 +19,9 @@ export default async function verifyPayments({ container }: ExecArgs): Promise<v
   const ug = ZURIBEANS_PAYMENT_POLICIES.find((policy) => policy.marketKey === "zuribeans-ug")
   if (!ug) throw new Error("Uganda payment policy is missing")
   const provider = resolvePaymentProvider(ug, "INVOICE_TERMS", "UGX")
-  const adapter = new MedusaPaymentOrchestrationAdapter(new PaymentBridgeRecordAdapter(bridge))
+  const adapter = new MedusaPaymentOrchestrationAdapter(
+    new PaymentBridgeRecordAdapter(bridge, locking),
+  )
   let payment = await adapter.initiate({
     paymentReference: "gate8-payment-ug-net30",
     orderReference: "gate8-order-ug-net30",

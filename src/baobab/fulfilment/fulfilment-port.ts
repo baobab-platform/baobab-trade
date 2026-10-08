@@ -1,3 +1,7 @@
+import {
+  THAMANI_DIGITAL_ESTATE_CANONICAL_ID,
+  ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
+} from "../context/digital-estates"
 import type { FulfilmentMode } from "./fulfilment-config"
 
 export type Incoterm = "EXW" | "FCA" | "FOB" | "CFR" | "CIF" | "DAP" | "DPU" | "DDP"
@@ -28,7 +32,8 @@ export type ShipmentMetadata = {
 export type RequestFulfilmentCommand = {
   fulfilmentReference: string
   orderReference: string
-  organisationId: string
+  organisationId?: string
+  customerReference?: string
   marketKey: string
   legalSellerKey: string
   sourceLocationKey: string
@@ -41,6 +46,7 @@ export type RequestFulfilmentCommand = {
 
 export type FulfilmentSnapshot = RequestFulfilmentCommand & {
   id: string
+  digitalEstate: string
   status: FulfilmentStatus
   shipmentReference?: string | null
   carrierReference?: string | null
@@ -52,7 +58,7 @@ export type FulfilmentSnapshot = RequestFulfilmentCommand & {
 
 export interface FulfilmentRecordRepository {
   findByIdempotencyKey(key: string): Promise<FulfilmentSnapshot | undefined>
-  create(command: RequestFulfilmentCommand): Promise<FulfilmentSnapshot>
+  create(command: RequestFulfilmentCommand & { digitalEstate: string }): Promise<FulfilmentSnapshot>
   transition(
     current: FulfilmentSnapshot,
     to: FulfilmentStatus,
@@ -92,6 +98,8 @@ const TRANSITIONS: Record<FulfilmentStatus, readonly FulfilmentStatus[]> = {
 }
 
 const validateShipment = (command: RequestFulfilmentCommand) => {
+  if (Boolean(command.organisationId) === Boolean(command.customerReference))
+    throw new Error("Fulfilment requires exactly one B2B organisation or B2C customer reference")
   if (
     !(command.shipment.grossWeightKg > 0) ||
     !Number.isInteger(command.shipment.packageCount) ||
@@ -117,10 +125,19 @@ export class MedusaFulfilmentAdapter implements FulfilmentPort {
   constructor(private readonly records: FulfilmentRecordRepository) {}
   async request(command: RequestFulfilmentCommand) {
     validateShipment(command)
-    return (
-      (await this.records.findByIdempotencyKey(command.idempotencyKey)) ??
-      this.records.create(command)
-    )
+    const digitalEstate = command.organisationId
+      ? ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID
+      : THAMANI_DIGITAL_ESTATE_CANONICAL_ID
+    const existing = await this.records.findByIdempotencyKey(command.idempotencyKey)
+    if (existing) {
+      // findByIdempotencyKey looks up by idempotencyKey alone — a caller-supplied string with
+      // no cross-estate uniqueness guarantee. Returning the other estate's fulfilment here
+      // would leak its full snapshot to this request instead of just failing loudly.
+      if (existing.digitalEstate !== digitalEstate)
+        throw new Error("Fulfilment idempotency key reused across Digital Estates")
+      return existing
+    }
+    return this.records.create({ ...command, digitalEstate })
   }
   async transition(
     current: FulfilmentSnapshot,

@@ -1,11 +1,11 @@
 export type MarketTaxContext = {
-  marketKey: "zuribeans_ug" | "zuribeans_za"
+  marketKey: string
   jurisdictionKey: "UG" | "ZA"
   currency: "UGX" | "ZAR"
   legalSellerKey: string
-  providerKey: "tp_system"
+  providerKey: "tp_system" | "baobab_reference" | "external_provider"
   sellerRegistrationReference: string
-  pricesIncludeTax: false
+  pricesIncludeTax: boolean
   failClosed: true
 }
 

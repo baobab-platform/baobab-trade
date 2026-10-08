@@ -133,15 +133,20 @@ async function verifyPricingDecisionPortFailsClosed(
     if (!(error instanceof ThamaniProductNotEligibleForMarketError)) throw error
   }
 
-  // The authorized combination must still resolve normally.
-  const decision = await port.decide({
-    variantId: ugOnlyVariant.id,
-    marketKey: "thamani_ug",
-    currencyCode: "ugx",
-  })
-  if (decision.amount !== 15_000) {
+  // Gate 14 fail-closed compliance (see `ensureRetailProjection` in
+  // bootstrap-thamani-catalogue.ts) withholds every product's Market
+  // eligibility until its HS classification is VERIFIED, and the launch
+  // catalogue's profiles are all deliberately UNVERIFIED illustrative
+  // fixtures — so even this Market/currency-authorized combination must
+  // still fail closed on eligibility today.
+  // `regression-thamani-trade-compliance-gate.ts` proves this resolves
+  // normally once a profile is genuinely verified.
+  try {
+    await port.decide({ variantId: ugOnlyVariant.id, marketKey: "thamani_ug", currencyCode: "ugx" })
     throw new Error(
-      `Expected thamani-reusable-cotton-tote-bag to resolve 15000 UGX, got ${decision.amount}`,
+      "Expected thamani-reusable-cotton-tote-bag to fail closed on eligibility pending Gate 14 review",
     )
+  } catch (error) {
+    if (!(error instanceof ThamaniProductNotEligibleForMarketError)) throw error
   }
 }

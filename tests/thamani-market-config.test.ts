@@ -48,6 +48,27 @@ describe("Thamani B2C launch Market configuration", () => {
     expect(THAMANI_SOUTH_AFRICA.tax).not.toHaveProperty("rate")
   })
 
+  it("gives every Market a distinct, positively priced shipping option", () => {
+    expect(THAMANI_UGANDA.shipping.shippingOption.amount).toBeGreaterThan(0)
+    expect(THAMANI_SOUTH_AFRICA.shipping.shippingOption.amount).toBeGreaterThan(0)
+    expect(THAMANI_UGANDA.shipping.shippingOption.key).not.toBe(
+      THAMANI_SOUTH_AFRICA.shipping.shippingOption.key,
+    )
+    const zuribeansShippingOptionKeys = new Set(
+      ZURIBEANS_LAUNCH_MARKETS.map((m) => m.shipping.shippingOption.key),
+    )
+    const zuribeansShippingOptionNames = new Set(
+      ZURIBEANS_LAUNCH_MARKETS.map((m) => m.shipping.shippingOption.name),
+    )
+    for (const market of THAMANI_LAUNCH_MARKETS) {
+      expect(zuribeansShippingOptionKeys.has(market.shipping.shippingOption.key)).toBe(false)
+      // Regression: provisioning.ts's idempotency check used to key off
+      // `name` alone, so a name collision across estates (not just within
+      // one estate's own two Markets) would have the same silent effect.
+      expect(zuribeansShippingOptionNames.has(market.shipping.shippingOption.name)).toBe(false)
+    }
+  })
+
   it("does not hardcode a UUID as a market identity", () => {
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     for (const market of THAMANI_LAUNCH_MARKETS) {

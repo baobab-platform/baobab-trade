@@ -8,10 +8,11 @@ export type PaymentProviderBinding = {
   enabled: boolean
   currencies: readonly string[]
   methods: readonly PaymentMethod[]
+  capabilities?: readonly ("AUTHORIZE" | "CAPTURE" | "REFUND" | "WEBHOOK" | "RECONCILE")[]
 }
 
 export type MarketPaymentPolicy = {
-  marketKey: "zuribeans-ug" | "zuribeans-za"
+  marketKey: string
   currency: "UGX" | "ZAR"
   legalSellerKey: string
   defaultTerms: PaymentTerms

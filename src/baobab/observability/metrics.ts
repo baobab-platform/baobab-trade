@@ -6,9 +6,18 @@ export const TRADE_METRICS = [
   "outbox_dead_letter",
   "integration_reconciliation_required",
   "dependency_health",
+  "reconciliation_variance_total",
+  "reconciliation_sla_breach_total",
 ] as const
 export type TradeMetric = (typeof TRADE_METRICS)[number]
-type Labels = { market?: string; outcome?: string; dependency?: string }
+/**
+ * `domain` is bounded to `ReconciliationDomain` (`./reconciliation-jobs.ts`)
+ * by convention, same as every other label here — none of these fields is
+ * type-enforced to its closed set, matching the existing `outcome`/`market`
+ * fields, so a caller stays responsible for never passing an unbounded
+ * value (a customer/order/tenant id) as a label.
+ */
+type Labels = { market?: string; outcome?: string; dependency?: string; domain?: string }
 const labelsKey = (labels: Labels) =>
   Object.entries(labels)
     .sort()

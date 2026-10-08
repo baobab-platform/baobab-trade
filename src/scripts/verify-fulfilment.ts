@@ -1,4 +1,5 @@
-import type { ExecArgs } from "@medusajs/framework/types"
+import type { ExecArgs, ILockingModule } from "@medusajs/framework/types"
+import { Modules } from "@medusajs/framework/utils"
 import {
   FulfilmentBridgeRecordAdapter,
   MedusaFulfilmentAdapter,
@@ -9,13 +10,16 @@ import {
 import type FulfilmentBridgeModuleService from "../modules/fulfilment-bridge/service"
 export default async function ({ container }: ExecArgs) {
   const bridge = container.resolve<FulfilmentBridgeModuleService>("fulfilmentBridge")
-  const policies = await bridge.listFulfilmentPolicyBindings({})
+  const locking = container.resolve<ILockingModule>(Modules.LOCKING)
+  const policies = await bridge.listFulfilmentPolicyBindings({
+    market_key: ZURIBEANS_FULFILMENT_POLICIES.map((policy) => policy.marketKey),
+  })
   if (policies.length !== 2)
-    throw new Error(`Expected 2 fulfilment policies, found ${policies.length}`)
+    throw new Error(`Expected 2 ZuriBeans fulfilment policies, found ${policies.length}`)
   const ug = ZURIBEANS_FULFILMENT_POLICIES.find((policy) => policy.marketKey === "zuribeans_ug")
   if (!ug) throw new Error("Uganda fulfilment policy missing")
   const provider = resolveFulfilmentProvider(ug, "CROSS_BORDER")
-  const port = new MedusaFulfilmentAdapter(new FulfilmentBridgeRecordAdapter(bridge))
+  const port = new MedusaFulfilmentAdapter(new FulfilmentBridgeRecordAdapter(bridge, locking))
   let fulfilment = await port.request({
     fulfilmentReference: "gate9-ug-za-fulfilment",
     orderReference: "gate9-order",
@@ -43,15 +47,20 @@ export default async function ({ container }: ExecArgs) {
   })
   const replay = await port.request({ ...fulfilment, idempotencyKey: "gate9:request:ug-za" })
   if (replay.id !== fulfilment.id) throw new Error("Fulfilment request is not idempotent")
-  fulfilment = await port.transition(fulfilment, "ACCEPTED", "gate9:accepted")
-  fulfilment = await port.transition(fulfilment, "ALLOCATED", "gate9:allocated")
-  fulfilment = await port.transition(fulfilment, "DISPATCHED", "gate9:dispatched", {
-    shipmentReference: "IDEMPIERE:M_INOUT:GATE9",
-    carrierReference: "gate9-carrier",
-    trackingReference: "gate9-track",
-    trackingUrl: "https://tracking.example.invalid/gate9-track",
-    dispatchDate: new Date(),
-  })
+  for (const [from, to] of [
+    ["REQUESTED", "ACCEPTED"],
+    ["ACCEPTED", "ALLOCATED"],
+  ] as const)
+    if (fulfilment.status === from)
+      fulfilment = await port.transition(fulfilment, to, `gate9:${to.toLowerCase()}`)
+  if (fulfilment.status === "ALLOCATED")
+    fulfilment = await port.transition(fulfilment, "DISPATCHED", "gate9:dispatched", {
+      shipmentReference: "IDEMPIERE:M_INOUT:GATE9",
+      carrierReference: "gate9-carrier",
+      trackingReference: "gate9-track",
+      trackingUrl: "https://tracking.example.invalid/gate9-track",
+      dispatchDate: new Date(),
+    })
   if (!fulfilment.trackingReference || fulfilment.status !== "DISPATCHED")
     throw new Error("Tracking projection or dispatch evidence missing")
   const result = reconcileFulfilment({

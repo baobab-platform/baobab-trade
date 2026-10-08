@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 import {
   assertMarketEligibility,
   assertOrderQuantity,
+  MedusaPricingDecisionAdapter,
   selectPrice,
   type PriceCandidate,
+  type PriceCandidateProvider,
 } from "../src/baobab/pricing"
 
 const request = {
@@ -61,5 +63,24 @@ describe("PricingDecisionPort policy", () => {
     expect(() =>
       assertMarketEligibility("zuribeans_za", { marketKey: "zuribeans_za", status: "SUSPENDED" }),
     ).toThrow("not eligible")
+  })
+})
+
+describe("PricingDecisionPort contract (MedusaPricingDecisionAdapter)", () => {
+  class StaticCandidateProvider implements PriceCandidateProvider {
+    constructor(private readonly candidates: PriceCandidate[]) {}
+    async listCandidates() {
+      return this.candidates
+    }
+  }
+
+  it("decides the same authorised price selectPrice would pick from the provided candidates", async () => {
+    const adapter = new MedusaPricingDecisionAdapter(new StaticCandidateProvider(candidates))
+    expect(await adapter.decide(request)).toMatchObject({ kind: "CONTRACT", amount: 5_500 })
+  })
+
+  it("propagates a fail-closed rejection when no candidate is eligible", async () => {
+    const adapter = new MedusaPricingDecisionAdapter(new StaticCandidateProvider([]))
+    await expect(adapter.decide(request)).rejects.toThrow("No authorised price")
   })
 })

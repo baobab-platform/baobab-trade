@@ -26,6 +26,18 @@ export interface PricingDecisionPort {
   decide(request: PricingDecisionRequest): Promise<PricingDecision>
 }
 
+export interface PriceCandidateProvider {
+  listCandidates(request: PricingDecisionRequest): Promise<PriceCandidate[]>
+}
+
+/** Native Medusa remains active behind this extraction seam. */
+export class MedusaPricingDecisionAdapter implements PricingDecisionPort {
+  constructor(private readonly candidates: PriceCandidateProvider) {}
+  async decide(request: PricingDecisionRequest): Promise<PricingDecision> {
+    return selectPrice(request, await this.candidates.listCandidates(request))
+  }
+}
+
 const precedence: Record<PricingKind, number> = {
   STANDARD_WHOLESALE: 1,
   VOLUME: 2,

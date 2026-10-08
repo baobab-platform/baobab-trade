@@ -3,6 +3,8 @@ import {
   assertPromotionCurrencyMatchesCart,
   findThamaniPromotionConfig,
   THAMANI_PROMOTIONS,
+  THAMANI_SALES_CHANNEL_KEY,
+  ThamaniCartEstateMismatchError,
   ThamaniPromotionCurrencyMismatchError,
 } from "../src/baobab/thamani/promotions/promotion-config"
 import {
@@ -47,6 +49,27 @@ describe("assertPromotionCurrencyMatchesCart", () => {
     expect(() => assertPromotionCurrencyMatchesCart(promotion, "zar")).toThrow(
       ThamaniPromotionCurrencyMismatchError,
     )
+  })
+})
+
+describe("THAMANI_SALES_CHANNEL_KEY", () => {
+  it("is the breadcrumb bootstrap-thamani-market.ts tags the Sales Channel with", () => {
+    expect(THAMANI_SALES_CHANNEL_KEY).toBe("thamani_b2c")
+  })
+})
+
+describe("ThamaniCartEstateMismatchError", () => {
+  it("names the code and the cart's sales channel — currency alone is never sufficient to identify a Thamani cart", () => {
+    const error = new ThamaniCartEstateMismatchError("THAMANI10", "sc_zuribeans_ug")
+    expect(error.code).toBe("THAMANI10")
+    expect(error.cartSalesChannelId).toBe("sc_zuribeans_ug")
+    expect(error.message).toContain("THAMANI10")
+    expect(error.message).toContain("sc_zuribeans_ug")
+  })
+
+  it("handles a cart with no sales channel at all", () => {
+    const error = new ThamaniCartEstateMismatchError("THAMANI10", null)
+    expect(error.message).toContain("none")
   })
 })
 

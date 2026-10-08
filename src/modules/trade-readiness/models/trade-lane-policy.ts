@@ -4,6 +4,7 @@ const TradeLanePolicy = model
     { name: "trade_lane_policy", tableName: "trade_lane_policy" },
     {
       id: model.id({ prefix: "trlane" }).primaryKey(),
+      digital_estate: model.text(),
       policy_reference: model.text(),
       policy_version: model.text(),
       origin_country: model.text().index(),
@@ -16,5 +17,5 @@ const TradeLanePolicy = model
       status: model.enum(["ACTIVE", "SUPERSEDED", "REVOKED"]).default("ACTIVE"),
     },
   )
-  .indexes([{ on: ["policy_reference", "policy_version"], unique: true }])
+  .indexes([{ on: ["digital_estate", "policy_reference", "policy_version"], unique: true }])
 export default TradeLanePolicy

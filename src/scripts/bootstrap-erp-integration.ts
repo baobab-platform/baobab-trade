@@ -1,10 +1,13 @@
 import type { ExecArgs, IProductModuleService } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
+import { ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID } from "../baobab/context/digital-estates"
+import { ZURIBEANS_INVENTORY_LOCATIONS } from "../baobab/inventory"
 import type B2BModuleService from "../modules/b2b/service"
 import type ErpIntegrationModuleService from "../modules/erp-integration/service"
 import type InventoryBridgeModuleService from "../modules/inventory-bridge/service"
 
 type MappingInput = {
+  digital_estate: string
   mapping_type: "BUSINESS_PARTNER" | "PRODUCT" | "WAREHOUSE"
   canonical_entity_id: string
   medusa_entity_type: string
@@ -24,6 +27,7 @@ export default async function ({ container }: ExecArgs) {
   const createMapping = async (input: MappingInput) => {
     const [existing] = await erp.listErpEntityMappings({
       mapping_type: input.mapping_type,
+      digital_estate: input.digital_estate,
       canonical_entity_id: input.canonical_entity_id,
     })
     if (!existing) await erp.createErpEntityMappings(input)
@@ -33,6 +37,7 @@ export default async function ({ container }: ExecArgs) {
     const [product] = await products.listProducts({ id: profile.product_id })
     if (!product) throw new Error(`Missing Medusa Product ${profile.product_id}`)
     await createMapping({
+      digital_estate: ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
       mapping_type: "PRODUCT",
       canonical_entity_id: profile.canonical_product_key,
       medusa_entity_type: "product",
@@ -44,9 +49,17 @@ export default async function ({ container }: ExecArgs) {
       status: "UNVERIFIED",
     })
   }
-  const warehouses = await inventory.listLocationMappings({ status: "ACTIVE" })
+  // listLocationMappings has no estate filter of its own — it returns every active location,
+  // ZuriBeans' and Thamani's alike, once both have been bootstrapped. Scope to ZuriBeans' own
+  // canonical location keys so this never claims a Thamani warehouse as a ZuriBeans ERP mapping
+  // (mirrors the same filter bootstrap-thamani-erp-integration.ts already applies).
+  const zuriBeansLocationKeys = new Set(ZURIBEANS_INVENTORY_LOCATIONS.map((item) => item.code))
+  const warehouses = (await inventory.listLocationMappings({ status: "ACTIVE" })).filter((item) =>
+    zuriBeansLocationKeys.has(item.canonical_location_key),
+  )
   for (const warehouse of warehouses)
     await createMapping({
+      digital_estate: ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
       mapping_type: "WAREHOUSE",
       canonical_entity_id: warehouse.canonical_location_key,
       medusa_entity_type: "stock_location",
@@ -58,6 +71,7 @@ export default async function ({ container }: ExecArgs) {
       status: "ACTIVE",
     })
   await createMapping({
+    digital_estate: ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
     mapping_type: "BUSINESS_PARTNER",
     canonical_entity_id: "gate12-b2b-organisation",
     medusa_entity_type: "b2b_organisation",

@@ -1,8 +1,11 @@
-export type TradeUom = "BAG" | "CARTON"
+export type TradeUom = "BAG" | "CARTON" | "EACH"
 export type TradeIncoterm = "EXW" | "FCA" | "FOB" | "CFR" | "CIF" | "DAP" | "DPU" | "DDP"
 export type CrossBorderLine = {
   canonicalProductKey: string
   hsClassificationReference: string
+  hsClassificationStatus: "VERIFIED" | "UNVERIFIED"
+  customsTariffReference: string
+  landedCostReference: string
   originCountry: string
   originRegion?: string
   tradeUom: TradeUom
@@ -12,6 +15,7 @@ export type CrossBorderLine = {
   lotReference?: string
 }
 export type CrossBorderTransactionMetadata = {
+  digitalEstate: string
   transactionReference: string
   orderReference: string
   marketKey: string
@@ -36,6 +40,7 @@ export const validateCrossBorderMetadata = (value: CrossBorderTransactionMetadat
   if (value.originCountry === value.destinationCountry)
     throw new Error("Cross-border origin and destination must differ")
   for (const field of [
+    value.digitalEstate,
     value.legalSellerKey,
     value.exporterOrganisationId,
     value.importerOrganisationId,
@@ -50,6 +55,8 @@ export const validateCrossBorderMetadata = (value: CrossBorderTransactionMetadat
   for (const line of value.lines) {
     if (!/^HS-[0-9]{4}(?:\.[0-9]{2,6})?$/.test(line.hsClassificationReference))
       throw new Error("Invalid HS classification reference")
+    if (!line.customsTariffReference || !line.landedCostReference)
+      throw new Error("Customs and landed-cost references are required")
     if (line.originCountry !== value.originCountry)
       throw new Error("Line origin conflicts with transaction origin")
     if (

@@ -1,5 +1,6 @@
 export type FulfilmentMode =
   | "LOCAL_DELIVERY"
+  | "PARCEL_SHIPMENT"
   | "BULK_FREIGHT"
   | "CROSS_BORDER"
   | "CUSTOMER_COLLECTION"
@@ -12,7 +13,7 @@ export type FulfilmentProviderBinding = {
 }
 
 export type MarketFulfilmentPolicy = {
-  marketKey: "zuribeans_ug" | "zuribeans_za"
+  marketKey: string
   countryCode: "UG" | "ZA"
   legalSellerKey: string
   providers: readonly FulfilmentProviderBinding[]

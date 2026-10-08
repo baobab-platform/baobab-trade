@@ -31,17 +31,52 @@ jobs:
         run: npm test
       - name: Contract tests
         run: npm run test:contract
+      - name: Extraction port contract tests
+        run: npm run test:ports
       - name: Context isolation tests
         run: npm run test:isolation
       - name: Production conformance tests
         run: npm run test:conformance
+      - name: ZB-04 buyer onboarding certification pack
+        run: npm run test:zb04
       - name: Build
         run: npm run build
       - name: Validate architecture declarations
         run: |
           test -f contracts.lock.yaml
           test -f runtime/requirements.yaml
-          test -f .nabhold/environment.yaml
+          test -f .baobab/environment.yaml
+
+  shared-conformance:
+    name: Conformance against the pinned Shared contracts
+    runs-on: ubuntu-26.04
+    # EA-01 / ADR-SHARED-018 T-COMPAT-07: Trade's validators, Control Plane
+    # client requests, event envelopes and workload authority are checked
+    # against the real files at the commit contracts.lock.yaml pins. The suite
+    # itself asserts that the checkout is exactly that commit.
+    env:
+      BAOBAB_SHARED_PATH: ${{ github.workspace }}/.shared-contracts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read pinned baobab-platform/shared commit
+        id: pin
+        run: echo "commit=$(grep -m1 'commit:' contracts.lock.yaml | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Checkout baobab-platform/shared at the pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: baobab-platform/shared
+          ref: ${{ steps.pin.outputs.commit }}
+          path: .shared-contracts
+      - name: Set up Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Shared conformance
+        run: npm run test:shared-conformance
 
   core-module-integration:
     runs-on: ubuntu-26.04
@@ -117,11 +152,17 @@ jobs:
       - name: Verify Gate 8 payment lifecycle and ERP reconciliation
         run: npm run verify:payments
 
+      - name: Regression — payment initiate()/transition() race safety under concurrent execution (mutates this disposable database only)
+        run: npm run regression:payment-transition-concurrency
+
       - name: Bootstrap Gate 9 fulfilment policies
         run: npm run bootstrap:fulfilment
 
       - name: Verify Gate 9 fulfilment, tracking, and reconciliation
         run: npm run verify:fulfilment
+
+      - name: Regression — fulfilment request()/transition() race safety and per-fulfilment idempotency scoping (mutates this disposable database only)
+        run: npm run regression:fulfilment-transition-concurrency
 
       - name: Bootstrap Gate 10 tax contexts
         run: npm run bootstrap:tax
@@ -159,6 +200,9 @@ jobs:
       - name: Verify Gate 18 ZuriBeans Uganda-South Africa simulation
         run: npm run verify:simulation
 
+      - name: Verify Gate 22 Thamani Uganda-South Africa simulation
+        run: npm run verify:thamani-simulation
+
       - name: Rebuild Thamani B2C product search index
         run: npm run bootstrap:thamani-search
 
@@ -182,6 +226,57 @@ jobs:
 
       - name: Regression — Thamani B2C promotion discount computation and exclusive stacking (mutates this disposable database only)
         run: npm run regression:thamani-promotion-application
+
+      - name: Bootstrap Thamani Gate 10 multi-location inventory
+        run: npm run bootstrap:thamani-inventory
+
+      - name: Verify Thamani Gate 10 availability, reservations, isolation, and ERP reconciliation
+        run: npm run verify:thamani-inventory
+
+      - name: Bootstrap Thamani Gate 11 regional payment policies
+        run: npm run bootstrap:thamani-payments
+
+      - name: Verify Thamani Gate 11 payment, webhook, refund, and ERP reconciliation
+        run: npm run verify:thamani-payments
+
+      - name: Bootstrap Thamani Gate 12 fulfilment policies
+        run: npm run bootstrap:thamani-fulfilment
+
+      - name: Verify Thamani Gate 12 partial allocation, tracking, returns, and reconciliation
+        run: npm run verify:thamani-fulfilment
+
+      - name: Bootstrap Thamani Gate 13 effective tax reference data
+        run: npm run bootstrap:thamani-tax
+
+      - name: Verify Thamani Gate 13 inclusive tax, provenance, and reconciliation
+        run: npm run verify:thamani-tax
+
+      - name: Regression — Thamani B2C tax provider wiring (real VAT on real carts, fail-closed for unsourced categories, ZuriBeans unaffected — mutates this disposable database only)
+        run: npm run regression:thamani-tax-provider-wiring
+
+      - name: Bootstrap Thamani Gate 14 product trade profiles
+        run: npm run bootstrap:thamani-trade-readiness
+
+      - name: Verify Thamani Gate 14 fail-closed cross-border readiness
+        run: npm run verify:thamani-trade-readiness
+
+      - name: Bootstrap Thamani Gate 15 ERP mappings
+        run: npm run bootstrap:thamani-erp-integration
+
+      - name: Verify Thamani Gate 15 projections and idempotency
+        run: npm run verify:thamani-erp-integration
+
+      - name: Verify Thamani Gate 16 transactional events and legal-entity isolation
+        run: npm run verify:thamani-events
+
+      - name: Regression Thamani Gate 17 store credit issuance
+        run: npm run regression:thamani-store-credit-issuance
+
+      - name: Regression Gate 22 Thamani simulation pack — real orders, payments, returns, stock, imports, ERP
+        run: npm run regression:thamani-simulation-pack
+
+      - name: Verify Gate 20 reconciliation sweep
+        run: npm run verify:observability
 
   production-infrastructure-integration:
     runs-on: ubuntu-26.04

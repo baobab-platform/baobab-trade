@@ -32,4 +32,11 @@ describe("Gate 17 production conformance", () => {
     expect(runtime).not.toMatch(/IDEMPIERE_(?:DATABASE|DB)_URL|ERP_(?:DATABASE|DB)_URL/)
     expect(runtime).toContain("Do not share databases")
   })
+  it("produces reproducible release evidence: an immutable image tag and a release manifest", () => {
+    expect(controls.requiredChecks).toContain("release-manifest")
+    const releaseReadiness = read(".github/workflows/release-readiness.yml")
+    expect(releaseReadiness).toContain("npm run release:manifest")
+    expect(releaseReadiness).toContain('docker build --tag "baobab-trade:${{ github.sha }}"')
+    expect(releaseReadiness).toContain("actions/upload-artifact@")
+  })
 })

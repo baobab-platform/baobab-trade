@@ -13,8 +13,21 @@
  * Plane for these keys (see market-config.ts and
  * docs/architecture/market-model.md). These `marketKey` values are candidate
  * `canonical_key`s pending Control Plane registration, and no external
- * production provider has been approved for either Market: payment, tax, and
- * shipping bind Medusa's built-in providers explicitly.
+ * production provider has been approved for either Market: payment and
+ * shipping bind Medusa's built-in providers explicitly. Do not invent
+ * provider credentials here. `shipping.shippingOption.amount` is a
+ * deliberate exception — see `market-config.ts`'s own doc comment on that
+ * field for why a placeholder amount is unavoidable.
+ *
+ * Tax is the one exception: `tp_thamani_effective_dated` (Gate 13,
+ * `src/modules/thamani-tax-provider/`) wraps Baobab's own sourced,
+ * effective-dated GOODS VAT rules (`THAMANI_STANDARD_TAX_RULES`) — real
+ * government rates with legal-authority provenance, not an external
+ * production integration. It is scoped to Thamani carts only via
+ * `src/workflows/thamani-tax-guard.ts`; ZuriBeans keeps `tp_system` and this
+ * provider replicates that same native behaviour for any cart it cannot
+ * positively identify as Thamani's, so ZuriBeans' tax computation never
+ * changes even though both estates share one Tax Region per country.
  *
  * Gate 4 provisions one primary Stock Location per Market, matching the
  * ZuriBeans pattern. The additional Thamani facilities described in the
@@ -51,11 +64,17 @@ export const THAMANI_UGANDA: MarketBootstrapConfig = {
       name: "Thamani Uganda Domestic",
       countryCode: "UG",
     },
+    shippingOption: {
+      key: "thamani_ug_standard_shipping",
+      name: "Thamani Uganda Standard Shipping (development placeholder rate)",
+      amount: 5_000,
+    },
   },
   tax: {
     mode: "NATIVE",
-    providerId: "tp_system",
+    providerId: "tp_thamani_effective_dated",
     automaticTaxes: true,
+    pricesIncludeTax: true,
     policyReference: "control-plane:thamani_ug:tax",
   },
 }
@@ -87,11 +106,17 @@ export const THAMANI_SOUTH_AFRICA: MarketBootstrapConfig = {
       name: "Thamani South Africa Domestic",
       countryCode: "ZA",
     },
+    shippingOption: {
+      key: "thamani_za_standard_shipping",
+      name: "Thamani South Africa Standard Shipping (development placeholder rate)",
+      amount: 50,
+    },
   },
   tax: {
     mode: "NATIVE",
-    providerId: "tp_system",
+    providerId: "tp_thamani_effective_dated",
     automaticTaxes: true,
+    pricesIncludeTax: true,
     policyReference: "control-plane:thamani_za:tax",
   },
 }

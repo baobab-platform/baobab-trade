@@ -1,5 +1,5 @@
 /**
- * Mirrors nabhold/shared contracts/errors/v1/problem-details.schema.json.
+ * Mirrors baobab-platform/shared contracts/errors/v1/problem-details.schema.json.
  * RFC 9457 application/problem+json response shape used by the Control Plane.
  */
 export type BaobabProblemDetails = {

@@ -1,3 +1,7 @@
+import {
+  THAMANI_DIGITAL_ESTATE_CANONICAL_ID,
+  ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
+} from "../context/digital-estates"
 import type { PaymentMethod, PaymentTerms } from "./payment-config"
 
 export type PaymentStatus =
@@ -13,7 +17,8 @@ export type PaymentStatus =
 export type InitiatePaymentCommand = {
   paymentReference: string
   orderReference: string
-  organisationId: string
+  organisationId?: string
+  customerReference?: string
   marketKey: string
   legalSellerKey: string
   method: PaymentMethod
@@ -28,6 +33,7 @@ export type InitiatePaymentCommand = {
 
 export type PaymentSnapshot = InitiatePaymentCommand & {
   id: string
+  digitalEstate: string
   status: PaymentStatus
   providerReference?: string | null
   providerStatus?: string | null
@@ -35,7 +41,7 @@ export type PaymentSnapshot = InitiatePaymentCommand & {
 
 export interface PaymentRecordRepository {
   findByIdempotencyKey(key: string): Promise<PaymentSnapshot | undefined>
-  create(command: InitiatePaymentCommand): Promise<PaymentSnapshot>
+  create(command: InitiatePaymentCommand & { digitalEstate: string }): Promise<PaymentSnapshot>
   transition(
     paymentId: string,
     from: PaymentStatus,
@@ -74,11 +80,28 @@ export class MedusaPaymentOrchestrationAdapter implements PaymentOrchestrationPo
     if (!Number.isSafeInteger(command.amountMinor) || command.amountMinor <= 0) {
       throw new Error("Payment amount must be a positive integer in minor units")
     }
+    if (Boolean(command.organisationId) === Boolean(command.customerReference)) {
+      throw new Error("Payment requires exactly one B2B organisation or B2C customer reference")
+    }
     if (command.terms !== "PREPAID" && command.method !== "INVOICE_TERMS") {
       throw new Error("Commercial invoice terms require the INVOICE_TERMS method")
     }
+    // organisationId/customerReference exclusivity is already enforced above — this is the same
+    // trusted, explicit derivation tax and trade-readiness use, never inferred from Market or
+    // currency (ZuriBeans and Thamani can share both per country).
+    const digitalEstate = command.organisationId
+      ? ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID
+      : THAMANI_DIGITAL_ESTATE_CANONICAL_ID
     const existing = await this.records.findByIdempotencyKey(command.idempotencyKey)
-    return existing ?? this.records.create(command)
+    if (existing) {
+      // findByIdempotencyKey looks up by idempotencyKey alone — a caller-supplied string with
+      // no cross-estate uniqueness guarantee. Returning the other estate's payment here would
+      // leak its full snapshot to this request instead of just failing loudly.
+      if (existing.digitalEstate !== digitalEstate)
+        throw new Error("Payment idempotency key reused across Digital Estates")
+      return existing
+    }
+    return this.records.create({ ...command, digitalEstate })
   }
 
   async transition(

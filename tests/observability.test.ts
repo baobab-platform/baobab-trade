@@ -4,6 +4,7 @@ import {
   TradeMetrics,
   assessOperationalStatus,
   parseTraceContext,
+  THAMANI_DASHBOARD,
   traceHeaders,
   ZURIBEANS_DASHBOARD,
 } from "../src/baobab/observability"
@@ -36,6 +37,17 @@ describe("Gate 16 observability", () => {
     ).toBe("ACTION_REQUIRED"))
   it("defines dashboards and alerts for critical paths", () =>
     expect(ZURIBEANS_DASHBOARD.panels).toContain("Dead letters"))
+  it("gives Thamani its own dashboard with a reconciliation SLA-breach alert per Gate 20 domain", () => {
+    expect(THAMANI_DASHBOARD.title).toBe("Thamani Commerce Operations")
+    expect(THAMANI_DASHBOARD.alerts).toMatchObject({
+      paymentReconciliationSlaBreach: expect.stringContaining("30m"),
+      inventoryReconciliationSlaBreach: expect.stringContaining("60m"),
+      taxReconciliationSlaBreach: expect.stringContaining("240m"),
+      fulfilmentReconciliationSlaBreach: expect.stringContaining("120m"),
+      erpReconciliationSlaBreach: expect.stringContaining("60m"),
+    })
+    expect(ZURIBEANS_DASHBOARD.alerts).toEqual(THAMANI_DASHBOARD.alerts)
+  })
   it("redacts secrets from structured diagnostic metadata", () => {
     const lines: string[] = []
     const original = console.log
@@ -49,6 +61,22 @@ describe("Gate 16 observability", () => {
       console.log = original
     }
     expect(lines[0]).not.toContain("do-not-log")
+    expect(lines[0]).toContain("[REDACTED]")
+  })
+  it("redacts consumer PII, not just credentials, from structured log metadata", () => {
+    const lines: string[] = []
+    const original = console.log
+    console.log = (line) => lines.push(String(line))
+    try {
+      createStructuredLogger("trade").info("registration", {
+        correlation_id: "corr",
+        customer: { email: "consumer@example.com", phone: "+256700000000" },
+      })
+    } finally {
+      console.log = original
+    }
+    expect(lines[0]).not.toContain("consumer@example.com")
+    expect(lines[0]).not.toContain("+256700000000")
     expect(lines[0]).toContain("[REDACTED]")
   })
 })

@@ -4,9 +4,11 @@ const CommercePayment = model.define(
   { name: "commerce_payment", tableName: "commerce_payment" },
   {
     id: model.id({ prefix: "pay" }).primaryKey(),
+    digital_estate: model.text(),
     payment_reference: model.text().unique(),
     order_reference: model.text().index(),
-    organisation_id: model.text().index(),
+    organisation_id: model.text().index().nullable(),
+    customer_reference: model.text().index().nullable(),
     market_key: model.text().index(),
     legal_seller_key: model.text(),
     method: model.enum(["BANK_TRANSFER", "MANUAL_SETTLEMENT", "INVOICE_TERMS", "SELECTED_PSP"]),

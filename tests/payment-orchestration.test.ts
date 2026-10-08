@@ -26,7 +26,7 @@ class MemoryRepository implements PaymentRecordRepository {
   async findByIdempotencyKey(key: string) {
     return this.records.get(key)
   }
-  async create(input: InitiatePaymentCommand) {
+  async create(input: InitiatePaymentCommand & { digitalEstate: string }) {
     const payment = { ...input, id: "pay_1", status: "CREATED" as const }
     this.records.set(input.idempotencyKey, payment)
     return payment
@@ -46,6 +46,32 @@ describe("PaymentOrchestrationPort", () => {
     const first = await adapter.initiate(command)
     expect((await adapter.initiate(command)).id).toBe(first.id)
     expect((await adapter.transition(first, "PENDING", "pending-1")).status).toBe("PENDING")
+  })
+
+  it("derives estate:zuribeans-b2b for an organisationId command and estate:thamani-b2c for a customerReference command", async () => {
+    const adapter = new MedusaPaymentOrchestrationAdapter(new MemoryRepository())
+    const zuriBeansPayment = await adapter.initiate(command)
+    expect(zuriBeansPayment.digitalEstate).toBe("estate:zuribeans-b2b")
+    const thamaniPayment = await adapter.initiate({
+      ...command,
+      organisationId: undefined,
+      customerReference: "customer-1",
+      idempotencyKey: "init-2",
+    })
+    expect(thamaniPayment.digitalEstate).toBe("estate:thamani-b2c")
+  })
+
+  it("rejects a B2C request that reuses a B2B idempotency key instead of returning the other estate's payment", async () => {
+    const repository = new MemoryRepository()
+    const adapter = new MedusaPaymentOrchestrationAdapter(repository)
+    await adapter.initiate(command)
+    await expect(
+      adapter.initiate({
+        ...command,
+        organisationId: undefined,
+        customerReference: "customer-1",
+      }),
+    ).rejects.toThrow(/reused across Digital Estates/)
   })
 
   it("rejects invalid transitions and terms disguised as settlement", async () => {

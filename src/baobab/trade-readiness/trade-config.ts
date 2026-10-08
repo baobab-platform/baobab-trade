@@ -1,6 +1,8 @@
+import { ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID } from "../context/digital-estates"
 import type { TradeLanePolicy } from "./compliance-port"
 export const ZURIBEANS_TRADE_LANES: readonly TradeLanePolicy[] = [
   {
+    digitalEstate: ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
     policyReference: "control-plane:trade-lane:ug-za",
     policyVersion: "gate11-v1",
     originCountry: "UG",
@@ -11,6 +13,7 @@ export const ZURIBEANS_TRADE_LANES: readonly TradeLanePolicy[] = [
     source: "GATE11_CONFIGURATION_NOT_CUSTOMS_AUTHORITY",
   },
   {
+    digitalEstate: ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
     policyReference: "control-plane:trade-lane:za-ug",
     policyVersion: "gate11-v1",
     originCountry: "ZA",

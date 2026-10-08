@@ -1,4 +1,5 @@
 import type { ExecArgs } from "@medusajs/framework/types"
+import { ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID } from "../baobab/context/digital-estates"
 import {
   ProjectedTradeComplianceAdapter,
   type CrossBorderTransactionMetadata,
@@ -6,9 +7,13 @@ import {
 import type TradeReadinessModuleService from "../modules/trade-readiness/service"
 export default async function ({ container }: ExecArgs) {
   const service = container.resolve<TradeReadinessModuleService>("tradeReadiness")
-  const lanes = await service.listTradeLanePolicies({ status: "ACTIVE" })
+  const lanes = await service.listTradeLanePolicies({
+    digital_estate: ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
+    status: "ACTIVE",
+  })
   if (lanes.length !== 2) throw new Error(`Expected 2 trade lanes, found ${lanes.length}`)
   const transaction: CrossBorderTransactionMetadata = {
+    digitalEstate: ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
     transactionReference: "gate11-ug-za",
     orderReference: "gate11-order",
     marketKey: "zuribeans_ug",
@@ -28,6 +33,9 @@ export default async function ({ container }: ExecArgs) {
       {
         canonicalProductKey: "ug-arabica-green-aa",
         hsClassificationReference: "HS-0901.11",
+        hsClassificationStatus: "VERIFIED",
+        customsTariffReference: "gate11:customs-tariff",
+        landedCostReference: "gate11:landed-cost",
         originCountry: "UG",
         originRegion: "Mount Elgon",
         tradeUom: "BAG",
@@ -40,28 +48,39 @@ export default async function ({ container }: ExecArgs) {
     idempotencyKey: "gate11:transaction:ug-za",
     correlationId: "gate11-verification",
   }
-  const port = new ProjectedTradeComplianceAdapter({
-    async listPolicies(originCountry, destinationCountry) {
-      return (
-        await service.listTradeLanePolicies({
-          origin_country: originCountry,
-          destination_country: destinationCountry,
-          status: "ACTIVE",
-        })
-      ).map((lane) => ({
-        policyReference: lane.policy_reference,
-        policyVersion: lane.policy_version,
-        originCountry: lane.origin_country,
-        destinationCountry: lane.destination_country,
-        permittedIncoterms: lane.permitted_incoterms as string[],
-        permittedTradeUoms: lane.permitted_trade_uoms as string[],
-        effectiveFrom: lane.effective_from,
-        effectiveUntil: lane.effective_until,
-        source: lane.source,
-      }))
+  const port = new ProjectedTradeComplianceAdapter(
+    {
+      async listPolicies(originCountry, destinationCountry) {
+        return (
+          await service.listTradeLanePolicies({
+            digital_estate: ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID,
+            origin_country: originCountry,
+            destination_country: destinationCountry,
+          })
+        ).map((lane) => ({
+          digitalEstate: lane.digital_estate,
+          policyReference: lane.policy_reference,
+          policyVersion: lane.policy_version,
+          originCountry: lane.origin_country,
+          destinationCountry: lane.destination_country,
+          permittedIncoterms: lane.permitted_incoterms as string[],
+          permittedTradeUoms: lane.permitted_trade_uoms as string[],
+          effectiveFrom: lane.effective_from,
+          effectiveUntil: lane.effective_until,
+          source: lane.source,
+        }))
+      },
     },
-  })
-  const decision = await port.evaluate(transaction, new Date("2026-09-08T00:00:00Z"))
+    {
+      async isVerified({ canonicalProductKey, hsClassificationReference }) {
+        return (
+          canonicalProductKey === "ug-arabica-green-aa" &&
+          hsClassificationReference === "HS-0901.11"
+        )
+      },
+    },
+  )
+  const decision = await port.evaluate(transaction, new Date("2026-09-09T00:00:00Z"))
   if (decision.status !== "APPROVED") throw new Error("Complete trade transaction was not approved")
   let [storedDecision] = await service.listTradeComplianceDecisions({
     source_idempotency_key: "gate11:decision:ug-za",

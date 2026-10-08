@@ -2,10 +2,11 @@
 
 Thamani is a second, coexisting Baobab Digital Estate on this same Trade
 engine instance — not a second storefront against ZuriBeans' B2B commercial
-model, and not a marketplace. This document covers Gates 0-6: Discovery
-through the initial retail catalogue. Search, pricing depth, promotions,
-inventory, payments, fulfilment, tax, cross-border trade, ERP integration,
-events, and the simulation dataset (Gates 7-22) remain **PLANNED**.
+model, and not a marketplace. This document is the historical Gate 0-6
+foundation record: Discovery through the initial retail catalogue. For
+current completion status, use
+`docs/plans/thamani-b2c-completion-plan.md` and the later Gate-specific
+architecture documents.
 
 ## Gate 0 — Discovery
 
@@ -184,7 +185,7 @@ Run `npm run bootstrap:thamani-catalogue` (idempotent; requires
 `npm run verify:thamani-catalogue`, which also asserts the two single-Market
 SKUs resolve to exactly the one Market each was configured for.
 
-## What remains PLANNED
+## Status at the end of Gate 6
 
 Everything from Gate 7 onward in the wider brief — Search/Meilisearch,
 pricing depth (sale/campaign prices), Promotions, full multi-location
@@ -192,4 +193,5 @@ Inventory, regional Payment providers, Fulfilment providers, Tax provider
 integration and inclusive/exclusive display policy, Cross-Border Trade
 readiness (`TradeCompliancePort`), ERP integration, the canonical event/
 outbox contract, Store Credit, and the Uganda-South Africa simulation
-dataset — is **PLANNED**, not implemented in this foundation slice.
+dataset — was **PLANNED** at the end of this foundation slice. This section
+is retained as historical scope evidence; it is not the current status report.

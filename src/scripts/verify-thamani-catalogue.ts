@@ -33,30 +33,25 @@ export default async function verifyThamaniCatalogue({ container }: ExecArgs): P
     )
   }
 
-  const expectedEligibilities = THAMANI_CATALOGUE.reduce(
-    (sum, product) => sum + product.eligibleMarkets.length,
-    0,
-  )
-  if (eligibilities.length !== expectedEligibilities) {
+  // Gate 14 fail-closed compliance (see `ensureRetailProjection` in
+  // bootstrap-thamani-catalogue.ts): a Market eligibility row is only ever
+  // created once a product/Market pair's `ThamaniTradeProfile` has been
+  // reviewed and marked VERIFIED. `bootstrap:thamani-trade-readiness` seeds
+  // every profile as illustrative and deliberately UNVERIFIED, so nothing in
+  // the launch catalogue is sellable yet — zero eligibility rows, for every
+  // product, is the correct fail-closed outcome here, not a bug.
+  // `regression-thamani-trade-compliance-gate.ts` proves the positive path
+  // (a verified profile does unlock eligibility) against disposable fixtures.
+  if (eligibilities.length !== 0) {
     throw new Error(
-      `Expected ${expectedEligibilities} Market eligibility records, found ${eligibilities.length}`,
+      `Expected 0 Market eligibility records pending Gate 14 review, found ${eligibilities.length}`,
     )
   }
 
-  // Catalogue isolation: the deliberately single-Market SKUs must resolve to
-  // exactly the one Market they were configured for, never both.
   const ugOnlyProduct = products.find((p) => p.handle === "thamani-reusable-cotton-tote-bag")
   const zaOnlyProduct = products.find((p) => p.handle === "thamani-handcrafted-ceramic-mug")
   if (!ugOnlyProduct || !zaOnlyProduct) {
     throw new Error("Expected single-Market isolation SKUs are missing")
-  }
-  const ugOnlyEligibility = eligibilities.filter((e) => e.product_id === ugOnlyProduct.id)
-  const zaOnlyEligibility = eligibilities.filter((e) => e.product_id === zaOnlyProduct.id)
-  if (ugOnlyEligibility.length !== 1 || ugOnlyEligibility[0].market_key !== "thamani_ug") {
-    throw new Error("Uganda-only SKU eligibility is not isolated to thamani_ug")
-  }
-  if (zaOnlyEligibility.length !== 1 || zaOnlyEligibility[0].market_key !== "thamani_za") {
-    throw new Error("South Africa-only SKU eligibility is not isolated to thamani_za")
   }
 
   const categoryCount = new Set(products.flatMap((p) => p.categories?.map((c) => c.id) ?? [])).size

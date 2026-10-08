@@ -7,12 +7,15 @@ import {
   type ErpProjectionRepository,
 } from "../src/baobab/erp-integration"
 class MemoryRepository implements ErpProjectionRepository {
-  records = new Map<string, { id: string }>()
+  records = new Map<string, { id: string; commandDigest: string }>()
   async findByIdempotencyKey(key: string) {
     return this.records.get(key)
   }
-  async create(command: ErpProjectionCommand) {
-    const result = { id: `projection-${this.records.size + 1}` }
+  async create(command: ErpProjectionCommand & { commandDigest: string }) {
+    const result = {
+      id: `projection-${this.records.size + 1}`,
+      commandDigest: command.commandDigest,
+    }
     this.records.set(command.idempotencyKey, result)
     return result
   }
@@ -31,7 +34,10 @@ describe("ERP integration projections", () => {
   it("queues Order/Fulfilment projections idempotently", async () => {
     const adapter = new DurableErpIntegrationAdapter(new MemoryRepository())
     const first = await adapter.queue(command)
-    expect((await adapter.queue({ ...command, payload: { retry: true } })).id).toBe(first.id)
+    expect((await adapter.queue(command)).id).toBe(first.id)
+    await expect(adapter.queue({ ...command, payload: { retry: true } })).rejects.toThrow(
+      /different projection content/,
+    )
   })
   it("rejects stale or invalid financial status", () => {
     const projection = {

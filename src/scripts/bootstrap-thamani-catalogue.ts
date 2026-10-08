@@ -4,6 +4,7 @@ import type {
   IFulfillmentModuleService,
   IProductModuleService,
   ISalesChannelModuleService,
+  Logger,
 } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
 import {
@@ -14,8 +15,10 @@ import {
 } from "../baobab/thamani/catalogue"
 import { THAMANI_SUPPLIERS } from "../baobab/thamani/suppliers"
 import { deriveActiveEligibleMarketKeys } from "../baobab/thamani/search/projection"
+import { requireVerifiedTradeProfile } from "../baobab/thamani/trade-readiness"
 import { findByMetadataKey } from "../baobab/market/mapping"
 import type ThamaniModuleService from "../modules/thamani/service"
+import type TradeReadinessModuleService from "../modules/trade-readiness/service"
 
 /**
  * The subset of catalogue configuration the `thamani_product` search index
@@ -96,6 +99,8 @@ async function ensureSuppliers(thamani: ThamaniModuleService): Promise<Map<strin
 
 async function ensureRetailProjection(
   thamani: ThamaniModuleService,
+  tradeReadiness: TradeReadinessModuleService,
+  logger: Logger,
   productId: string,
   supplierIdByKey: Map<string, string>,
   config: ThamaniProductConfig,
@@ -124,17 +129,69 @@ async function ensureRetailProjection(
   }
 
   for (const marketKey of config.eligibleMarkets) {
+    // Gate 14 fail-closed compliance: a product only stays sellable in a
+    // Market while its HS classification is actually verified. This is the
+    // ONLY enforcement point — no ACTIVE eligibility row is ever created (so
+    // nothing downstream ever treats the product as eligible, see
+    // `deriveActiveEligibleMarketKeys`) without a verified `ThamaniTradeProfile`
+    // for this product/Market pair.
+    const [tradeProfile] = await tradeReadiness.listThamaniTradeProfiles({
+      canonical_product_key: config.canonicalKey,
+      market_key: marketKey,
+    })
+    let isVerified = true
+    try {
+      requireVerifiedTradeProfile({
+        hsClassificationStatus: tradeProfile?.hs_classification_status ?? "UNVERIFIED",
+      })
+    } catch (error) {
+      isVerified = false
+      logger.warn(
+        `${marketKey} eligibility for ${config.sku} requires customs review: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
+
+    const policyReference = `control-plane:${marketKey}:catalogue`
     const [eligibility] = await thamani.listMarketProductEligibilities({
       product_id: productId,
       market_key: marketKey,
     })
+
     if (!eligibility) {
-      await thamani.createMarketProductEligibilities({
-        product_id: productId,
-        market_key: marketKey,
-        status: "ACTIVE",
-        policy_reference: `control-plane:${marketKey}:catalogue`,
-      })
+      if (isVerified) {
+        await thamani.createMarketProductEligibilities({
+          product_id: productId,
+          market_key: marketKey,
+          status: "ACTIVE",
+          policy_reference: policyReference,
+        })
+      }
+      continue
+    }
+
+    // A row this same catalogue-onboarding process created earlier — before
+    // this gate existed, before its trade profile was revoked, or before a
+    // once-revoked profile was re-verified — must be reconciled to the
+    // current verification state, not left however it was found just
+    // because it already exists.
+    //
+    // `WITHDRAWN` is used (not `SUSPENDED`) specifically because it is the
+    // one status this bootstrap ever writes for compliance reasons — never
+    // for anything else — so reconciling a `WITHDRAWN` row back to `ACTIVE`
+    // on reverification can never be undoing someone else's decision.
+    // `SUSPENDED` is left alone in both directions: it is reserved for a
+    // different authority (e.g. a manual, non-compliance suspension —
+    // `regression-thamani-eligibility-sync.ts` proves this exact case), and
+    // this bootstrap must never reactivate a row it did not itself demote.
+    if (eligibility.policy_reference !== policyReference) continue
+    if (!isVerified && eligibility.status === "ACTIVE") {
+      await thamani.updateMarketProductEligibilities({ id: eligibility.id, status: "WITHDRAWN" })
+      logger.warn(`Withdrew ${marketKey} eligibility for ${config.sku}: no longer verified`)
+    } else if (isVerified && eligibility.status === "WITHDRAWN") {
+      await thamani.updateMarketProductEligibilities({ id: eligibility.id, status: "ACTIVE" })
+      logger.info(`Reactivated ${marketKey} eligibility for ${config.sku}: verification restored`)
     }
   }
 }
@@ -145,6 +202,7 @@ export default async function bootstrapThamaniCatalogue({ container }: ExecArgs)
   const salesChannelService = container.resolve<ISalesChannelModuleService>(Modules.SALES_CHANNEL)
   const fulfillmentService = container.resolve<IFulfillmentModuleService>(Modules.FULFILLMENT)
   const thamani = container.resolve<ThamaniModuleService>("thamani")
+  const tradeReadiness = container.resolve<TradeReadinessModuleService>("tradeReadiness")
 
   const salesChannels = await salesChannelService.listSalesChannels({})
   const salesChannel = findByMetadataKey(salesChannels, "baobab_sales_channel_key", "thamani_b2c")
@@ -214,7 +272,14 @@ export default async function bootstrapThamaniCatalogue({ container }: ExecArgs)
 
     const variant = product.variants?.[0]
     if (!variant) throw new Error(`Product ${config.handle} has no retail variant`)
-    await ensureRetailProjection(thamani, product.id, supplierIdByKey, config)
+    await ensureRetailProjection(
+      thamani,
+      tradeReadiness,
+      logger,
+      product.id,
+      supplierIdByKey,
+      config,
+    )
 
     // Keep the Gate 7 search-projection metadata in sync on every run, not
     // just at creation: search reads from `metadata`, never from the

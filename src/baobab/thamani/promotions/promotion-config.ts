@@ -92,3 +92,25 @@ export function assertPromotionCurrencyMatchesCart(
 
 export const findThamaniPromotionConfig = (code: string): ThamaniPromotionConfig | undefined =>
   THAMANI_PROMOTIONS.find((promotion) => promotion.code === code)
+
+/**
+ * The breadcrumb `bootstrap-thamani-market.ts` tags Thamani's Sales Channel
+ * with (`findByMetadataKey(salesChannels, "baobab_sales_channel_key", ...)`,
+ * matching every other Thamani gate's convention). This is the only
+ * authoritative way to tell a Thamani cart from a ZuriBeans one: ZuriBeans
+ * Uganda and Thamani Uganda share the same Region and the same currency
+ * (UGX) — currency alone is not a Digital Estate identifier.
+ */
+export const THAMANI_SALES_CHANNEL_KEY = "thamani_b2c"
+
+export class ThamaniCartEstateMismatchError extends Error {
+  constructor(
+    readonly code: string,
+    readonly cartSalesChannelId: string | null,
+  ) {
+    super(
+      `Promotion "${code}" is a Thamani B2C promotion — cart (sales channel ${cartSalesChannelId ?? "none"}) is not a Thamani cart`,
+    )
+    this.name = "ThamaniCartEstateMismatchError"
+  }
+}
