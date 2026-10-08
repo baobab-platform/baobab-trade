@@ -18,13 +18,14 @@ export default async function ({ container }: ExecArgs) {
     },
     {
       id: "22222222-2222-4222-8222-222222222222",
-      type: "com.nabhold.commerce.erp-order.projection-requested.v1",
+      type: "com.baobab-platform.trade.order.placed.v1",
       subject: "commerce-order/gate13-order",
       time: "2026-09-08T00:00:00.000Z",
-      dataschema: "https://contracts.nabhold.com/commerce/erp-order/projection-requested/v1",
+      dataschema:
+        "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
       correlationid: "11111111-1111-4111-8111-111111111111",
       causationid: "33333333-3333-4333-8333-333333333333",
-      idempotencykey: "gate13:erp-order:projection-requested",
+      idempotencykey: "gate13:trade-order:placed",
       traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
       data: {
         canonical_entity_id: "canonical:order:gate13",

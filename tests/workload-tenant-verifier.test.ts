@@ -18,13 +18,14 @@ const fakeControlPlaneClient = (
   resolveContext: vi.fn(),
   getMarket: vi.fn(),
   resolveMapping: vi.fn(),
+  resolveStoredContext: vi.fn(),
   resolvePlatformContext,
 })
 
 describe("ControlPlaneWorkloadTenantVerifier", () => {
   it("resolves without throwing when the Control Plane attests the asserted tenant", async () => {
     const resolvePlatformContext = vi.fn().mockResolvedValue({
-      context_id: "ctx_1",
+      context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
       tenant_id: "tn_1",
       resolved_at: "2026-09-01T10:00:00Z",
     })
@@ -46,7 +47,7 @@ describe("ControlPlaneWorkloadTenantVerifier", () => {
 
   it("throws TenantAttestationError when the Control Plane echoes a different tenant_id", async () => {
     const resolvePlatformContext = vi.fn().mockResolvedValue({
-      context_id: "ctx_1",
+      context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
       tenant_id: "tn_someone_else",
       resolved_at: "2026-09-01T10:00:00Z",
     })

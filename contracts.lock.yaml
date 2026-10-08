@@ -1,70 +1,61 @@
-contract_bundle:
-  name: "baobab-platform-resolution"
-  version: "1.0.0"
-  source_repository: "nabhold/shared"
-  source_commit: "2da1a429602d2f1421c498d412bb6c65a5626127"
-schema:
-  name: "nabhold-contract-consumption-lock"
-  version: "1.0"
-consumer:
-  repository: "nabhold/baobab-trade"
-  version: "0.2.0"
-sources:
-  shared:
-    repository: "nabhold/shared"
-    commit: "2da1a429602d2f1421c498d412bb6c65a5626127"
-    contracts:
-      development_environment:
-        path: "contracts/development-environment/schema.yaml"
-        version: "1.0"
-      tenancy:
-        path: "contracts/tenancy/tenancy.yaml"
-        version: "1.0"
-      legal_entity_registry:
-        path: "contracts/legal-entity/registry.yaml"
-        version: "current-at-pinned-commit"
-      control_plane_domain:
-        path: "contracts/control-plane/v1/domain.schema.json"
-        version: "1"
-      context_resolution:
-        path: "contracts/control-plane/v1/context-resolution.schema.json"
-        version: "1"
-      market_registry:
-        path: "contracts/control-plane/v1/market.schema.json"
-        version: "1"
-        note: >-
-          Market registry schema is published, but no Market instance exists yet for
-          ZuriBeans UG or ZA: legal-entity/registry.yaml records ZURIBEANS with
-          markets: []. Trade MUST resolve real market_id values from Control Plane
-          (GET /v1/markets/{market_id}) once activated, not mint them locally.
-      canonical_mapping:
-        path: "contracts/control-plane/v1/canonical-mapping.schema.json"
-        version: "1"
-      control_plane_openapi:
-        path: "contracts/control-plane/v1/openapi.yaml"
-        version: "1.1.0"
-      problem_details:
-        path: "contracts/errors/v1/problem-details.schema.json"
-        version: "1"
-      idempotency_policy:
-        path: "contracts/idempotency/v1/policy.yaml"
-        version: "1.0"
-      event_envelope:
-        path: "contracts/events/v1/envelope.schema.json"
-        version: "1"
-  control_plane:
-    repository: "nabhold/baobab-cp"
-    role: "authoritative runtime provider of authenticated tenant context, market registry and product entitlement"
-    api_contract_status: "published-in-nabhold/shared"
-    context_resolution_endpoint: "POST /v1/context/resolve"
-    market_endpoint: "GET /v1/markets/{market_id}"
-    mapping_resolution_endpoint: "POST /v1/resolution/mappings"
-    implementation_commit_audited: "328e11450a242b99cee3c7ab5014130d6f725741"
-  event_envelope:
-    owner: "nabhold/shared"
-    publication_status: "published"
-    format: "CloudEvents 1.0 structured JSON profile (contracts/events/v1/envelope.schema.json)"
+# The baobab-platform/shared contracts baobab-trade implements or consumes
+# (EA Plan v2.0 EA-01A; schema: shared .baobab/contract-consumer-lock.schema.json).
+# Foundation checks that the commit is on Shared main and that every listed
+# contract exists and parses there, and reports drift in the job summary.
+# Migrated from the legacy nabhold-contract-consumption-lock pinned at
+# nabhold/shared@2da1a42. Re-pinned to baobab-platform/shared main after the
+# EA-01 compatibility sequence (ADR-SHARED-018 T-COMPAT-04..07): mapping
+# resolution redeems a stored context (ADR-SHARED-014), and the conformance
+# suite (tests/shared-conformance, `npm run test:shared-conformance`) validates
+# Trade against these exact files at this commit.
+schema: baobab-contract-consumer-lock
+version: "1.0"
+source:
+  repository: baobab-platform/shared
+  commit: b063f8a8df3f012baadf068aa9ba312d83929e69
+contracts:
+  - contracts/control-plane/v1/canonical-mapping.schema.json
+  # $ref target of the context_id grammar used by mapping resolution.
+  - contracts/control-plane/v1/capability-explanation.schema.json
+  - contracts/control-plane/v1/context-resolution.schema.json
+  - contracts/control-plane/v1/domain.schema.json
+  # Registered (system_namespace, engine_id) pairs a mapping target must use,
+  # e.g. medusa / baobab-trade.
+  - contracts/control-plane/v1/external-systems.yaml
+  # Market registry schema is published, but no Market instance exists yet for
+  # ZuriBeans UG or ZA: legal-entity/registry.yaml records ZURIBEANS with
+  # markets: []. Trade MUST resolve real market_id values from Control Plane
+  # (GET /v1/markets/{market_id}) once activated, not mint them locally.
+  - contracts/control-plane/v1/market.schema.json
+  - contracts/control-plane/v1/openapi.yaml
+  # Stored platform context: its context_id is what mapping resolution redeems.
+  - contracts/control-plane/v1/platform-context.schema.json
+  - contracts/development-environment/schema.yaml
+  - contracts/errors/v1/problem-details.schema.json
+  - contracts/events/v1/context-registry.yaml
+  - contracts/events/v1/envelope.schema.json
+  # ADR-SHARED-018: every event type Trade publishes is registered here.
+  - contracts/events/v1/event-registry.yaml
+  - contracts/idempotency/v1/policy.yaml
+  # Scopes the baobab-trade-workload identity is allowed; the conformance suite
+  # checks the Control Plane operations Trade calls against it.
+  - contracts/identity/v1/workload-registry.yaml
+  - contracts/legal-entity/registry.yaml
+  - contracts/tenancy/tenancy.yaml
 policy:
+  updates: explicit_pull_request
+  compatibility: validate_before_merge
+# Repository-specific metadata, carried over from the legacy lock.
+consumer:
+  repository: baobab-platform/baobab-trade
+  version: "0.2.0"
+consumer_policy:
   fail_on_unresolved_tenant_context: true
   allow_cross_engine_database_access: false
   allow_local_redefinition_as_canonical: false
+control_plane:
+  repository: baobab-platform/baobab-cp
+  role: "authoritative runtime provider of authenticated tenant context, market registry and product entitlement"
+  context_resolution_endpoint: "POST /v1/context/resolve"
+  market_endpoint: "GET /v1/markets/{market_id}"
+  mapping_resolution_endpoint: "POST /v1/resolution/mappings"

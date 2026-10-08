@@ -4,7 +4,7 @@ Baobab Trade is the independently deployable Trade Engine of the Baobab Platform
 
 ## Architectural boundaries
 
-- `nabhold/shared` owns canonical organisational contracts and engineering standards.
+- `baobab-platform/shared` owns canonical organisational contracts and engineering standards.
 - `nabhold/baobab-cp` resolves authenticated tenant context, lifecycle and product entitlement.
 - `nabhold/infrastructure` owns production infrastructure and deployment orchestration.
 - Baobab ERP and Pulse are reached through APIs and signed events, never shared databases.
@@ -262,6 +262,6 @@ Never commit credentials. Production injects database, Redis, Medusa signing and
 
 ## Foundation 4
 
-Codespaces uses `ghcr.io/nabhold/baobab-dev:1.2.6`. The reusable, SHA-pinned
+Codespaces uses `ghcr.io/baobab-platform/baobab-dev:1.4.4`. The reusable, SHA-pinned
 Foundation gate validates the environment contract and reproducible inputs and
 scans source, dependencies, secrets, configuration, and the Trade image.
