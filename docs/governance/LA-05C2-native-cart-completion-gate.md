@@ -13,6 +13,7 @@
 ## Explicit remaining LA-05C3 / native acceptance boundary
 
 This change installs the native hook but **does not register** a real authoritative cart-to-tenant/Organisation/Context binding source or a certified Medusa seller/provider readiness implementation. A fake module returning permitted answers must never be installed. Before enabling staging:
+
 1. Implement trusted, immutable server-owned binding storage with a current CP RUNTIME context issued to the Trade workload. Never treat cart metadata, storefront headers or legalSellerKey aliases as authority.
 2. Register the dependency object with real active IAM credentials, CP client and independently assessed commercial/provider readiness.
 3. Prove that every relevant store/cart/region/sales-channel completion route goes through this hook, including native checkout and idempotency replay, and that market changes cannot evade the binding.
