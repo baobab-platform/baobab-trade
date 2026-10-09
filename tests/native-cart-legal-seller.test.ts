@@ -17,12 +17,14 @@ const cmd: GovernedSellerOrderCommand & {
   cartId: string
   salesChannelId: string | null
   regionId: string | null
+  tenantId: string
 } = {
   cartId: cart.id,
   salesChannelId: cart.sales_channel_id,
   regionId: cart.region_id,
   orderReference: `cart/${cart.id}/complete`,
   organisationId: "org-synthetic",
+  tenantId: "tn_synthetic",
   marketKey: "za",
   legalSellerKey: "LE-SYNTHETIC-ZA",
   currencyCode: "ZAR",
