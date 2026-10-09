@@ -20,4 +20,4 @@ This change installs the native hook but **does not register** a real authoritat
 4. Obtain CP staging assessor and token promotion, verify revocation/expired/ambiguous mandates, concurrent changes, CP unavailability, provider unavailable and merchant failure **before native order creation**.
 5. Fix Trade Foundation dependency/image vulnerability gates and obtain per-capability readiness/authorised production release. CP assessment is currently production-disabled; do not remove its safety gate to make checkout work.
 
-The implemented hook is a guarded staging integration *seam*, not a finished native provider PEP or a production claim.
+The implemented hook is a guarded staging integration _seam_, not a finished native provider PEP or a production claim.
