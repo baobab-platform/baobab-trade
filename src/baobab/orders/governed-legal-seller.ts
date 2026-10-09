@@ -67,25 +67,40 @@ export class GovernedMedusaOrderOrchestrationAdapter implements OrderOrchestrati
     ) {
       throw new Error("Legal seller readiness denied: governed operation context missing")
     }
-    const token = await this.tokens.getAccessToken()
-    const fact = await this.cp.assess(
-      {
-        context_id: command.legalContextId,
-        role: "SELLER_OF_RECORD",
-        activity: command.legalActivity,
-        market: command.marketCode,
-        capability: command.legalCapability,
-        operation_reference: command.orderReference,
-      },
-      token,
+    const request = {
+      context_id: command.legalContextId,
+      role: "SELLER_OF_RECORD" as const,
+      activity: command.legalActivity,
+      market: command.marketCode,
+      capability: command.legalCapability,
+      operation_reference: command.orderReference,
+    }
+    const initialFact = await this.cp.assess(
+      request,
+      await this.tokens.getAccessToken(),
       command.correlationId,
     )
-    const evidence = assertFreshSellerFact(fact, command, this.now())
-    // CP legal responsibility does not prove market/provider/merchant/legal
-    // permissions. A separate, current readiness adapter is compulsory.
-    await this.readiness.assertReadyForSeller(command, evidence)
-    // The underlying Medusa adapter remains the owner of idempotent order
-    // execution. Never bypass the guard on replay, since authority may revoke.
+    const initialEvidence = assertFreshSellerFact(initialFact, command, this.now())
+    // Provider readiness can involve asynchronous I/O. The authority obtained
+    // BEFORE it might be revoked or expire during that await.
+    await this.readiness.assertReadyForSeller(command, initialEvidence)
+    // LA-05C: re-resolve current CP authority after readiness, immediately
+    // before an irreversible native order placement (including replay).
+    // An event, cached mandate, or first assessment is NOT proof of authority.
+    const finalFact = await this.cp.assess(
+      request,
+      await this.tokens.getAccessToken(),
+      command.correlationId,
+    )
+    const finalEvidence = assertFreshSellerFact(finalFact, command, this.now())
+    if (
+      finalEvidence.mandateId !== initialEvidence.mandateId ||
+      finalEvidence.responsibleLegalEntityId !== initialEvidence.responsibleLegalEntityId
+    ) {
+      throw new Error("Legal seller authority denied: mandate changed during readiness")
+    }
+    // Native Medusa remains the execution owner. This decorator is not yet
+    // the native completeCartWorkflow hook and must not be advertised as such.
     return this.native.place(command)
   }
 
