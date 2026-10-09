@@ -53,7 +53,6 @@ export class HttpLegalActorAssessmentClient implements LegalActorAssessmentPort 
       },
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(this.timeoutMs),
-      cache: "no-store",
     })
     if (!response.ok) throw new Error("Control Plane legal-actor assessment unavailable or denied")
     const payload: unknown = await response.json()
