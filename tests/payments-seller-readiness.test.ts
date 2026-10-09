@@ -113,9 +113,13 @@ describe("LA-05C3 independently authenticated Payments readiness", () => {
           tokens: { getAccessToken: async () => "token" },
         }),
     ).toThrow("HTTPS")
-    await expect(
-      build().assertReadyForSeller({ ...cmd, tenantId: "" }, evidence),
-    ).rejects.toThrow("no authoritative tenant")
+    const invalidTenant: GovernedSellerOrderCommand & { tenantId: string } = {
+      ...cmd,
+      tenantId: "",
+    }
+    await expect(build().assertReadyForSeller(invalidTenant, evidence)).rejects.toThrow(
+      "no authoritative tenant",
+    )
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503 })))
     await expect(build().assertReadyForSeller(cmd, evidence)).rejects.toThrow(
       "provider unavailable",
