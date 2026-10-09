@@ -110,28 +110,26 @@ describe("LA-05C2 native Medusa checkout guard", () => {
 
   it("denies revocation or mandate replacement occurring during provider readiness", async () => {
     const revoked = setup()
-    revoked.assess
-      .mockResolvedValueOnce(approved())
-      .mockResolvedValueOnce({
-        ...approved(),
-        legal_actor_resolution: {
-          ...approved().legal_actor_resolution,
-          outcome: "REVOKED_OR_EXPIRED",
-        },
-      })
+    revoked.assess.mockResolvedValueOnce(approved())
+    revoked.assess.mockResolvedValueOnce({
+      ...approved(),
+      legal_actor_resolution: {
+        ...approved().legal_actor_resolution,
+        outcome: "REVOKED_OR_EXPIRED",
+      },
+    })
     await expect(assertNativeCartLegalSeller(cart, revoked.deps)).rejects.toThrow(
       "Legal seller authority denied",
     )
     const switched = setup()
-    switched.assess
-      .mockResolvedValueOnce(approved())
-      .mockResolvedValueOnce({
-        ...approved(),
-        legal_actor_resolution: {
-          ...approved().legal_actor_resolution,
-          mandate_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a7d",
-        },
-      })
+    switched.assess.mockResolvedValueOnce(approved())
+    switched.assess.mockResolvedValueOnce({
+      ...approved(),
+      legal_actor_resolution: {
+        ...approved().legal_actor_resolution,
+        mandate_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a7d",
+      },
+    })
     await expect(assertNativeCartLegalSeller(cart, switched.deps)).rejects.toThrow(
       "mandate changed before commit",
     )
@@ -158,6 +156,8 @@ describe("LA-05C2 native Medusa checkout guard", () => {
       "trusted dependency not registered",
     )
     const t = setup()
-    await expect(enforceNativeCheckoutGate(cart, true, false, () => t.deps)).resolves.toBeUndefined()
+    await expect(
+      enforceNativeCheckoutGate(cart, true, false, () => t.deps),
+    ).resolves.toBeUndefined()
   })
 })
