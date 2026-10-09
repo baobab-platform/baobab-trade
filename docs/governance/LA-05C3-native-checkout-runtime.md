@@ -4,14 +4,14 @@
 
 ## Enforced boundaries
 
-| Concern | Implemented authority | Never inferred from |
-| --- | --- | --- |
-| Cart identity | Medusa native complete-cart workflow | Browser-selected Organisation/LegalEntity |
-| Trusted cart binding | Dedicated Medusa PostgreSQL module; one active row per cart | Cart metadata, headers, storefront aliases |
-| Tenant/Organisation | Fresh `baobab-cp` platform-context attestation using Trade's workload token | Unverified local `tenant_id` |
-| Legal responsibility | Two current CP `SELLER_OF_RECORD` assessments bound to that cart's operation; same actor/mandate | A tenant default LegalEntity or Nabhold affiliation |
-| Provider eligibility | Separate authenticated, operation-scoped Payments readiness response; exact actor/market/currency/tenant/Organisation and short lease | CP legal-actor permission or a merchant's technical existence |
-| Workload authentication | Environment-supplied IAM OAuth2 client-credentials; Trade CP and Payments credentials have separate audiences | Customer token or service account aliases |
+| Concern                 | Implemented authority                                                                                                                 | Never inferred from                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Cart identity           | Medusa native complete-cart workflow                                                                                                  | Browser-selected Organisation/LegalEntity                     |
+| Trusted cart binding    | Dedicated Medusa PostgreSQL module; one active row per cart                                                                           | Cart metadata, headers, storefront aliases                    |
+| Tenant/Organisation     | Fresh `baobab-cp` platform-context attestation using Trade's workload token                                                           | Unverified local `tenant_id`                                  |
+| Legal responsibility    | Two current CP `SELLER_OF_RECORD` assessments bound to that cart's operation; same actor/mandate                                      | A tenant default LegalEntity or Nabhold affiliation           |
+| Provider eligibility    | Separate authenticated, operation-scoped Payments readiness response; exact actor/market/currency/tenant/Organisation and short lease | CP legal-actor permission or a merchant's technical existence |
+| Workload authentication | Environment-supplied IAM OAuth2 client-credentials; Trade CP and Payments credentials have separate audiences                         | Customer token or service account aliases                     |
 
 The new `native_seller_cart_binding` model has an explicit server-owned cart, tenant, Organisation, CP-owned RUNTIME context, expected actor, sales channel, region, market, currency, named activity/capability, independent approval reference/approver, and expiry. The module migration creates an **empty** table. It does not silently migrate historical `legalSellerKey` values or grant any trading access. The generated Medusa module provides the persisted read path; it exposes **no Store API mutation route** for applicants to mint bindings.
 
