@@ -84,7 +84,7 @@ describe("LA-05C legal-seller PEP", () => {
 
   it("refuses to default a tenant or legal actor from a storefront alias when context is missing", async () => {
     const t = setup()
-    await expect(t.adapter.place({ ...command, legalContextId: "" })).rejects.toThrow("context missing")
+    await expect(t.adapter.place(({ ...command, legalContextId: "" } as GovernedSellerOrderCommand))).rejects.toThrow("context missing")
     expect(t.assess).not.toHaveBeenCalled()
   })
 })
@@ -102,7 +102,7 @@ describe("LA-05C HTTP CP assessor", () => {
     await expect(client.assess(request, "workload-token", command.correlationId)).resolves.toMatchObject(fact())
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe("https://control-plane.example/internal/legal-actor/v1/assess")
-    expect(init.cache).toBe("no-store")
+    expect(init.headers).toMatchObject({ "cache-control": "no-store" })
     expect(init.headers).toMatchObject({ authorization: "Bearer workload-token" })
     expect(JSON.parse(init.body as string)).toEqual(request)
     expect(fetchMock).toHaveBeenCalledTimes(1)
