@@ -75,7 +75,7 @@ describe("LA-05C legal-seller PEP", () => {
     const t = setup()
     await t.adapter.place(command)
     await t.adapter.place(command)
-    expect(t.assess).toHaveBeenCalledTimes(2)
+    expect(t.assess).toHaveBeenCalledTimes(4)
     expect(t.seller).toHaveBeenCalledTimes(2)
     expect(t.place).toHaveBeenCalledTimes(2)
     expect(t.assess).toHaveBeenCalledWith(
@@ -123,6 +123,38 @@ describe("LA-05C legal-seller PEP", () => {
       "Provider merchant not onboarded",
     )
     expect(unavailable.place).not.toHaveBeenCalled()
+  })
+
+  it("denies a mandate revoked during provider readiness, before native mutation", async () => {
+    const t = setup()
+    t.assess
+      .mockResolvedValueOnce(fact())
+      .mockResolvedValueOnce({
+        ...fact(),
+        legal_actor_resolution: {
+          ...fact().legal_actor_resolution,
+          outcome: "REVOKED_OR_EXPIRED",
+        },
+      })
+    await expect(t.adapter.place(command)).rejects.toThrow("Legal seller authority denied")
+    expect(t.assess).toHaveBeenCalledTimes(2)
+    expect(t.seller).toHaveBeenCalledTimes(1)
+    expect(t.place).not.toHaveBeenCalled()
+  })
+
+  it("denies a mandate switched while waiting for provider readiness", async () => {
+    const t = setup()
+    t.assess
+      .mockResolvedValueOnce(fact())
+      .mockResolvedValueOnce({
+        ...fact(),
+        legal_actor_resolution: {
+          ...fact().legal_actor_resolution,
+          mandate_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a7d",
+        },
+      })
+    await expect(t.adapter.place(command)).rejects.toThrow("mandate changed during readiness")
+    expect(t.place).not.toHaveBeenCalled()
   })
 
   it("refuses to default a tenant or legal actor from a storefront alias when context is missing", async () => {
