@@ -54,9 +54,7 @@ class NativeSellerCheckoutModuleService
     platformContextPath: this.environment.controlPlanePlatformContextPath,
   })
 
-  readonly cp = new HttpLegalActorAssessmentClient(
-    requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL"),
-  )
+  readonly cp = new HttpLegalActorAssessmentClient(requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL"))
 
   readonly readiness = new HttpPaymentsMerchantReadinessAdapter({
     url: requireEnv("BAOBAB_PAYMENTS_SELLER_READINESS_URL"),
@@ -72,9 +70,7 @@ class NativeSellerCheckoutModuleService
       this.resolveTrustedCart(cart),
   }
 
-  private async resolveTrustedCart(
-    cart: NativeCartIdentity,
-  ): Promise<TrustedNativeSellerBinding> {
+  private async resolveTrustedCart(cart: NativeCartIdentity): Promise<TrustedNativeSellerBinding> {
     if (!cart.cartId || !cart.salesChannelId || !cart.regionId) {
       throw new Error("LA-05C3 denied: native cart identity incomplete")
     }
