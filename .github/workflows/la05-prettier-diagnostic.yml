@@ -1,0 +1,23 @@
+name: Temporary LA-05 Prettier diagnostics
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  format-preview:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Format diagnostics only
+        run: |
+          npm ci --ignore-scripts
+          for file in docs/governance/LA-05C2-native-cart-completion-gate.md tests/native-cart-legal-seller.test.ts; do
+            npx prettier --write "$file"
+            printf '\nBEGIN_FORMATTED_FILE:%s\n' "$file"
+            base64 -w0 "$file"
+            printf '\nEND_FORMATTED_FILE:%s\n' "$file"
+          done
