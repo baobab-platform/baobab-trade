@@ -17,6 +17,13 @@ import NativeSellerCartBinding from "./models/native-seller-cart-binding"
 const requireEnv = (name: string): string => {
   const value = process.env[name]
   if (!value?.trim()) throw new Error(`LA-05C3 staging requires ${name}`)
+  if (
+    (name.endsWith("_URL") || name === "BAOBAB_CONTROL_PLANE_BASE_URL") &&
+    !/^https:\/\//.test(value) &&
+    !/^http:\/\/localhost(?::\d+)?(?:\/|$)/.test(value)
+  ) {
+    throw new Error(`LA-05C3 requires a trusted HTTPS endpoint for ${name}`)
+  }
   return value
 }
 const seconds = (v: unknown): number => new Date(String(v)).getTime()
