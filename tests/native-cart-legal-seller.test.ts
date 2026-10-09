@@ -23,6 +23,7 @@ const cmd: GovernedSellerOrderCommand & {
   regionId: cart.region_id,
   orderReference: `cart/${cart.id}/complete`,
   organisationId: "org-synthetic",
+  tenantId: "tn_synthetic",
   marketKey: "za",
   legalSellerKey: "LE-SYNTHETIC-ZA",
   currencyCode: "ZAR",
