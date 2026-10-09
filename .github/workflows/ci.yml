@@ -21,14 +21,6 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: LA05C temporary Prettier capture
-        run: |
-          npx prettier --write src/baobab/control-plane/legal-actor-assessment.ts src/baobab/orders/governed-legal-seller.ts tests/legal-seller-pep.test.ts src/baobab/orders/index.ts
-          for file in src/baobab/control-plane/legal-actor-assessment.ts src/baobab/orders/governed-legal-seller.ts tests/legal-seller-pep.test.ts src/baobab/orders/index.ts; do
-            printf 'LA05C_FMT:%s:' "$file"
-            base64 -w0 "$file"
-            printf '\n'
-          done
       - name: Check formatting
         run: npm run format:check
       - name: Lint
