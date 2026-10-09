@@ -23,8 +23,7 @@ export type NativeCartIdentity = {
   regionId: string | null
 }
 
-export type TrustedNativeSellerBinding = GovernedSellerOrderCommand &
-  NativeCartIdentity
+export type TrustedNativeSellerBinding = GovernedSellerOrderCommand & NativeCartIdentity
 
 export interface TrustedNativeSellerBindingResolver {
   /** Must load authoritative server-side state; no browser-selected actor. */
