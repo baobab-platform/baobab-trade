@@ -41,6 +41,12 @@ import type {
   MedusaContainer,
 } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
+import {
+  enforceNativeCheckoutGate,
+  NATIVE_SELLER_DEPENDENCY_KEY,
+  type NativeCartLegalSellerDependencies,
+  type NativeCheckoutCart,
+} from "../baobab/orders/native-cart-legal-seller"
 import { THAMANI_LAUNCH_MARKETS } from "../baobab/market/thamani-market-config"
 import { ThamaniProductNotEligibleForMarketError } from "../baobab/thamani/pricing/decision-port"
 import { THAMANI_SALES_CHANNEL_KEY } from "../baobab/thamani/promotions/promotion-config"
@@ -121,6 +127,15 @@ addToCartWorkflow.hooks.validate(async ({ input, cart }, { container }) =>
   assertItemsEligible(cart as GuardedCart, input.items as GuardedItem[] | undefined, container),
 )
 
-completeCartWorkflow.hooks.validate(async ({ cart }, { container }) =>
-  assertItemsEligible(cart as GuardedCart, (cart as { items?: GuardedItem[] }).items, container),
-)
+// Medusa supports only one validate hook per workflow. All native pre-commit
+// policies share this handler, preserving Thamani product enforcement and
+// the separately gated LA-05 seller assessment for opted-in staging.
+completeCartWorkflow.hooks.validate(async ({ cart }, { container }) => {
+  await assertItemsEligible(cart as GuardedCart, (cart as { items?: GuardedItem[] }).items, container)
+  await enforceNativeCheckoutGate(
+    cart as NativeCheckoutCart,
+    process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD === "true",
+    process.env.NODE_ENV === "production",
+    () => container.resolve<NativeCartLegalSellerDependencies>(NATIVE_SELLER_DEPENDENCY_KEY),
+  )
+})
