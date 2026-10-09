@@ -131,7 +131,11 @@ addToCartWorkflow.hooks.validate(async ({ input, cart }, { container }) =>
 // policies share this handler, preserving Thamani product enforcement and
 // the separately gated LA-05 seller assessment for opted-in staging.
 completeCartWorkflow.hooks.validate(async ({ cart }, { container }) => {
-  await assertItemsEligible(cart as GuardedCart, (cart as { items?: GuardedItem[] }).items, container)
+  await assertItemsEligible(
+    cart as GuardedCart,
+    (cart as { items?: GuardedItem[] }).items,
+    container,
+  )
   await enforceNativeCheckoutGate(
     cart as NativeCheckoutCart,
     process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD === "true",
