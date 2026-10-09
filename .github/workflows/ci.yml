@@ -21,6 +21,12 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: LA05C temporary Markdown format capture
+        run: |
+          npx prettier --write docs/governance/LA-05C-legal-seller-pep.md
+          printf 'LA05C_DOC_FMT:'
+          base64 -w0 docs/governance/LA-05C-legal-seller-pep.md
+          printf '\n'
       - name: Check formatting
         run: npm run format:check
       - name: Lint
