@@ -11,7 +11,6 @@
  * separate audited implementation of the dependency registration.
  */
 import { completeCartWorkflow } from "@medusajs/core-flows"
-import type { MedusaContainer } from "@medusajs/framework/types"
 import {
   enforceNativeCheckoutGate,
   NATIVE_SELLER_DEPENDENCY_KEY,
