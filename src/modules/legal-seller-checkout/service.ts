@@ -1,9 +1,6 @@
 import { MedusaService } from "@medusajs/framework/utils"
 import { getBaobabTradeEnvironment } from "../../baobab/config/environment"
-import {
-  HttpControlPlaneClient,
-  type ControlPlaneClient,
-} from "../../baobab/control-plane/client"
+import { HttpControlPlaneClient, type ControlPlaneClient } from "../../baobab/control-plane/client"
 import { HttpLegalActorAssessmentClient } from "../../baobab/control-plane/legal-actor-assessment"
 import { ClientCredentialsWorkloadTokenProvider } from "../../baobab/control-plane/workload-token"
 import type {
