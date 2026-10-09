@@ -127,15 +127,14 @@ describe("LA-05C legal-seller PEP", () => {
 
   it("denies a mandate revoked during provider readiness, before native mutation", async () => {
     const t = setup()
-    t.assess
-      .mockResolvedValueOnce(fact())
-      .mockResolvedValueOnce({
+    t.assess.mockResolvedValueOnce(fact())
+    t.assess.mockResolvedValueOnce({
         ...fact(),
         legal_actor_resolution: {
           ...fact().legal_actor_resolution,
           outcome: "REVOKED_OR_EXPIRED",
         },
-      })
+    })
     await expect(t.adapter.place(command)).rejects.toThrow("Legal seller authority denied")
     expect(t.assess).toHaveBeenCalledTimes(2)
     expect(t.seller).toHaveBeenCalledTimes(1)
@@ -152,7 +151,7 @@ describe("LA-05C legal-seller PEP", () => {
           ...fact().legal_actor_resolution,
           mandate_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a7d",
         },
-      })
+    })
     await expect(t.adapter.place(command)).rejects.toThrow("mandate changed during readiness")
     expect(t.place).not.toHaveBeenCalled()
   })
