@@ -17,6 +17,7 @@ const cmd: GovernedSellerOrderCommand & {
   cartId: string
   salesChannelId: string | null
   regionId: string | null
+  tenantId: string
 } = {
   cartId: cart.id,
   salesChannelId: cart.sales_channel_id,
