@@ -103,7 +103,9 @@ describe("LA-05C2 native Medusa checkout guard", () => {
     ]) {
       const t = setup()
       t.resolveForCart.mockResolvedValueOnce({ ...cmd, ...change })
-      await expect(assertNativeCartLegalSeller(cart, t.deps)).rejects.toThrow("trusted cart binding")
+      await expect(assertNativeCartLegalSeller(cart, t.deps)).rejects.toThrow(
+        "trusted cart binding",
+      )
       expect(t.assess).not.toHaveBeenCalled()
       expect(t.ready).not.toHaveBeenCalled()
     }
