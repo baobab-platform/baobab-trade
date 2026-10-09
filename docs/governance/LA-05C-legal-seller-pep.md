@@ -8,6 +8,7 @@ ADR-BCP-027 LA-05, Shared CP assessment `organisation/v2/legal-actor-enforcement
 - `GovernedMedusaOrderOrchestrationAdapter`: an opt-in decorator for the existing Medusa order port. It requires the exact operating business context, `SELLER_OF_RECORD`, activity, market code, capability, operation reference, fresh `AUTHORIZED` from CP, and `responsible_legal_entity_id == legalSellerKey`.
 - **Independent mandatory** `LegalSellerProviderReadiness.assertReadyForSeller` port: legal-actor verification does not prove market, merchant, processor or commercial seller readiness. An absent or denied provider means no order placement.
 - A replayed order is *still rechecked* before attempting Medusa's idempotent execution. Read-only retrieval is not a new obligation.
+- **Post-readiness revalidation:** The decorator now requests a fresh current CP assessment after the provider/merchant readiness await and immediately before `native.place`, including replays. Both assessments must identify the same mandate and real LegalEntity. Revocation, expiry, mandate replacement or CP unavailability fails closed. This eliminates a time-of-check/time-of-use gap within the decorator; native Medusa checkout still needs its own non-bypassable integration and certification.
 - Tests exercise bypass, revocation, expiry, mismatched legal actor, denied provider, invalid CP response, and never-cached HTTP.
 
 ## What this increment deliberately does not claim
