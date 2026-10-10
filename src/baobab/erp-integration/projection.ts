@@ -19,18 +19,9 @@ export type ProjectionKind =
   | "RETURN_REFUND"
   | "CREDIT_LINE"
 export type ProjectionStatus =
-  | "PENDING"
-  | "PUBLISHED"
-  | "ACKNOWLEDGED"
-  | "FAILED"
-  | "RECONCILIATION_REQUIRED"
+  "PENDING" | "PUBLISHED" | "ACKNOWLEDGED" | "FAILED" | "RECONCILIATION_REQUIRED"
 export type FinancialStatus =
-  | "OPEN"
-  | "PARTIALLY_PAID"
-  | "PAID"
-  | "OVERDUE"
-  | "CREDIT_HOLD"
-  | "CANCELLED"
+  "OPEN" | "PARTIALLY_PAID" | "PAID" | "OVERDUE" | "CREDIT_HOLD" | "CANCELLED"
 export type ErpProjectionCommand = {
   kind: ProjectionKind
   commerceReference: string

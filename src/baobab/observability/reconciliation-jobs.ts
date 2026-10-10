@@ -15,11 +15,7 @@ export type ReconciliationDomain = "PAYMENTS" | "INVENTORY" | "TAX" | "FULFILMEN
 
 /** The five reconciliation modules' own `status` unions, plus `RESOLVED` — every `*_reconciliation` table's status enum already includes it, even though nothing sets it yet. */
 export type ReconciliationOutcomeStatus =
-  | "MATCHED"
-  | "RESOLVED"
-  | "VARIANCE"
-  | "PENDING_ERP"
-  | "PENDING_EXECUTION"
+  "MATCHED" | "RESOLVED" | "VARIANCE" | "PENDING_ERP" | "PENDING_EXECUTION"
 
 const nonActionableStatuses: ReadonlySet<ReconciliationOutcomeStatus> = new Set([
   "MATCHED",
