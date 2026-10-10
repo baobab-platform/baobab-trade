@@ -1,0 +1,36 @@
+name: Format LA-05C4 candidate (temporary)
+on:
+  pull_request:
+    paths:
+      - src/baobab/orders/native-cart-legal-seller.ts
+      - src/modules/legal-seller-checkout/service.ts
+      - docs/governance/LA-05C3-native-checkout-runtime.md
+      - .github/workflows/la05c4-format.yml
+permissions:
+  contents: write
+jobs:
+  prettier:
+    if: >-
+      github.event.pull_request.head.repo.full_name == 'baobab-platform/baobab-trade' &&
+      github.event.pull_request.head.ref == 'feat/la-05c4-strict-market-bound-reassessment'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: true
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts --no-fund
+      - run: npx prettier --write docs/governance/LA-05C3-native-checkout-runtime.md src/baobab/orders/native-cart-legal-seller.ts src/modules/legal-seller-checkout/service.ts src/baobab/orders/seller-market-context.ts tests/seller-market-context.test.ts
+      - name: Commit candidate source formatting only
+        run: |
+          if git diff --quiet -- docs/governance/LA-05C3-native-checkout-runtime.md src/baobab/orders/native-cart-legal-seller.ts src/modules/legal-seller-checkout/service.ts src/baobab/orders/seller-market-context.ts tests/seller-market-context.test.ts; then exit 0; fi
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/governance/LA-05C3-native-checkout-runtime.md src/baobab/orders/native-cart-legal-seller.ts src/modules/legal-seller-checkout/service.ts src/baobab/orders/seller-market-context.ts tests/seller-market-context.test.ts
+          git commit -m 'style(la-05c4): canonical Prettier formatting'
+          git push origin 'HEAD:refs/heads/feat/la-05c4-strict-market-bound-reassessment'
