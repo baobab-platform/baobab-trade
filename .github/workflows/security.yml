@@ -18,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Node
-        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -32,6 +32,6 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    uses: baobab-platform/shared/.github/workflows/security-codeql.yml@498c431ea7eb76eb038975bc49e7087499d30d48 # shared main, verified 2026-08-30
+    uses: baobab-platform/shared/.github/workflows/security-codeql.yml@6ae8d9ff517588866766e6d0f8591f987241b22a # shared main, verified 2026-08-30
     with:
       languages: '["javascript-typescript"]'

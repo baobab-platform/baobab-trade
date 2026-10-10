@@ -66,6 +66,12 @@ export default defineConfig({
     },
     { resolve: "./src/modules/erp-integration" },
     { resolve: "./src/modules/event-outbox" },
+    // LA-05C3 gated staging only: no credentials, module or producer rights
+    // are constructed when disabled; production deliberately refuses enablement.
+    ...(process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD === "true" &&
+    process.env.NODE_ENV !== "production"
+      ? [{ resolve: "./src/modules/legal-seller-checkout" }]
+      : []),
     {
       resolve: "@medusajs/medusa/auth",
       options: {
