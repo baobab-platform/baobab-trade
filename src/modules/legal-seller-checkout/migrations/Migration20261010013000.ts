@@ -17,23 +17,26 @@ export class Migration20261010013000 extends Migration {
       "legal_activity" text not null,
       "legal_capability" text not null,
       "currency_code" text not null,
-      "approval_reference" text not null,
+      "approval_reference" text null,
       "approval_scope" text not null
         check ("approval_scope" = 'SELLER_OF_RECORD_CART_BINDING'),
       "proposed_by" text not null,
       "proposed_at" timestamptz not null,
-      "approved_by" text not null,
-      "approved_at" timestamptz not null,
+      "approved_by" text null,
+      "approved_at" timestamptz null,
       "expires_at" timestamptz not null,
-      "status" text not null default 'ACTIVE'
-        check ("status" in ('ACTIVE','REVOKED','EXPIRED')),
+      "status" text not null default 'PROPOSED'
+        check ("status" in ('PROPOSED','ACTIVE','REJECTED','REVOKED','EXPIRED')),
       "correlation_id" text not null,
       "created_at" timestamptz not null default now(),
       "updated_at" timestamptz not null default now(),
       "deleted_at" timestamptz null,
       constraint "native_seller_binding_validity"
-        check ("expires_at" > "approved_at" and "approved_at" >= "proposed_at"
-          and "approved_by" <> "proposed_by"),
+        check ("expires_at" > "proposed_at" and
+          ("status" <> 'ACTIVE' or
+            ("approved_at" is not null and "approved_by" is not null
+             and "approval_reference" is not null and "approved_at" >= "proposed_at"
+             and "expires_at" > "approved_at" and "approved_by" <> "proposed_by"))),
       constraint "native_seller_binding_market"
         check ("market_code" ~ '^[A-Z]{2}$'),
       constraint "native_seller_binding_currency"
