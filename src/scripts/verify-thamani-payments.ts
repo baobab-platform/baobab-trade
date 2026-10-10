@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import { createHash } from "node:crypto"
 import type { ExecArgs, ILockingModule } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
@@ -133,7 +134,7 @@ export default async function verifyThamaniPayments({ container }: ExecArgs): Pr
       commerce_currency: payment.currency,
       amount_delta_minor: pending.amountDeltaMinor,
       status: pending.status,
-      reasons: pending.reasons,
+      reasons: medusaJsonArray(pending.reasons),
       source_idempotency_key: "thamani:gate11:reconcile:ug",
       observed_at: new Date(),
     })
