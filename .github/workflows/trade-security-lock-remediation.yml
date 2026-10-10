@@ -1,0 +1,76 @@
+name: Security remediation lockfile generator (one-time)
+on:
+  pull_request:
+    paths:
+      - package.json
+      - .nvmrc
+      - Dockerfile
+      - .github/workflows/trade-security-lock-remediation.yml
+permissions:
+  contents: write
+jobs:
+  regenerate-compatible-lock:
+    if: >-
+      github.event.pull_request.head.repo.full_name == 'baobab-platform/baobab-trade' &&
+      github.event.pull_request.head.ref == 'feat/trade-medusa-2212-validated-canary'
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout internal remediation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: true
+      - name: Node 24 LTS
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Regenerate only the compatible package-lock
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          # Do not allow npm audit --force: preserve all pinned Medusa 2.21.2 APIs.
+          npm audit fix --package-lock-only --ignore-scripts --no-fund || echo "::notice::Some upstream vulnerabilities still require manual review; no security gate is waived"
+      - name: Confirm Medusa framework and direct APIs were not changed
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const pkg = JSON.parse(fs.readFileSync('package.json','utf8'))
+          const lock = JSON.parse(fs.readFileSync('package-lock.json','utf8'))
+          for (const name of ['@medusajs/auth-oidc','@medusajs/framework','@medusajs/medusa','@medusajs/utils']) {
+            if (pkg.dependencies[name] !== '2.21.2' ||
+                lock.packages[''].dependencies[name] !== '2.21.2') {
+              throw new Error('Unsafe Medusa API version change: '+name)
+            }
+          }
+          if (pkg.devDependencies['@medusajs/admin-sdk'] !== '2.21.2' ||
+              lock.packages[''].devDependencies['@medusajs/admin-sdk'] !== '2.21.2') {
+            throw new Error('Unsafe Medusa admin API version change')
+          }
+          if (pkg.devDependencies.vitest !== '5.0.3' || lock.packages[''].devDependencies.vitest !== '5.0.3') { throw new Error('Vitest critical RCE mitigation missing') }
+          console.log('All Medusa APIs pinned to 2.21.2 and Vitest to 5.0.3')
+          NODE
+      - name: Run Medusa compatibility smoke checks
+        run: |
+          npm ci --ignore-scripts --no-fund
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Print remaining vulnerability count without weakening audit
+        if: always()
+        run: |
+          npm audit --json --omit=dev > /tmp/baobab-security-audit.json || true
+          node -e "const a=require('/tmp/baobab-security-audit.json'); console.log('Unresolved production vulnerabilities:', JSON.stringify(a.metadata?.vulnerabilities||{}))"
+      - name: Commit safe compatible lockfile
+        env:
+          EXPECTED_BRANCH: feat/trade-medusa-2212-validated-canary
+        run: |
+          git diff --check
+          if git diff --quiet -- package-lock.json; then
+            echo 'No resolvable lockfile changes'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'fix(security): regenerate Medusa-compatible patched transitive lockfile'
+          git push origin "HEAD:refs/heads/$EXPECTED_BRANCH"
