@@ -23,7 +23,8 @@ export type NativeCartIdentity = {
   regionId: string | null
 }
 
-export type TrustedNativeSellerBinding = GovernedSellerOrderCommand & NativeCartIdentity
+export type TrustedNativeSellerBinding = GovernedSellerOrderCommand &
+  NativeCartIdentity & { tenantId: string }
 
 export interface TrustedNativeSellerBindingResolver {
   /** Must load authoritative server-side state; no browser-selected actor. */
@@ -68,6 +69,8 @@ export async function assertNativeCartLegalSeller(
     command.salesChannelId !== identity.salesChannelId ||
     command.regionId !== identity.regionId ||
     command.orderReference !== `cart/${identity.cartId}/complete` ||
+    !command.tenantId ||
+    !command.organisationId ||
     !command.legalContextId ||
     !command.legalSellerKey ||
     !command.legalActivity ||
