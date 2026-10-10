@@ -19,3 +19,12 @@ artifacts:
     runtime: true
 security:
   sast_provider: fallback
+exceptions:
+  dependency-audit:
+    reason: "Unfixed upstream npm advisories (braces, @graphql-tools/utils 10.x via Medusa) block the audit gates; remediate by Medusa upgrade"
+    expires: "2026-11-09"
+    approved_by: "@bjnabs"
+  container-scan:
+    reason: "Image scan inherits the same unfixed upstream advisories from the Medusa dependency tree; remove with the Medusa upgrade"
+    expires: "2026-11-09"
+    approved_by: "@bjnabs"
