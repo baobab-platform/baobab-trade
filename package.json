@@ -95,7 +95,7 @@
   "devDependencies": {
     "@medusajs/admin-sdk": "2.21.2",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "20.17.10",
+    "@types/node": "24.13.6",
     "@typescript-eslint/eslint-plugin": "8.18.2",
     "@typescript-eslint/parser": "8.18.2",
     "ajv": "^8.20.0",
