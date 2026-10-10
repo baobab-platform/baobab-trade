@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../../../../../baobab/medusa/json-array"
 // Gate ZB-04 buyer application boundary.
 //
 // This route creates a Trade-owned application, not an approved organisation,
@@ -84,7 +85,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
     registration_number: optionalString(req.body?.registration_number, 128),
     country_of_registration: country?.toUpperCase() ?? null,
     website: optionalString(req.body?.website, 2048),
-    requested_market_keys: requestedMarkets,
+    requested_market_keys: medusaJsonArray(requestedMarkets),
   }
   const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex")
   const tenantId = resolveBuyerTenantId()
