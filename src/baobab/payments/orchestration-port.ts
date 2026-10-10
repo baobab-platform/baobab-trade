@@ -5,14 +5,7 @@ import {
 import type { PaymentMethod, PaymentTerms } from "./payment-config"
 
 export type PaymentStatus =
-  | "CREATED"
-  | "PENDING"
-  | "AUTHORIZED"
-  | "CAPTURED"
-  | "SETTLED"
-  | "FAILED"
-  | "CANCELLED"
-  | "UNKNOWN"
+  "CREATED" | "PENDING" | "AUTHORIZED" | "CAPTURED" | "SETTLED" | "FAILED" | "CANCELLED" | "UNKNOWN"
 
 export type InitiatePaymentCommand = {
   paymentReference: string

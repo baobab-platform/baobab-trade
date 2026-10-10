@@ -31,8 +31,7 @@ export type BaobabPlatformEvent<TData extends Record<string, unknown> = Record<s
   BaobabCloudEventBase<TData> & { baobabscope: "platform" }
 
 export type BaobabCloudEvent<TData extends Record<string, unknown> = Record<string, unknown>> =
-  | BaobabTenantEvent<TData>
-  | BaobabPlatformEvent<TData>
+  BaobabTenantEvent<TData> | BaobabPlatformEvent<TData>
 
 /**
  * Stable logical producer URI (ADR-SHARED-018 §3.7). Must never be a

@@ -5,11 +5,7 @@
  * the pinned commit in contracts.lock.yaml.
  */
 export type TenantLifecycleStatus =
-  | "provisioning"
-  | "active"
-  | "suspended"
-  | "decommissioning"
-  | "decommissioned"
+  "provisioning" | "active" | "suspended" | "decommissioning" | "decommissioned"
 
 export type RawContextResolutionResponse = {
   tenant_id: string
