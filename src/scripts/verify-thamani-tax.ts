@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs } from "@medusajs/framework/types"
 import {
   EffectiveDatedTaxProviderAdapter,
@@ -129,7 +130,7 @@ export default async function ({ container }: ExecArgs) {
         erp_currency: result.currency,
         delta_minor: reconciliation.deltaMinor,
         status: reconciliation.status,
-        reasons: reconciliation.reasons,
+        reasons: medusaJsonArray(reconciliation.reasons),
         source_idempotency_key: `thamani:gate13:reconcile:${context.jurisdictionKey.toLowerCase()}`,
         observed_at: new Date(),
       })
