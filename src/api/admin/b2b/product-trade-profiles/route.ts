@@ -3,6 +3,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { MedusaError } from "@medusajs/framework/utils"
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
+import type { ClassificationConfidence } from "../../../../baobab/b2b/product-assortment-policy"
 import { validateTradeProfileBody } from "../../../../baobab/b2b/product-assortment-admin-validation"
 
 type Body = Record<string, unknown>
@@ -28,7 +29,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
       typeof body.classification_system === "string" && body.classification_system.trim()
         ? body.classification_system.trim()
         : "HS",
-    classification_confidence: validated.data.classification_confidence,
+    classification_confidence: validated.data.classification_confidence as ClassificationConfidence,
     commodity_category: validated.data.commodity_category as string,
     trade_uom: validated.data.trade_uom as string,
     net_weight_kg: typeof body.net_weight_kg === "number" ? body.net_weight_kg : null,
@@ -41,14 +42,16 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
         ? body.export_eligibility_reference
         : null,
     commodity_attributes:
-      body.commodity_attributes && typeof body.commodity_attributes === "object"
-        ? body.commodity_attributes
+      body.commodity_attributes &&
+      typeof body.commodity_attributes === "object" &&
+      !Array.isArray(body.commodity_attributes)
+        ? (body.commodity_attributes as Record<string, unknown>)
         : null,
   }
 
   const row =
     existing.length > 0
-      ? await b2b.updateProductTradeProfiles(existing[0].id, payload)
+      ? await b2b.updateProductTradeProfiles({ id: existing[0].id, ...payload })
       : await b2b.createProductTradeProfiles(payload)
 
   res.status(existing.length > 0 ? 200 : 201).json({ product_trade_profile: row })

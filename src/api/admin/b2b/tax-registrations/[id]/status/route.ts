@@ -41,7 +41,10 @@ export const POST = async (req: AuthenticatedMedusaRequest<StatusBody>, res: Med
     )
   }
 
-  const patch: Record<string, unknown> = { status: nextStatus }
+  const patch: { id: string; status: TaxStatus; verified_at?: Date | null } = {
+    id: req.params.id,
+    status: nextStatus,
+  }
   if (nextStatus === "VERIFIED") {
     patch.verified_at = new Date()
   }
@@ -49,7 +52,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<StatusBody>, res: Med
     patch.verified_at = null
   }
 
-  const updated = await b2b.updateTaxRegistrations(req.params.id, patch)
+  const updated = await b2b.updateTaxRegistrations(patch)
 
   res.status(200).json({
     id: updated.id,

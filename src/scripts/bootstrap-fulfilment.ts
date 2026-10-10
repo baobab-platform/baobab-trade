@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs } from "@medusajs/framework/types"
 import { ZURIBEANS_FULFILMENT_POLICIES } from "../baobab/fulfilment"
 import type FulfilmentBridgeModuleService from "../modules/fulfilment-bridge/service"
@@ -10,7 +11,7 @@ export default async function ({ container }: ExecArgs) {
         market_key: policy.marketKey,
         country_code: policy.countryCode,
         legal_seller_key: policy.legalSellerKey,
-        provider_bindings: policy.providers.map((provider) => ({ ...provider })),
+        provider_bindings: medusaJsonArray(policy.providers.map((provider) => ({ ...provider }))),
         status: "ACTIVE",
       })
   }

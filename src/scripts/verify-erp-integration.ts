@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs } from "@medusajs/framework/types"
 import { ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID } from "../baobab/context/digital-estates"
 import {
@@ -125,7 +126,7 @@ export default async function ({ container }: ExecArgs) {
       projection_kind: "ORDER",
       commerce_reference: "gate12-order",
       expected_state: { status: "PENDING", currency: "UGX" },
-      differences: reconciliation.differences,
+      differences: medusaJsonArray(reconciliation.differences),
       status: reconciliation.status,
       source_idempotency_key: "gate12:reconcile:order",
       observed_at: new Date(),

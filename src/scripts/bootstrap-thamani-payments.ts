@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs } from "@medusajs/framework/types"
 import { THAMANI_PAYMENT_POLICIES } from "../baobab/thamani/payments"
 import type PaymentBridgeModuleService from "../modules/payment-bridge/service"
@@ -14,8 +15,8 @@ export default async function bootstrapThamaniPayments({ container }: ExecArgs):
       legal_seller_key: policy.legalSellerKey,
       currency_code: policy.currency,
       default_terms: policy.defaultTerms,
-      allowed_terms: [...policy.allowedTerms],
-      provider_bindings: policy.providers.map((provider) => ({ ...provider })),
+      allowed_terms: medusaJsonArray([...policy.allowedTerms]),
+      provider_bindings: medusaJsonArray(policy.providers.map((provider) => ({ ...provider }))),
       status: "ACTIVE" as const,
     }
     if (existing) await bridge.updatePaymentPolicyBindings({ id: existing.id, ...input })

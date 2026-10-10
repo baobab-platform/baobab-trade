@@ -87,7 +87,7 @@ export default defineSearchIndex({
       const documents = products
         .filter((product) => isThamaniProduct(product.metadata))
         .map(toThamaniSearchDocument)
-      if (documents.length > 0) yield documents
+      if (documents.length > 0) yield [{ action: "upsert", documents }]
 
       if (products.length < pageSize) break
       skip += pageSize

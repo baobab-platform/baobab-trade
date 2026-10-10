@@ -19,7 +19,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     req.query.require_regulatory_clearance === "1"
 
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
-  const rows = await b2b.listMarketProductEligibilitys(
+  const rows = await b2b.listMarketProductEligibilities(
     { market_key: marketKey.trim() },
     { take: 500 },
   )

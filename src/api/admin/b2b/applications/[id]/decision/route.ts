@@ -342,7 +342,8 @@ export const POST = async (req: AuthenticatedMedusaRequest<DecisionBody>, res: M
       })
     }
 
-    await b2b.updateBuyerApplications(application.id, {
+    await b2b.updateBuyerApplications({
+      id: application.id,
       status: decision,
       revision: Number(application.revision) + 1,
     })
