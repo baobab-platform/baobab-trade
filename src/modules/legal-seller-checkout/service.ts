@@ -10,6 +10,7 @@ import type {
 } from "../../baobab/orders/native-cart-legal-seller"
 import { HttpPaymentsMerchantReadinessAdapter } from "../../baobab/orders/payments-seller-readiness"
 import { assertIndependentlyApprovedBinding } from "../../baobab/orders/cart-binding-approval"
+import { assertCurrentSellerMarketContext } from "../../baobab/orders/seller-market-context"
 import NativeSellerCartBinding from "./models/native-seller-cart-binding"
 
 const requireEnv = (name: string): string => {
@@ -124,14 +125,16 @@ class NativeSellerCheckoutModuleService
       await this.tokens.getAccessToken(),
       row.correlation_id,
     )
-    if (
-      canonical.tenant_id !== row.tenant_id ||
-      canonical.organisation_id !== row.organisation_id ||
-      (canonical.country_code && canonical.country_code !== row.market_code) ||
-      (canonical.expires_at && seconds(canonical.expires_at) <= Date.now())
-    ) {
-      throw new Error("LA-05C3 denied: Control Plane tenant or Organisation disagrees")
-    }
+    assertCurrentSellerMarketContext(
+      canonical,
+      {
+        tenantId: row.tenant_id,
+        organisationId: row.organisation_id,
+        marketCode: row.market_code,
+        currencyCode: row.currency_code,
+      },
+      Date.now(),
+    )
     // CP's legal-actor assessment independently checks that context_id is a
     // current RUNTIME handle owned by this SAME Trade workload principal.
     return {

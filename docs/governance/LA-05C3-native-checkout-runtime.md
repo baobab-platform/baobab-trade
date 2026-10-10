@@ -53,3 +53,11 @@ Medusa rejects two `completeCartWorkflow.hooks.validate` registrations. LA-05C2'
 ## Rollback and safety
 
 Disable the flag to restore previously unaccepted behavior only in controlled test environments; doing so must **not** be accepted as production remediation. Revoke compromised cart bindings, CP mandates and IAM scopes independently. Disabling the flag never revokes an already ACTIVE legal mandate. Never create synthetic Nabhold/Thamani/ZuriBeans legal records, fabricated merchant certifications or automatically granted provider rights to get a green test.
+
+## LA-05C4 — strict market and revocation-window reassessment (candidate)
+
+The original LA-05C3 implementation accepted a current CP tenant/Organisation response without an explicit `country_code` and did not require its `currency_code` to match the bound cart. LA-05C4 now requires exact current CP tenant, Organisation, **country and currency** before a cart can reach the native legal-actor/Payments gates. An organisation-wide context is insufficient to assert permission to transact in a particular market.
+
+A separately governed cart binding can be revoked while Payments assesses the merchant. LA-05C4 now reloads the server-owned `ACTIVE` binding **after** Payments I/O and checks that the cart, channel, region, tenant, Organisation, CP RUNTIME context, responsible LegalEntity, market, currency, activity, capability, operation reference and idempotency identity remain exactly stable. If the binding disappeared, expired, was revoked or changed, checkout fails before the second CP mandate read.
+
+The final Control Plane `SELLER_OF_RECORD` assessment still runs after that reread. This narrows the checkout race window; it does **not** create a serializable transaction spanning the two engines, solve a revocation happening after the final external response, issue the missing maker/checker binding mutation APIs, or certify any real merchant. Required production acceptance remains unchanged.
