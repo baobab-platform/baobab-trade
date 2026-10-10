@@ -119,7 +119,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   let updated = false
   let eventRecord: { id: string } | undefined
   try {
-    await b2b.updateBuyerApplicationEvidences(evidence.id, { status: decision })
+    await b2b.updateBuyerApplicationEvidences({ id: evidence.id, status: decision })
     updated = true
     const eventId = randomUUID()
     const correlationId = randomUUID()
@@ -165,7 +165,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     if (eventRecord) await outbox.deleteEventOutboxes(eventRecord.id).catch(() => undefined)
     if (updated)
       await b2b
-        .updateBuyerApplicationEvidences(evidence.id, { status: "PENDING" })
+        .updateBuyerApplicationEvidences({ id: evidence.id, status: "PENDING" })
         .catch(() => undefined)
     await b2b.deleteBuyerApplicationEvidenceDecisions(recorded.id).catch(() => undefined)
     throw error
