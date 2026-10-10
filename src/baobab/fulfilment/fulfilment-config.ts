@@ -1,9 +1,5 @@
 export type FulfilmentMode =
-  | "LOCAL_DELIVERY"
-  | "PARCEL_SHIPMENT"
-  | "BULK_FREIGHT"
-  | "CROSS_BORDER"
-  | "CUSTOMER_COLLECTION"
+  "LOCAL_DELIVERY" | "PARCEL_SHIPMENT" | "BULK_FREIGHT" | "CROSS_BORDER" | "CUSTOMER_COLLECTION"
 
 export type FulfilmentProviderBinding = {
   key: string

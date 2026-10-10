@@ -14,10 +14,7 @@ export type CartBindingApproval = {
   expiresAt: string
 }
 
-export function assertIndependentlyApprovedBinding(
-  row: CartBindingApproval,
-  atMs: number,
-): void {
+export function assertIndependentlyApprovedBinding(row: CartBindingApproval, atMs: number): void {
   const proposed = Date.parse(row.proposedAt)
   const approved = Date.parse(row.approvedAt)
   const expires = Date.parse(row.expiresAt)

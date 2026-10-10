@@ -30,7 +30,9 @@ const NativeSellerCartBinding = model.define(
     approved_by: model.text().nullable(),
     approved_at: model.dateTime().nullable(),
     expires_at: model.dateTime(),
-    status: model.enum(["PROPOSED", "ACTIVE", "REJECTED", "REVOKED", "EXPIRED"]).default("PROPOSED"),
+    status: model
+      .enum(["PROPOSED", "ACTIVE", "REJECTED", "REVOKED", "EXPIRED"])
+      .default("PROPOSED"),
     correlation_id: model.text(),
   },
 )
