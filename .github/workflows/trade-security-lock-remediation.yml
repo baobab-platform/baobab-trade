@@ -53,18 +53,7 @@ jobs:
           if (pkg.devDependencies.vitest !== '5.0.3' || lock.packages[''].devDependencies.vitest !== '5.0.3') { throw new Error('Vitest critical RCE mitigation missing') }
           console.log('All Medusa APIs pinned to 2.21.2 and Vitest to 5.0.3')
           NODE
-      - name: Run Medusa compatibility smoke checks
-        run: |
-          npm ci --ignore-scripts --no-fund
-          npm run typecheck
-          npm test
-          npm run build
-      - name: Print remaining vulnerability count without weakening audit
-        if: always()
-        run: |
-          npm audit --json --omit=dev > /tmp/baobab-security-audit.json || true
-          node -e "const a=require('/tmp/baobab-security-audit.json'); console.log('Unresolved production vulnerabilities:', JSON.stringify(a.metadata?.vulnerabilities||{}))"
-      - name: Commit safe compatible lockfile
+      - name: Commit reproducible locked dependency graph before compatibility checks
         env:
           EXPECTED_BRANCH: feat/trade-medusa-2212-validated-canary
         run: |
@@ -78,3 +67,15 @@ jobs:
           git add package-lock.json
           git commit -m 'fix(security): regenerate Medusa-compatible patched transitive lockfile'
           git push origin "HEAD:refs/heads/$EXPECTED_BRANCH"
+
+      - name: Check Medusa 2.21 API compatibility (fails PR on regressions)
+        run: |
+          npm ci --ignore-scripts --no-fund
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Print remaining vulnerability count without weakening audit
+        if: always()
+        run: |
+          npm audit --json --omit=dev > /tmp/baobab-security-audit.json || true
+          node -e "const a=require('/tmp/baobab-security-audit.json'); console.log('Unresolved production vulnerabilities:', JSON.stringify(a.metadata?.vulnerabilities||{}))"
