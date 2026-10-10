@@ -176,13 +176,15 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   let receipt: { id: string } | undefined
   try {
     if (input.creditStatus === "APPROVED" && organisation.status === "PENDING") {
-      await b2b.updateB2BOrganisations({ id: organisation.id,
+      await b2b.updateB2BOrganisations({
+        id: organisation.id,
         status: "ACTIVE",
         erp_business_partner_id: input.businessPartnerId,
       })
       activated = true
     } else if (organisation.erp_business_partner_id !== input.businessPartnerId) {
-      await b2b.updateB2BOrganisations({ id: organisation.id,
+      await b2b.updateB2BOrganisations({
+        id: organisation.id,
         erp_business_partner_id: input.businessPartnerId,
       })
     }
@@ -233,7 +235,8 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     if (receipt) await events.deleteEventConsumerReceipts(receipt.id).catch(() => undefined)
     if (activated) {
       await b2b
-        .updateB2BOrganisations({ id: organisation.id,
+        .updateB2BOrganisations({
+          id: organisation.id,
           status: "PENDING",
           erp_business_partner_id: organisation.erp_business_partner_id ?? null,
         })

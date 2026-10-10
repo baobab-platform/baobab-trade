@@ -41,7 +41,10 @@ export const POST = async (req: AuthenticatedMedusaRequest<StatusBody>, res: Med
     )
   }
 
-  const patch: { id: string; status: TaxStatus; verified_at?: Date | null } = { id: req.params.id, status: nextStatus }
+  const patch: { id: string; status: TaxStatus; verified_at?: Date | null } = {
+    id: req.params.id,
+    status: nextStatus,
+  }
   if (nextStatus === "VERIFIED") {
     patch.verified_at = new Date()
   }

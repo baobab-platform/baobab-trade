@@ -42,9 +42,10 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
         ? body.export_eligibility_reference
         : null,
     commodity_attributes:
-      body.commodity_attributes && typeof body.commodity_attributes === "object" &&
+      body.commodity_attributes &&
+      typeof body.commodity_attributes === "object" &&
       !Array.isArray(body.commodity_attributes)
-        ? body.commodity_attributes as Record<string, unknown>
+        ? (body.commodity_attributes as Record<string, unknown>)
         : null,
   }
 

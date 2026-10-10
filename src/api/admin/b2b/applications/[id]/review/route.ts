@@ -168,7 +168,8 @@ export const POST = async (req: AuthenticatedMedusaRequest<ReviewBody>, res: Med
 
   let updated
   try {
-    updated = await b2b.updateBuyerApplications({ id: application.id,
+    updated = await b2b.updateBuyerApplications({
+      id: application.id,
       status: nextStatus,
       revision: nextRevision,
       assigned_reviewer_principal_id: reviewerPrincipalId,

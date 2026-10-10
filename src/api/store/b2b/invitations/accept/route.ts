@@ -82,7 +82,8 @@ export const POST = async (req: AuthenticatedMedusaRequest<AcceptBody>, res: Med
     )
   }
 
-  const updated = await b2b.updateBuyerMemberships({ id: membership.id,
+  const updated = await b2b.updateBuyerMemberships({
+    id: membership.id,
     customer_id: customerId,
     principal_id: principalId,
     status: "ACTIVE",

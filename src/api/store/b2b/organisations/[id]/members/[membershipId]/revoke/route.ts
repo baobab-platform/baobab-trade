@@ -34,7 +34,8 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
   if (membership.organisation_id !== req.params.id || membership.status !== "INVITED") {
     throw new MedusaError(MedusaError.Types.NOT_FOUND, "active invitation was not found")
   }
-  const updated = await b2b.updateBuyerMemberships({ id: membership.id,
+  const updated = await b2b.updateBuyerMemberships({
+    id: membership.id,
     status: "REVOKED",
     invitation_token_hash: null,
     invitation_expires_at: null,
