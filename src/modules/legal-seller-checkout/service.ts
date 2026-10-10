@@ -9,6 +9,7 @@ import type {
   TrustedNativeSellerBinding,
 } from "../../baobab/orders/native-cart-legal-seller"
 import { HttpPaymentsMerchantReadinessAdapter } from "../../baobab/orders/payments-seller-readiness"
+import { assertIndependentlyApprovedBinding } from "../../baobab/orders/cart-binding-approval"
 import NativeSellerCartBinding from "./models/native-seller-cart-binding"
 
 const requireEnv = (name: string): string => {
@@ -99,6 +100,22 @@ class NativeSellerCheckoutModuleService
     ) {
       throw new Error("LA-05C3 denied: invalid or expired governed cart binding")
     }
+    assertIndependentlyApprovedBinding(
+      {
+        cartId: row.cart_id,
+        proposedBy: row.proposed_by,
+        proposedAt: String(row.proposed_at),
+        approvedBy: row.approved_by,
+        approvedAt: String(row.approved_at),
+        approvalReference: row.approval_reference,
+        approvalScope: row.approval_scope,
+        expiresAt: String(row.expires_at),
+      },
+      now,
+    )
+    // The record is local evidence, not an independently verifiable
+    // platform administrative grant; CP reattestation and CP-owned
+    // legal-actor assessment remain required on EVERY operation.
     // Fresh, workload-scoped CP corroboration: a Trade-local DB row MUST NOT
     // be treated as canonical tenant/Organisation authority.
     const canonical = await this.controlPlane.resolvePlatformContext(
