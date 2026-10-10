@@ -70,7 +70,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   const requestHash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex")
   const replays = await outbox.listEventOutboxes({ idempotency_key: idempotencyKey })
   if (replays.length) {
-    const replayData = replays[0].envelope?.data ?? {}
+    const replayData = (replays[0].envelope?.data ?? {}) as Record<string, unknown>
     const replayHash = createHash("sha256")
       .update(
         JSON.stringify({
