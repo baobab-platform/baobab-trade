@@ -151,8 +151,21 @@ export class PostgresGovernedBindingPersistence implements Persistence {
         locked.rows[0].proposed_by !== command.proposal.maker.subject
       )
         deny()
-      // Do not activate placeholder context/legal activity. CP-issued mandate binding
-      // requires an additional approved authoritative activation adapter.
+      // Record the independent approval on the binding row itself (LA-05C3: distinct
+      // maker/checker, approval scope and reference live with the binding) but do NOT
+      // activate: context/legal activity are placeholders until an authoritative CP
+      // activation adapter exists. The guard makes approval single-use, enforces
+      // maker != checker and the STORED expiry against database time, never the
+      // caller-supplied expiry or clock.
+      const recorded = await db.query(
+        `UPDATE native_seller_cart_binding
+        SET approved_by = $2, approved_at = transaction_timestamp(), approval_reference = $3,
+        updated_at = transaction_timestamp()
+        WHERE cart_id = $1 AND status = 'PROPOSED' AND approved_by IS NULL
+        AND proposed_by <> $2 AND expires_at > transaction_timestamp() AND deleted_at IS NULL`,
+        [s.cartId, command.checker.subject, command.approvalReference],
+      )
+      if (recorded.rowCount !== 1) deny()
       const decision = await db.query(
         `INSERT INTO la05_binding_decision
         (id,cart_id,tenant_id,organisation_id,market_code,currency_code,decision,actor_subject,evidence_reference,evidence_decision_id)
@@ -195,14 +208,14 @@ export class PostgresGovernedBindingPersistence implements Persistence {
       )
         deny()
       const changed = await db.query(
-        "UPDATE native_seller_cart_binding SET status = 'REVOKED' WHERE cart_id = $1 AND status IN ('PROPOSED','ACTIVE')",
+        "UPDATE native_seller_cart_binding SET status = 'REVOKED', updated_at = transaction_timestamp() WHERE cart_id = $1 AND status IN ('PROPOSED','ACTIVE')",
         [scope.cartId],
       )
       if (changed.rowCount !== 1) deny()
       const decision = await db.query(
         `INSERT INTO la05_binding_decision
-        (id,cart_id,tenant_id,organisation_id,market_code,currency_code,decision,actor_subject,evidence_reference,evidence_decision_id)
-        VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,'REVOKED',$6,$7,$8) RETURNING id`,
+        (id,cart_id,tenant_id,organisation_id,market_code,currency_code,decision,actor_subject,evidence_reference,evidence_decision_id,reason)
+        VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,'REVOKED',$6,$7,$8,$9) RETURNING id`,
         [
           scope.cartId,
           scope.tenantId,
@@ -212,6 +225,7 @@ export class PostgresGovernedBindingPersistence implements Persistence {
           actor.subject,
           evidence.reference,
           evidence.decisionId,
+          reason,
         ],
       )
       await event(
@@ -221,7 +235,6 @@ export class PostgresGovernedBindingPersistence implements Persistence {
         actor.subject,
         evidence,
       )
-      void reason // canonical event reason field awaits Shared schema agreement
     })
   }
 }

@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS la05_binding_decision (
   actor_subject text NOT NULL,
   evidence_reference text NOT NULL,
   evidence_decision_id text NOT NULL,
+  -- Mandatory for REVOKED: revocation must be evidence- AND reason-backed (LA-05C3).
+  reason text,
+  CHECK (decision <> 'REVOKED' OR (reason IS NOT NULL AND length(btrim(reason)) > 0)),
   created_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
   UNIQUE (cart_id, id)
 );
