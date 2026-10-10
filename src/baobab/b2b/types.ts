@@ -29,5 +29,4 @@ export type PurchaseAuthority = {
 }
 
 export type PurchaseDecision =
-  | { outcome: "PLACE_ORDER" }
-  | { outcome: "REQUIRE_APPROVAL"; reason: "THRESHOLD" | "SPEND_LIMIT" }
+  { outcome: "PLACE_ORDER" } | { outcome: "REQUIRE_APPROVAL"; reason: "THRESHOLD" | "SPEND_LIMIT" }

@@ -216,8 +216,7 @@ async function readCartItemDiscount(
     filters: { id: [cartId] },
   })
   const cart = data[0] as
-    | { item_discount_total: number | string; promotions?: readonly { code: string }[] }
-    | undefined
+    { item_discount_total: number | string; promotions?: readonly { code: string }[] } | undefined
   if (!cart) throw new Error(`Cart "${cartId}" not found while reading back its discount`)
   return {
     // `item_discount_total` comes back as a Medusa BigNumberValue (a
