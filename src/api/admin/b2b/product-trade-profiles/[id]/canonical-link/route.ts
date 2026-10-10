@@ -21,7 +21,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   await b2b.retrieveProductTradeProfile(req.params.id)
 
-  const updated = await b2b.updateProductTradeProfiles(req.params.id, {
+  const updated = await b2b.updateProductTradeProfiles({ id: req.params.id,
     canonical_product_key: validated.canonical_product_key,
   })
 
