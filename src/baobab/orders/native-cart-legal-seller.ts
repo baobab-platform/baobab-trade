@@ -101,10 +101,21 @@ export async function assertNativeCartLegalSeller(
   // market attestation before the final CP mandate assessment.
   const currentBinding = await deps.bindings.resolveForCart(identity)
   const immutableSellerScope = [
-    "cartId", "salesChannelId", "regionId", "tenantId", "organisationId",
-    "legalContextId", "legalSellerKey", "marketCode", "marketKey",
-    "currencyCode", "legalActivity", "legalCapability", "orderReference",
-    "correlationId", "idempotencyKey",
+    "cartId",
+    "salesChannelId",
+    "regionId",
+    "tenantId",
+    "organisationId",
+    "legalContextId",
+    "legalSellerKey",
+    "marketCode",
+    "marketKey",
+    "currencyCode",
+    "legalActivity",
+    "legalCapability",
+    "orderReference",
+    "correlationId",
+    "idempotencyKey",
   ] as const
   if (
     !currentBinding ||

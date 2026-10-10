@@ -127,8 +127,12 @@ class NativeSellerCheckoutModuleService
     )
     assertCurrentSellerMarketContext(
       canonical,
-      { tenantId: row.tenant_id, organisationId: row.organisation_id,
-        marketCode: row.market_code, currencyCode: row.currency_code },
+      {
+        tenantId: row.tenant_id,
+        organisationId: row.organisation_id,
+        marketCode: row.market_code,
+        currencyCode: row.currency_code,
+      },
       Date.now(),
     )
     // CP's legal-actor assessment independently checks that context_id is a

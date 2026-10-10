@@ -54,7 +54,6 @@ Medusa rejects two `completeCartWorkflow.hooks.validate` registrations. LA-05C2'
 
 Disable the flag to restore previously unaccepted behavior only in controlled test environments; doing so must **not** be accepted as production remediation. Revoke compromised cart bindings, CP mandates and IAM scopes independently. Disabling the flag never revokes an already ACTIVE legal mandate. Never create synthetic Nabhold/Thamani/ZuriBeans legal records, fabricated merchant certifications or automatically granted provider rights to get a green test.
 
-
 ## LA-05C4 — strict market and revocation-window reassessment (candidate)
 
 The original LA-05C3 implementation accepted a current CP tenant/Organisation response without an explicit `country_code` and did not require its `currency_code` to match the bound cart. LA-05C4 now requires exact current CP tenant, Organisation, **country and currency** before a cart can reach the native legal-actor/Payments gates. An organisation-wide context is insufficient to assert permission to transact in a particular market.
