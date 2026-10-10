@@ -12,7 +12,7 @@ schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: b063f8a8df3f012baadf068aa9ba312d83929e69
+  commit: 6899a2d8f143bf23d36c4f4ac904e0a1e10c3cea
 contracts:
   - contracts/control-plane/v1/canonical-mapping.schema.json
   # $ref target of the context_id grammar used by mapping resolution.

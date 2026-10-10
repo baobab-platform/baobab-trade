@@ -11,7 +11,7 @@ export type RawPlatformContextResolutionResponse = {
   context_id: string
   tenant_id: string
   resolved_at: string
-  expires_at?: string | null
+  expires_at?: string
   country_code?: string
   market_id?: string
   currency_code?: string
@@ -42,7 +42,7 @@ export const isValidPlatformContextResolutionResponse = (
     typeof value.tenant_id === "string" &&
     /^tn_[a-z0-9]{3,60}$/.test(value.tenant_id) &&
     isDateTime(value.resolved_at) &&
-    (value.expires_at === undefined || value.expires_at === null || isDateTime(value.expires_at)) &&
+    (value.expires_at === undefined || isDateTime(value.expires_at)) &&
     isOptionalMatch(value.market_id, /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/) &&
     isOptionalMatch(value.country_code, /^[A-Z]{2}$/) &&
     isOptionalMatch(value.currency_code, /^[A-Z]{3}$/) &&
