@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs } from "@medusajs/framework/types"
 import { ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID } from "../baobab/context/digital-estates"
 import {
@@ -144,7 +145,7 @@ export default async function ({ container }: ExecArgs) {
       commerce_currency: result.currency,
       delta_minor: pending.deltaMinor,
       status: pending.status,
-      reasons: pending.reasons,
+      reasons: medusaJsonArray(pending.reasons),
       source_idempotency_key: "gate10:reconcile:ug",
       observed_at: new Date(),
     })
