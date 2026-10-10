@@ -34,7 +34,7 @@ export const POST = async (
   // consistent with every other admin resource lookup in this codebase.
   await b2b.retrieveB2BOrganisation(req.params.id)
 
-  const updated = await b2b.updateB2BOrganisations(req.params.id, {
+  const updated = await b2b.updateB2BOrganisations({ id: req.params.id,
     canonical_organisation_id: canonicalOrganisationId,
   })
 
