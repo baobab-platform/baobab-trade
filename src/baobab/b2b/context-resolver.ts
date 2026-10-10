@@ -31,6 +31,9 @@ export async function resolveBuyerContext(
   }
   const membership = memberships[0]
   const roles: RoleRecord[] = await b2b.listBuyerRoles({ membership_id: membership.id })
+  // Medusa 2.21's generated types now allow null for historic nullable
+  // membership identifiers; a missing principal/customer is NEVER a buyer.
+  if (!membership.principal_id || !membership.customer_id) return null
   return {
     principalId: membership.principal_id,
     customerId: membership.customer_id,

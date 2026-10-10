@@ -55,7 +55,7 @@ describe("ZB-04 staff application review", () => {
       id: "b2brev_1",
       ...input,
     }))
-    const updateBuyerApplications = vi.fn(async (_id, patch) => ({
+    const updateBuyerApplications = vi.fn(async (patch) => ({
       ...application,
       ...patch,
     }))
@@ -99,7 +99,8 @@ describe("ZB-04 staff application review", () => {
         application_revision: 2,
       }),
     )
-    expect(updateBuyerApplications).toHaveBeenCalledWith(application.id, {
+    expect(updateBuyerApplications).toHaveBeenCalledWith({
+      id: application.id,
       status: "UNDER_REVIEW",
       revision: 2,
       assigned_reviewer_principal_id: "prn_staff_1",

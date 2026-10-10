@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs, ILockingModule } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
 import {
@@ -58,7 +59,7 @@ export default async function verifyPayments({ container }: ExecArgs): Promise<v
       commerce_currency: payment.currency,
       amount_delta_minor: pending.amountDeltaMinor,
       status: pending.status,
-      reasons: pending.reasons,
+      reasons: medusaJsonArray(pending.reasons),
       source_idempotency_key: "gate8:reconcile:ug:net30",
       observed_at: new Date(),
     })

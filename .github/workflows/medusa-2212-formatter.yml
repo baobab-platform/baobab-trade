@@ -1,0 +1,43 @@
+name: Format Medusa 2.21 compatibility source (temporary)
+on:
+  pull_request:
+    paths:
+      - src/**
+      - docs/security/medusa-2-21-security-canary.md
+      - .github/workflows/medusa-2212-formatter.yml
+permissions:
+  contents: write
+jobs:
+  prettier:
+    if: >-
+      github.event.pull_request.head.repo.full_name == 'baobab-platform/baobab-trade' &&
+      github.event.pull_request.head.ref == 'feat/trade-medusa-2212-validated-canary'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts --no-fund
+      - name: Canonical formatting without changing dependencies or source semantics
+        run: |
+          git fetch --no-tags origin main
+          mapfile -d '' files < <(git diff --name-only -z origin/main...HEAD -- '*.ts' '*.tsx' '*.js' '*.mjs' '*.json' '*.md')
+          if (( ${#files[@]} > 0 )); then
+            npx prettier --write "${files[@]}"
+          fi
+          npx prettier --write docs/governance/LA-05C3-native-checkout-runtime.md
+      - name: Commit only Prettier output
+        run: |
+          if git diff --quiet -- src docs; then exit 0; fi
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- src docs
+          git commit -m 'style(medusa-2.21): canonical format of upgrade compatibility edits'
+          git push origin 'HEAD:refs/heads/feat/trade-medusa-2212-validated-canary'

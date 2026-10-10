@@ -64,7 +64,7 @@ const request = (body: ReturnType<typeof event>, organisationStatus = "PENDING")
       erp_business_partner_id: null,
       status: organisationStatus,
     })),
-    updateB2BOrganisations: vi.fn(async (_id, patch) => ({ id: "b2borg_1", ...patch })),
+    updateB2BOrganisations: vi.fn(async (patch) => ({ id: "b2borg_1", ...patch })),
   }
   const erp = {
     createBuyerCommercialProfileProjections: vi.fn(async (input) => ({ id: "erpbcp_1", ...input })),
@@ -98,7 +98,8 @@ describe("ZB-04 ERP commercial profile consumer", () => {
     const res = response()
     await POST(fixture.req as never, res)
     expect(fixture.erp.createBuyerCommercialProfileProjections).toHaveBeenCalled()
-    expect(fixture.b2b.updateB2BOrganisations).toHaveBeenCalledWith("b2borg_1", {
+    expect(fixture.b2b.updateB2BOrganisations).toHaveBeenCalledWith({
+      id: "b2borg_1",
       status: "ACTIVE",
       erp_business_partner_id: "BP-10001",
     })
@@ -116,7 +117,8 @@ describe("ZB-04 ERP commercial profile consumer", () => {
     const fixture = request(event(status))
     await POST(fixture.req as never, response())
     expect(fixture.erp.createBuyerCommercialProfileProjections).toHaveBeenCalled()
-    expect(fixture.b2b.updateB2BOrganisations).toHaveBeenCalledWith("b2borg_1", {
+    expect(fixture.b2b.updateB2BOrganisations).toHaveBeenCalledWith({
+      id: "b2borg_1",
       erp_business_partner_id: "BP-10001",
     })
     expect(fixture.events.createEventOutboxes).not.toHaveBeenCalled()

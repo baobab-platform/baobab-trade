@@ -12,6 +12,7 @@ const ErpProjection = model.define(
       "SHIPMENT",
       "PAYMENT",
       "RETURN_REFUND",
+      "CREDIT_LINE",
     ]),
     commerce_reference: model.text().index(),
     canonical_entity_id: model.text(),

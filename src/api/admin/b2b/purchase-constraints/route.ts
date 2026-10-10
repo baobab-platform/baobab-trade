@@ -35,7 +35,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
 
   const row =
     existing.length > 0
-      ? await b2b.updatePurchaseConstraints(existing[0].id, payload)
+      ? await b2b.updatePurchaseConstraints({ id: existing[0].id, ...payload })
       : await b2b.createPurchaseConstraints(payload)
 
   res.status(existing.length > 0 ? 200 : 201).json({ purchase_constraint: row })

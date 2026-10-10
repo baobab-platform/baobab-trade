@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs, ILockingModule } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
 import {
@@ -111,7 +112,7 @@ export default async function ({ container }: ExecArgs) {
       commerce_status: fulfilment.status,
       execution_status: "DISPATCHED",
       status: result.status,
-      reasons: result.reasons,
+      reasons: medusaJsonArray(result.reasons),
       source_idempotency_key: "thamani:gate12:reconcile",
       observed_at: new Date(),
     })

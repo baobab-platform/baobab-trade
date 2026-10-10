@@ -71,7 +71,8 @@ describe("buyer invitation lifecycle", () => {
         status: "PENDING",
       }),
     )
-    expect(b2b.updateBuyerInvitationDeliveries).toHaveBeenCalledWith("delivery_2", {
+    expect(b2b.updateBuyerInvitationDeliveries).toHaveBeenCalledWith({
+      id: "delivery_2",
       status: "QUEUED",
       provider_message_id: "msg_2",
     })
@@ -88,7 +89,7 @@ describe("buyer invitation lifecycle", () => {
         organisation_id: "b2borg_1",
         status: "INVITED",
       })),
-      updateBuyerMemberships: vi.fn(async (_id, patch) => ({ id: "b2bmem_invite", ...patch })),
+      updateBuyerMemberships: vi.fn(async (patch) => ({ id: "b2bmem_invite", ...patch })),
     }
     const req = {
       auth_context: auth,
@@ -98,8 +99,8 @@ describe("buyer invitation lifecycle", () => {
     const res = response()
     await revoke(req as never, res)
     expect(b2b.updateBuyerMemberships).toHaveBeenCalledWith(
-      "b2bmem_invite",
       expect.objectContaining({
+        id: "b2bmem_invite",
         status: "REVOKED",
         invitation_token_hash: null,
         invitation_expires_at: null,
