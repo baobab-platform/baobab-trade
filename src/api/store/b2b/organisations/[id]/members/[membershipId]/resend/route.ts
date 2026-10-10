@@ -88,7 +88,7 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
   const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
   const originalHash = membership.invitation_token_hash
   const originalExpiry = membership.invitation_expires_at
-  await b2b.updateBuyerMemberships(membership.id, {
+  await b2b.updateBuyerMemberships({ id: membership.id,
     invitation_token_hash: createHash("sha256").update(token).digest("hex"),
     invitation_expires_at: expiresAt,
   })
@@ -117,19 +117,19 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
     })
     const providerId =
       result && typeof result === "object" && "id" in result ? String(result.id) : null
-    await b2b.updateBuyerInvitationDeliveries(delivery.id, {
+    await b2b.updateBuyerInvitationDeliveries({ id: delivery.id,
       status: "QUEUED",
       provider_message_id: providerId,
     })
   } catch (error) {
     await b2b
-      .updateBuyerMemberships(membership.id, {
+      .updateBuyerMemberships({ id: membership.id,
         invitation_token_hash: originalHash,
         invitation_expires_at: originalExpiry,
       })
       .catch(() => undefined)
     await b2b
-      .updateBuyerInvitationDeliveries(delivery.id, {
+      .updateBuyerInvitationDeliveries({ id: delivery.id,
         status: "FAILED",
         error_code: "NOTIFICATION_PROVIDER_ERROR",
       })
