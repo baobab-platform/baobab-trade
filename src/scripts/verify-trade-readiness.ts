@@ -1,3 +1,4 @@
+import { readMedusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs } from "@medusajs/framework/types"
 import { ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID } from "../baobab/context/digital-estates"
 import {
@@ -63,8 +64,8 @@ export default async function ({ container }: ExecArgs) {
           policyVersion: lane.policy_version,
           originCountry: lane.origin_country,
           destinationCountry: lane.destination_country,
-          permittedIncoterms: lane.permitted_incoterms as string[],
-          permittedTradeUoms: lane.permitted_trade_uoms as string[],
+          permittedIncoterms: readMedusaJsonArray<string>(lane.permitted_incoterms),
+          permittedTradeUoms: readMedusaJsonArray<string>(lane.permitted_trade_uoms),
           effectiveFrom: lane.effective_from,
           effectiveUntil: lane.effective_until,
           source: lane.source,
