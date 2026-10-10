@@ -43,7 +43,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
 
   const row =
     existing.length > 0
-      ? await b2b.updateMarketProductEligibilities(existing[0].id, payload)
+      ? await b2b.updateMarketProductEligibilities({ id: existing[0].id, ...payload })
       : await b2b.createMarketProductEligibilities(payload)
 
   res.status(existing.length > 0 ? 200 : 201).json({
