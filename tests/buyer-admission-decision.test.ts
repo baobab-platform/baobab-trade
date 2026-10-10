@@ -96,7 +96,7 @@ describe("ZB-04 admission decision", () => {
       createBuyerMemberships: vi.fn(async (input) => ({ id: "b2bmem_1", ...input })),
       createBuyerRoles: vi.fn(async (input) => ({ id: "b2brole_1", ...input })),
       createBuyerApplicationDecisions: vi.fn(async (input) => ({ id: "b2bdec_1", ...input })),
-      updateBuyerApplications: vi.fn(async (_id, patch) => ({ ...application, ...patch })),
+      updateBuyerApplications: vi.fn(async (patch) => ({ ...application, ...patch })),
       deleteB2BOrganisations: vi.fn(),
       deleteBuyerMemberships: vi.fn(),
       deleteBuyerRoles: vi.fn(),
@@ -185,7 +185,8 @@ describe("ZB-04 admission decision", () => {
         }),
       }),
     )
-    expect(b2b.updateBuyerApplications).toHaveBeenCalledWith(application.id, {
+    expect(b2b.updateBuyerApplications).toHaveBeenCalledWith({
+      id: application.id,
       status: "APPROVED",
       revision: 3,
     })
@@ -206,7 +207,7 @@ describe("ZB-04 admission decision", () => {
       createBuyerMemberships: vi.fn(),
       createBuyerRoles: vi.fn(),
       createBuyerApplicationDecisions: vi.fn(async (input) => ({ id: "b2bdec_1", ...input })),
-      updateBuyerApplications: vi.fn(async (_id, patch) => ({ ...application, ...patch })),
+      updateBuyerApplications: vi.fn(async (patch) => ({ ...application, ...patch })),
       deleteBuyerApplicationDecisions: vi.fn(),
     }
     const outbox = {
@@ -226,7 +227,8 @@ describe("ZB-04 admission decision", () => {
     expect(b2b.createB2BOrganisations).not.toHaveBeenCalled()
     expect(b2b.createBuyerMemberships).not.toHaveBeenCalled()
     expect(b2b.createBuyerRoles).not.toHaveBeenCalled()
-    expect(b2b.updateBuyerApplications).toHaveBeenCalledWith(application.id, {
+    expect(b2b.updateBuyerApplications).toHaveBeenCalledWith({
+      id: application.id,
       status: "REJECTED",
       revision: 3,
     })

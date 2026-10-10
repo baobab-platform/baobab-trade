@@ -192,7 +192,8 @@ describe("buyer organisation invitations", () => {
     }
 
     await expect(inviteMember(req as never, response() as never)).rejects.toThrow("delivery failed")
-    expect(b2b.updateBuyerInvitationDeliveries).toHaveBeenCalledWith("b2binvdel_1", {
+    expect(b2b.updateBuyerInvitationDeliveries).toHaveBeenCalledWith({
+      id: "b2binvdel_1",
       status: "FAILED",
       error_code: "NOTIFICATION_PROVIDER_ERROR",
     })

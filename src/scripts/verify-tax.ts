@@ -45,7 +45,7 @@ export default async function ({ container }: ExecArgs) {
       organisation_id: "gate10-b2b-organisation",
       jurisdiction_key: "UG",
       verification_status: "UNVERIFIED",
-      eligible_treatments: ["STANDARD"],
+      eligible_treatments: medusaJsonArray(["STANDARD"]),
       provenance: {
         source: "GATE10_TEST_FIXTURE_NOT_STATUTORY",
         checked_at: new Date().toISOString(),
