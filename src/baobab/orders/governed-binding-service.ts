@@ -28,7 +28,12 @@ export interface BindingAuthorityPorts {
   persistence: {
     propose(command: BindingProposal, evidence: VerifiedEvidence): Promise<void>
     approve(command: BindingApproval, evidence: VerifiedEvidence): Promise<void>
-    revoke(scope: GovernedBindingScope, actor: VerifiedActor, reason: string, evidence: VerifiedEvidence): Promise<void>
+    revoke(
+      scope: GovernedBindingScope,
+      actor: VerifiedActor,
+      reason: string,
+      evidence: VerifiedEvidence,
+    ): Promise<void>
   }
 }
 const requireVerified = (actor: VerifiedActor): void => {
@@ -37,13 +42,20 @@ const requireVerified = (actor: VerifiedActor): void => {
   }
 }
 const requireEvidence = (evidence: VerifiedEvidence, reference: string): void => {
-  if (!evidence || evidence.reference !== reference || !evidence.decisionId?.trim() ||
-    !Number.isFinite(Date.parse(evidence.verifiedAt))) {
+  if (
+    !evidence ||
+    evidence.reference !== reference ||
+    !evidence.decisionId?.trim() ||
+    !Number.isFinite(Date.parse(evidence.verifiedAt))
+  ) {
     throw new Error("LA-05C5 denied: canonical evidence verification failed")
   }
 }
 export async function proposeBinding(
-  ports: BindingAuthorityPorts, token: string, proposal: BindingProposal, nowMs: number,
+  ports: BindingAuthorityPorts,
+  token: string,
+  proposal: BindingProposal,
+  nowMs: number,
 ): Promise<void> {
   const actor = await ports.iam.verify(token, "propose")
   requireVerified(actor)
@@ -57,21 +69,31 @@ export async function proposeBinding(
   await ports.persistence.propose(canonical, evidence)
 }
 export async function approveBinding(
-  ports: BindingAuthorityPorts, token: string, approval: BindingApproval, nowMs: number,
+  ports: BindingAuthorityPorts,
+  token: string,
+  approval: BindingApproval,
+  nowMs: number,
 ): Promise<void> {
   const actor = await ports.iam.verify(token, "approve")
   requireVerified(actor)
-  if (actor.subject !== approval.checker.subject) throw new Error("LA-05C5 denied: checker mismatch")
+  if (actor.subject !== approval.checker.subject)
+    throw new Error("LA-05C5 denied: checker mismatch")
   const canonical = { ...approval, checker: actor }
   assertBindingApproval(canonical, nowMs)
   await ports.legalAuthority.assertCurrent(canonical.proposal.scope)
-  const evidence = await ports.evidence.verify(canonical.approvalReference, canonical.proposal.scope)
+  const evidence = await ports.evidence.verify(
+    canonical.approvalReference,
+    canonical.proposal.scope,
+  )
   requireEvidence(evidence, canonical.approvalReference)
   await ports.persistence.approve(canonical, evidence)
 }
 export async function revokeBinding(
-  ports: BindingAuthorityPorts, token: string, scope: GovernedBindingScope,
-  reason: string, reference: string,
+  ports: BindingAuthorityPorts,
+  token: string,
+  scope: GovernedBindingScope,
+  reason: string,
+  reference: string,
 ): Promise<void> {
   const actor = await ports.iam.verify(token, "revoke")
   requireVerified(actor)

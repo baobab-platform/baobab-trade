@@ -1,19 +1,42 @@
 import { describe, expect, it, vi } from "vitest"
-import { PostgresGovernedBindingPersistence, type PgClient, type PgPool } from "../src/baobab/orders/postgres-governed-binding-persistence"
+import {
+  PostgresGovernedBindingPersistence,
+  type PgClient,
+  type PgPool,
+} from "../src/baobab/orders/postgres-governed-binding-persistence"
 
-const scope = { cartId: "cart-test", tenantId: "tenant-test", organisationId: "org-test",
-  responsibleLegalEntityId: "legal-test", marketCode: "ZA", currencyCode: "ZAR",
-  salesChannelId: "channel-test", regionId: "region-test" }
-const actor = { subject: "maker", tenantId: "tenant-test", organisationId: "org-test",
-  audience: "baobab-trade", scopes: ["trade:legal-seller-binding:propose"], issuer: "iam", tokenId: "jwt" }
-const evidence = { reference: "evidence/test", decisionId: "test-decision", verifiedAt: "2026-10-10T06:00:00Z" }
+const scope = {
+  cartId: "cart-test",
+  tenantId: "tenant-test",
+  organisationId: "org-test",
+  responsibleLegalEntityId: "legal-test",
+  marketCode: "ZA",
+  currencyCode: "ZAR",
+  salesChannelId: "channel-test",
+  regionId: "region-test",
+}
+const actor = {
+  subject: "maker",
+  tenantId: "tenant-test",
+  organisationId: "org-test",
+  audience: "baobab-trade",
+  scopes: ["trade:legal-seller-binding:propose"],
+  issuer: "iam",
+  tokenId: "jwt",
+}
+const evidence = {
+  reference: "evidence/test",
+  decisionId: "test-decision",
+  verifiedAt: "2026-10-10T06:00:00Z",
+}
 function mockDb(existing: Record<string, unknown>[] = []) {
   const queries: string[] = []
   const client: PgClient = {
     query: vi.fn().mockImplementation(async (sql: string) => {
       queries.push(sql)
       if (sql.startsWith("SELECT")) return { rows: existing, rowCount: existing.length }
-      if (sql.includes("RETURNING id")) return { rows: [{ id: "00000000-0000-4000-8000-000000000001" }], rowCount: 1 }
+      if (sql.includes("RETURNING id"))
+        return { rows: [{ id: "00000000-0000-4000-8000-000000000001" }], rowCount: 1 }
       return { rows: [], rowCount: 1 }
     }),
     release: vi.fn(),
@@ -24,36 +47,68 @@ function mockDb(existing: Record<string, unknown>[] = []) {
 describe("LA-05C5 PostgreSQL transaction boundary", () => {
   it("commits proposed binding, decision and outbox atomically", async () => {
     const db = mockDb()
-    await new PostgresGovernedBindingPersistence(db.pool).propose({
-      scope, maker: actor, proposedAt: "2026-10-10T05:00:00Z",
-      expiresAt: "2026-10-11T05:00:00Z", evidenceReference: evidence.reference,
-    }, evidence)
+    await new PostgresGovernedBindingPersistence(db.pool).propose(
+      {
+        scope,
+        maker: actor,
+        proposedAt: "2026-10-10T05:00:00Z",
+        expiresAt: "2026-10-11T05:00:00Z",
+        evidenceReference: evidence.reference,
+      },
+      evidence,
+    )
     expect(db.queries[0]).toBe("BEGIN")
     expect(db.queries.at(-1)).toBe("COMMIT")
-    expect(db.queries.some(q => q.includes("la05_binding_outbox"))).toBe(true)
+    expect(db.queries.some((q) => q.includes("la05_binding_outbox"))).toBe(true)
     expect(db.client.release).toHaveBeenCalledOnce()
   })
   it("rolls back duplicate cart proposals", async () => {
     const db = mockDb([{ cart_id: scope.cartId }])
-    await expect(new PostgresGovernedBindingPersistence(db.pool).propose({
-      scope, maker: actor, proposedAt: "2026-10-10T05:00:00Z",
-      expiresAt: "2026-10-11T05:00:00Z", evidenceReference: evidence.reference,
-    }, evidence)).rejects.toThrow("transition rejected")
+    await expect(
+      new PostgresGovernedBindingPersistence(db.pool).propose(
+        {
+          scope,
+          maker: actor,
+          proposedAt: "2026-10-10T05:00:00Z",
+          expiresAt: "2026-10-11T05:00:00Z",
+          evidenceReference: evidence.reference,
+        },
+        evidence,
+      ),
+    ).rejects.toThrow("transition rejected")
     expect(db.queries).toContain("ROLLBACK")
     expect(db.queries).not.toContain("COMMIT")
   })
   it("never activates a binding merely because a checker approved", async () => {
-    const db = mockDb([{ cart_id: scope.cartId, tenant_id: scope.tenantId,
-      organisation_id: scope.organisationId, responsible_legal_entity_id: scope.responsibleLegalEntityId,
-      market_code: scope.marketCode, currency_code: scope.currencyCode,
-      sales_channel_id: scope.salesChannelId, region_id: scope.regionId,
-      proposed_by: actor.subject, status: "PROPOSED" }])
-    await new PostgresGovernedBindingPersistence(db.pool).approve({
-      proposal: { scope, maker: actor, proposedAt: "2026-10-10T05:00:00Z",
-        expiresAt: "2026-10-11T05:00:00Z", evidenceReference: evidence.reference },
-      checker: { ...actor, subject: "checker" }, approvedAt: "2026-10-10T05:30:00Z",
-      approvalReference: "review/test",
-    }, evidence)
-    expect(db.queries.some(q => /UPDATE.*ACTIVE/.test(q))).toBe(false)
+    const db = mockDb([
+      {
+        cart_id: scope.cartId,
+        tenant_id: scope.tenantId,
+        organisation_id: scope.organisationId,
+        responsible_legal_entity_id: scope.responsibleLegalEntityId,
+        market_code: scope.marketCode,
+        currency_code: scope.currencyCode,
+        sales_channel_id: scope.salesChannelId,
+        region_id: scope.regionId,
+        proposed_by: actor.subject,
+        status: "PROPOSED",
+      },
+    ])
+    await new PostgresGovernedBindingPersistence(db.pool).approve(
+      {
+        proposal: {
+          scope,
+          maker: actor,
+          proposedAt: "2026-10-10T05:00:00Z",
+          expiresAt: "2026-10-11T05:00:00Z",
+          evidenceReference: evidence.reference,
+        },
+        checker: { ...actor, subject: "checker" },
+        approvedAt: "2026-10-10T05:30:00Z",
+        approvalReference: "review/test",
+      },
+      evidence,
+    )
+    expect(db.queries.some((q) => /UPDATE.*ACTIVE/.test(q))).toBe(false)
   })
 })
