@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import { readMedusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs } from "@medusajs/framework/types"
 import { ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID } from "../baobab/context/digital-estates"
@@ -93,7 +94,7 @@ export default async function ({ container }: ExecArgs) {
       status: decision.status,
       policy_reference: decision.policyReference,
       policy_version: decision.policyVersion,
-      reasons: decision.reasons,
+      reasons: medusaJsonArray(decision.reasons),
       decided_at: decision.decidedAt,
       expires_at: decision.expiresAt,
       source: decision.source,
@@ -120,7 +121,7 @@ export default async function ({ container }: ExecArgs) {
       importer_registration_reference: transaction.importerRegistrationReference,
       customs_declaration_reference: transaction.customsDeclarationReference,
       export_permit_reference: transaction.exportPermitReference,
-      trade_lines: transaction.lines,
+      trade_lines: medusaJsonArray(transaction.lines),
       compliance_decision_id: storedDecision.id,
       status: "READY",
       source_idempotency_key: transaction.idempotencyKey,
