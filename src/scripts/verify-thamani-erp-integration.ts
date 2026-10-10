@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs } from "@medusajs/framework/types"
 import { THAMANI_DIGITAL_ESTATE_CANONICAL_ID } from "../baobab/context/digital-estates"
 import {
@@ -114,7 +115,7 @@ export default async function ({ container }: ExecArgs) {
       projection_kind: "PRODUCT",
       commerce_reference: "gate15-product",
       expected_state: { supplier: "sup_ug_mountain_roasters" },
-      differences: reconciliation.differences,
+      differences: medusaJsonArray(reconciliation.differences),
       status: reconciliation.status,
       source_idempotency_key: "gate15:thamani:reconcile:product",
       observed_at: new Date(),
