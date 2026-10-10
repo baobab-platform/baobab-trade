@@ -233,13 +233,13 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
       deliveryResult && typeof deliveryResult === "object" && "id" in deliveryResult
         ? String(deliveryResult.id)
         : null
-    await b2b.updateBuyerInvitationDeliveries(delivery.id, {
+    await b2b.updateBuyerInvitationDeliveries({ id: delivery.id,
       status: "QUEUED",
       provider_message_id: providerId,
     })
   } catch (error) {
     await b2b
-      .updateBuyerInvitationDeliveries(delivery.id, {
+      .updateBuyerInvitationDeliveries({ id: delivery.id,
         status: "FAILED",
         error_code: "NOTIFICATION_PROVIDER_ERROR",
       })
