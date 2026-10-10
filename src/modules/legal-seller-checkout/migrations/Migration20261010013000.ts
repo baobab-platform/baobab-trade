@@ -18,6 +18,10 @@ export class Migration20261010013000 extends Migration {
       "legal_capability" text not null,
       "currency_code" text not null,
       "approval_reference" text not null,
+      "approval_scope" text not null
+        check ("approval_scope" = 'SELLER_OF_RECORD_CART_BINDING'),
+      "proposed_by" text not null,
+      "proposed_at" timestamptz not null,
       "approved_by" text not null,
       "approved_at" timestamptz not null,
       "expires_at" timestamptz not null,
@@ -28,7 +32,8 @@ export class Migration20261010013000 extends Migration {
       "updated_at" timestamptz not null default now(),
       "deleted_at" timestamptz null,
       constraint "native_seller_binding_validity"
-        check ("expires_at" > "approved_at"),
+        check ("expires_at" > "approved_at" and "approved_at" >= "proposed_at"
+          and "approved_by" <> "proposed_by"),
       constraint "native_seller_binding_market"
         check ("market_code" ~ '^[A-Z]{2}$'),
       constraint "native_seller_binding_currency"
