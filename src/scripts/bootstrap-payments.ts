@@ -1,3 +1,4 @@
+import { medusaJsonArray } from "../baobab/medusa/json-array"
 import type { ExecArgs } from "@medusajs/framework/types"
 import { ZURIBEANS_PAYMENT_POLICIES } from "../baobab/payments"
 import type PaymentBridgeModuleService from "../modules/payment-bridge/service"
@@ -15,8 +16,8 @@ export default async function bootstrapPayments({ container }: ExecArgs): Promis
         legal_seller_key: policy.legalSellerKey,
         currency_code: policy.currency,
         default_terms: policy.defaultTerms,
-        allowed_terms: [...policy.allowedTerms],
-        provider_bindings: policy.providers.map((provider) => ({ ...provider })),
+        allowed_terms: medusaJsonArray([...policy.allowedTerms]),
+        provider_bindings: medusaJsonArray(policy.providers.map((provider) => ({ ...provider }))),
         status: "ACTIVE",
       })
     }
