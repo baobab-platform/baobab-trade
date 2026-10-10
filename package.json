@@ -85,15 +85,15 @@
     "test:zb04": "vitest run tests/buyer-application-route.test.ts tests/buyer-application-staff-review.test.ts tests/buyer-kyb-evidence.test.ts tests/buyer-admission-decision.test.ts tests/buyer-erp-projection-request.test.ts tests/buyer-commercial-profile-consumer.test.ts tests/buyer-organisation-status-route.test.ts tests/buyer-invitation-route.test.ts tests/buyer-invitation-lifecycle.test.ts tests/zb04-certification.test.ts"
   },
   "dependencies": {
-    "@medusajs/auth-oidc": "2.20.1",
-    "@medusajs/framework": "2.20.1",
-    "@medusajs/medusa": "2.20.1",
-    "@medusajs/utils": "2.20.1",
+    "@medusajs/auth-oidc": "2.21.2",
+    "@medusajs/framework": "2.21.2",
+    "@medusajs/medusa": "2.21.2",
+    "@medusajs/utils": "2.21.2",
     "awilix": "8.0.1",
     "pg": "8.13.1"
   },
   "devDependencies": {
-    "@medusajs/admin-sdk": "2.20.1",
+    "@medusajs/admin-sdk": "2.21.2",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "20.17.10",
     "@typescript-eslint/eslint-plugin": "8.18.2",
@@ -106,7 +106,7 @@
     "prettier": "3.4.2",
     "ts-node": "10.9.2",
     "typescript": "5.7.2",
-    "vitest": "3.2.7",
+    "vitest": "5.0.3",
     "yaml": "^2.9.0"
   },
   "overrides": {
