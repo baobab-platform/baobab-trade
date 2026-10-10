@@ -25,7 +25,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   const regulatory = validated.data.regulatory_eligibility as RegulatoryEligibility
 
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
-  const existing = await b2b.listMarketProductEligibilitys(
+  const existing = await b2b.listMarketProductEligibilities(
     { product_id: productId, market_key: marketKey },
     { take: 1 },
   )
@@ -43,8 +43,8 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
 
   const row =
     existing.length > 0
-      ? await b2b.updateMarketProductEligibilitys(existing[0].id, payload)
-      : await b2b.createMarketProductEligibilitys(payload)
+      ? await b2b.updateMarketProductEligibilities(existing[0].id, payload)
+      : await b2b.createMarketProductEligibilities(payload)
 
   res.status(existing.length > 0 ? 200 : 201).json({
     market_product_eligibility: row,
@@ -63,7 +63,7 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   const filters: Record<string, string> = {}
   if (productId) filters.product_id = productId
   if (marketKey) filters.market_key = marketKey
-  const rows = await b2b.listMarketProductEligibilitys(filters, { take: 200 })
+  const rows = await b2b.listMarketProductEligibilities(filters, { take: 200 })
   res.status(200).json({
     market_product_eligibilities: rows.map((row) => ({
       ...row,
