@@ -17,12 +17,7 @@ export type RegulatoryEligibility =
   | "ERROR"
 
 export type ClassificationConfidence =
-  | "PROPOSED"
-  | "UNDER_REVIEW"
-  | "VERIFIED"
-  | "AUTHORITATIVE"
-  | "DISPUTED"
-  | "EXPIRED"
+  "PROPOSED" | "UNDER_REVIEW" | "VERIFIED" | "AUTHORITATIVE" | "DISPUTED" | "EXPIRED"
 
 /** Commercial assortment active in a market. */
 export const isAssortmentActive = (status: CommercialAssortmentStatus): boolean =>
