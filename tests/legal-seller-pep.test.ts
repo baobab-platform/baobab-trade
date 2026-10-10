@@ -44,13 +44,11 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe("LA-05C legal-seller PEP", () => {
   const setup = (overrides: Record<string, unknown> = {}, ready = true) => {
-    const place = vi.fn(
-      async (cmd: GovernedSellerOrderCommand): Promise<OrderSnapshot> => ({
-        ...cmd,
-        id: "order-record-01",
-        status: "PENDING",
-      }),
-    )
+    const place = vi.fn(async (cmd: GovernedSellerOrderCommand): Promise<OrderSnapshot> => ({
+      ...cmd,
+      id: "order-record-01",
+      status: "PENDING",
+    }))
     const native: OrderOrchestrationPort = {
       place,
       retrieve: vi.fn(async () => ({ ...command, id: "order-record-01", status: "PENDING" })),
