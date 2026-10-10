@@ -139,6 +139,35 @@ describe("LA-05C2 native Medusa checkout guard", () => {
     )
   })
 
+  it("denies an ACTIVE cart binding revoked while Payments readiness is pending", async () => {
+    const t = setup()
+    t.resolveForCart.mockResolvedValueOnce(cmd)
+    t.resolveForCart.mockRejectedValueOnce(new Error("LA-05C3 denied: revoked"))
+    await expect(assertNativeCartLegalSeller(cart, t.deps)).rejects.toThrow("revoked")
+    expect(t.assess).toHaveBeenCalledTimes(1)
+    expect(t.ready).toHaveBeenCalledTimes(1)
+    expect(t.resolveForCart).toHaveBeenCalledTimes(2)
+  })
+
+  it("denies seller, market, currency or context changed during provider wait", async () => {
+    for (const change of [
+      { legalSellerKey: "LE-OTHER" },
+      { marketCode: "UG" },
+      { currencyCode: "UGX" },
+      { legalContextId: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5abc" },
+      { organisationId: "org-other" },
+      { idempotencyKey: "a-different-operation" },
+    ]) {
+      const t = setup()
+      t.resolveForCart.mockResolvedValueOnce(cmd)
+      t.resolveForCart.mockResolvedValueOnce({ ...cmd, ...change })
+      await expect(assertNativeCartLegalSeller(cart, t.deps)).rejects.toThrow(
+        "cart binding changed or revoked",
+      )
+      expect(t.assess).toHaveBeenCalledTimes(1)
+    }
+  })
+
   it("refuses native checkout when independent seller/provider readiness denies", async () => {
     const t = setup()
     t.ready.mockRejectedValueOnce(new Error("PSP merchant not verified"))
