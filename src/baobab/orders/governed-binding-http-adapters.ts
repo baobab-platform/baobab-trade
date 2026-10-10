@@ -1,4 +1,7 @@
 import type { BindingAuthorityPorts, VerifiedActor, VerifiedEvidence } from "./governed-binding-service"
+type LegalAuthorityPort = BindingAuthorityPorts["legalAuthority"]
+type IamPort = BindingAuthorityPorts["iam"]
+type EvidencePort = BindingAuthorityPorts["evidence"]
 import type { GovernedBindingScope } from "./governed-binding-command-policy"
 import { HttpControlPlaneClient } from "../control-plane/client"
 import { ClientCredentialsWorkloadTokenProvider } from "../control-plane/workload-token"
@@ -7,7 +10,7 @@ import { ClientCredentialsWorkloadTokenProvider } from "../control-plane/workloa
  * CP reattestation using the already-integrated Trade workload credentials.
  * This is a context check, not an assertion that a LegalEntity has a mandate.
  */
-export class ControlPlaneBindingAuthority implements BindingAuthorityPorts["legalAuthority"] {
+export class ControlPlaneBindingAuthority implements LegalAuthorityPort {
   constructor(
     private readonly cp: HttpControlPlaneClient,
     private readonly workload: ClientCredentialsWorkloadTokenProvider,
@@ -36,7 +39,7 @@ export class ControlPlaneBindingAuthority implements BindingAuthorityPorts["lega
  * expiry, human assurance, tenancy and operation scope; never decode JWT locally.
  * Endpoint is a trusted internal service and must not be supplied by a browser.
  */
-export class HttpIamHumanVerifier implements BindingAuthorityPorts["iam"] {
+export class HttpIamHumanVerifier implements IamPort {
   constructor(private readonly endpoint: string, private readonly workloadToken: () => Promise<string>) {
     const u = new URL(endpoint)
     if (u.protocol !== "https:") throw new Error("LA-05C5 IAM verifier requires HTTPS")
@@ -63,7 +66,7 @@ export class HttpIamHumanVerifier implements BindingAuthorityPorts["iam"] {
 }
 
 /** Evidence verification is authoritative only if the server confirms scope and decision. */
-export class HttpBindingEvidenceVerifier implements BindingAuthorityPorts["evidence"] {
+export class HttpBindingEvidenceVerifier implements EvidencePort {
   constructor(private readonly endpoint: string, private readonly workloadToken: () => Promise<string>) {
     if (new URL(endpoint).protocol !== "https:") throw new Error("LA-05C5 evidence verifier requires HTTPS")
   }
