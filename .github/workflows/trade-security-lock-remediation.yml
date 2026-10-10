@@ -12,7 +12,7 @@ jobs:
   regenerate-compatible-lock:
     if: >-
       github.event.pull_request.head.repo.full_name == 'baobab-platform/baobab-trade' &&
-      github.event.pull_request.head.ref == 'fix/trade-medusa-compatible-security'
+      github.event.pull_request.head.ref == 'feat/trade-medusa-2-21-security-canary'
     runs-on: ubuntu-26.04
     steps:
       - name: Checkout internal remediation branch
@@ -28,7 +28,7 @@ jobs:
       - name: Regenerate only the compatible package-lock
         run: |
           npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          # Do not allow npm audit --force: preserve all pinned Medusa 2.20.1 APIs.
+          # Do not allow npm audit --force: preserve all pinned Medusa 2.21.2 APIs.
           npm audit fix --package-lock-only --ignore-scripts --no-fund || echo "::notice::Some upstream vulnerabilities still require manual review; no security gate is waived"
       - name: Confirm Medusa framework and direct APIs were not changed
         run: |
@@ -37,22 +37,24 @@ jobs:
           const pkg = JSON.parse(fs.readFileSync('package.json','utf8'))
           const lock = JSON.parse(fs.readFileSync('package-lock.json','utf8'))
           for (const name of ['@medusajs/auth-oidc','@medusajs/framework','@medusajs/medusa','@medusajs/utils']) {
-            if (pkg.dependencies[name] !== '2.20.1' ||
-                lock.packages[''].dependencies[name] !== '2.20.1') {
+            if (pkg.dependencies[name] !== '2.21.2' ||
+                lock.packages[''].dependencies[name] !== '2.21.2') {
               throw new Error('Unsafe Medusa API version change: '+name)
             }
           }
-          if (pkg.devDependencies['@medusajs/admin-sdk'] !== '2.20.1' ||
-              lock.packages[''].devDependencies['@medusajs/admin-sdk'] !== '2.20.1') {
+          if (pkg.devDependencies['@medusajs/admin-sdk'] !== '2.21.2' ||
+              lock.packages[''].devDependencies['@medusajs/admin-sdk'] !== '2.21.2') {
             throw new Error('Unsafe Medusa admin API version change')
           }
-          console.log('All five Medusa API packages still pinned to 2.20.1')
+          if (pkg.devDependencies.vitest !== '5.0.3' || lock.packages[''].devDependencies.vitest !== '5.0.3') { throw new Error('Vitest critical RCE mitigation missing') }
+          console.log('All Medusa APIs pinned to 2.21.2 and Vitest to 5.0.3')
           NODE
       - name: Run Medusa compatibility smoke checks
         run: |
           npm ci --ignore-scripts --no-fund
           npm run typecheck
           npm test
+          npm run build
       - name: Print remaining vulnerability count without weakening audit
         if: always()
         run: |
@@ -60,7 +62,7 @@ jobs:
           node -e "const a=require('/tmp/baobab-security-audit.json'); console.log('Unresolved production vulnerabilities:', JSON.stringify(a.metadata?.vulnerabilities||{}))"
       - name: Commit safe compatible lockfile
         env:
-          EXPECTED_BRANCH: fix/trade-medusa-compatible-security
+          EXPECTED_BRANCH: feat/trade-medusa-2-21-security-canary
         run: |
           git diff --check
           if git diff --quiet -- package-lock.json; then
