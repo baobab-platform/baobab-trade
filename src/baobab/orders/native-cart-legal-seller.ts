@@ -96,6 +96,22 @@ export async function assertNativeCartLegalSeller(
   )
   // Native provider readiness is independent of CP's legal responsibility.
   await deps.readiness.assertReadyForSeller(command, initial)
+  // LA-05C4: a local cart binding may be revoked, expire, or be replaced
+  // WHILE the provider is assessed. Re-read the server-owned row and fresh CP
+  // market attestation before the final CP mandate assessment.
+  const currentBinding = await deps.bindings.resolveForCart(identity)
+  const immutableSellerScope = [
+    "cartId", "salesChannelId", "regionId", "tenantId", "organisationId",
+    "legalContextId", "legalSellerKey", "marketCode", "marketKey",
+    "currencyCode", "legalActivity", "legalCapability", "orderReference",
+    "correlationId", "idempotencyKey",
+  ] as const
+  if (
+    !currentBinding ||
+    immutableSellerScope.some((field) => currentBinding[field] !== command[field])
+  ) {
+    throw new Error("Native legal seller denied: cart binding changed or revoked during readiness")
+  }
   // Do not commit using the pre-readiness authority (revocation race).
   const final = assertFreshSellerFact(
     await deps.cp.assess(request, await deps.tokens.getAccessToken(), command.correlationId),
