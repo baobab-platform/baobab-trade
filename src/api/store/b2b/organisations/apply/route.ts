@@ -122,7 +122,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
   const application = await b2b.createBuyerApplications({
     tenant_id: tenantId,
     applicant_customer_id: customerId,
-    applicant_principal_id: principalId,
+    applicant_principal_id: principalId ?? null,
     idempotency_key: idempotencyKey,
     request_hash: requestHash,
     ...input,
