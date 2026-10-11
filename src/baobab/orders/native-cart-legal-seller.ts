@@ -1,6 +1,10 @@
 import type { LegalActorAssessmentPort } from "../control-plane/legal-actor-assessment"
 import type { WorkloadTokenProvider } from "../control-plane/workload-token"
 import {
+  assertUnblockedDocumentaryScope,
+  type DocumentaryRestrictionPort,
+} from "../control-plane/documentary-restriction"
+import {
   assertFreshSellerFact,
   type GovernedSellerOrderCommand,
   type LegalSellerProviderReadiness,
@@ -34,6 +38,7 @@ export interface TrustedNativeSellerBindingResolver {
 export type NativeCartLegalSellerDependencies = {
   bindings: TrustedNativeSellerBindingResolver
   cp: LegalActorAssessmentPort
+  documentary: DocumentaryRestrictionPort
   tokens: WorkloadTokenProvider
   readiness: LegalSellerProviderReadiness
   now?: () => number
@@ -52,7 +57,7 @@ export async function assertNativeCartLegalSeller(
   if (!cart?.id || typeof cart.id !== "string") {
     throw new Error("Native legal seller denied: no canonical cart ID")
   }
-  if (!deps?.bindings || !deps.cp || !deps.tokens || !deps.readiness) {
+  if (!deps?.bindings || !deps.cp || !deps.documentary || !deps.tokens || !deps.readiness) {
     throw new Error("Native legal seller denied: required trusted dependencies unavailable")
   }
   const identity: NativeCartIdentity = {
@@ -94,7 +99,24 @@ export async function assertNativeCartLegalSeller(
     command,
     now(),
   )
-  // Native provider readiness is independent of CP's legal responsibility.
+  const restrictionRequest = {
+    context_id: command.legalContextId,
+    capability: command.legalCapability,
+    market: command.marketCode,
+    operation_reference: command.orderReference,
+  }
+  // CP can veto the exact Organisation+capability+market; the absence of a
+  // restriction is NOT a legal-actor or Payments/provider permission.
+  assertUnblockedDocumentaryScope(
+    await deps.documentary.assess(
+      restrictionRequest,
+      await deps.tokens.getAccessToken(),
+      command.correlationId,
+    ),
+    { ...restrictionRequest, organisation_id: command.organisationId },
+    now(),
+  )
+  // Native provider readiness is independent of BOTH CP authority checks.
   await deps.readiness.assertReadyForSeller(command, initial)
   // LA-05C4: a local cart binding may be revoked, expire, or be replaced
   // WHILE the provider is assessed. Re-read the server-owned row and fresh CP
@@ -135,6 +157,17 @@ export async function assertNativeCartLegalSeller(
   ) {
     throw new Error("Native legal seller denied: mandate changed before commit")
   }
+  // A scoped remediation may have been imposed during the Payments wait.
+  // Re-query CP immediately before Medusa's irreversible completeCart path.
+  assertUnblockedDocumentaryScope(
+    await deps.documentary.assess(
+      restrictionRequest,
+      await deps.tokens.getAccessToken(),
+      command.correlationId,
+    ),
+    { ...restrictionRequest, organisation_id: command.organisationId },
+    now(),
+  )
 }
 
 /**

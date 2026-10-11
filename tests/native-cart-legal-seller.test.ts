@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import type { LegalActorAssessmentPort } from "../src/baobab/control-plane/legal-actor-assessment"
+import type { DocumentaryRestrictionPort } from "../src/baobab/control-plane/documentary-restriction"
 import {
   assertNativeCartLegalSeller,
   enforceNativeCheckoutGate,
@@ -57,14 +58,27 @@ const setup = () => {
   const assess = vi.fn(async () => approved())
   const token = vi.fn(async () => "staging-workload-token")
   const ready = vi.fn(async () => undefined)
+  const documentary = vi.fn(async () => ({
+    context_id: cmd.legalContextId,
+    organisation_id: cmd.organisationId,
+    capability: cmd.legalCapability,
+    market: cmd.marketCode,
+    operation_reference: cmd.orderReference,
+    blocked: false,
+    authority_granted: false as const,
+    policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
+    evaluated_at: new Date(now).toISOString(),
+    expires_at: new Date(now + 1500).toISOString(),
+  }))
   const deps: NativeCartLegalSellerDependencies = {
     bindings: { resolveForCart },
     cp: { assess } as LegalActorAssessmentPort,
+    documentary: { assess: documentary } as DocumentaryRestrictionPort,
     tokens: { getAccessToken: token },
     readiness: { assertReadyForSeller: ready },
     now: () => now,
   }
-  return { deps, resolveForCart, assess, token, ready }
+  return { deps, resolveForCart, assess, documentary, token, ready }
 }
 
 describe("LA-05C2 native Medusa checkout guard", () => {
@@ -77,7 +91,8 @@ describe("LA-05C2 native Medusa checkout guard", () => {
       regionId: cart.region_id,
     })
     expect(t.assess).toHaveBeenCalledTimes(2)
-    expect(t.token).toHaveBeenCalledTimes(2)
+    expect(t.token).toHaveBeenCalledTimes(4)
+    expect(t.documentary).toHaveBeenCalledTimes(2)
     expect(t.ready).toHaveBeenCalledTimes(1)
     expect(t.assess).toHaveBeenCalledWith(
       {
@@ -110,6 +125,56 @@ describe("LA-05C2 native Medusa checkout guard", () => {
       expect(t.assess).not.toHaveBeenCalled()
       expect(t.ready).not.toHaveBeenCalled()
     }
+  })
+
+  it("denies negative remediation holds and a hold imposed while Payments is pending", async () => {
+    const held = setup()
+    held.documentary.mockResolvedValueOnce({
+      context_id: cmd.legalContextId,
+      organisation_id: cmd.organisationId,
+      capability: cmd.legalCapability,
+      market: cmd.marketCode,
+      operation_reference: cmd.orderReference,
+      blocked: true,
+      authority_granted: false as const,
+      policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
+      evaluated_at: new Date(now).toISOString(),
+      expires_at: new Date(now + 1500).toISOString(),
+    })
+    await expect(assertNativeCartLegalSeller(cart, held.deps)).rejects.toThrow(
+      "Documentary restriction denied",
+    )
+    expect(held.ready).not.toHaveBeenCalled()
+    const revokedMidflight = setup()
+    revokedMidflight.documentary.mockResolvedValueOnce({
+      context_id: cmd.legalContextId,
+      organisation_id: cmd.organisationId,
+      capability: cmd.legalCapability,
+      market: cmd.marketCode,
+      operation_reference: cmd.orderReference,
+      blocked: false,
+      authority_granted: false as const,
+      policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
+      evaluated_at: new Date(now).toISOString(),
+      expires_at: new Date(now + 1500).toISOString(),
+    })
+    revokedMidflight.documentary.mockResolvedValueOnce({
+      context_id: cmd.legalContextId,
+      organisation_id: cmd.organisationId,
+      capability: cmd.legalCapability,
+      market: cmd.marketCode,
+      operation_reference: cmd.orderReference,
+      blocked: true,
+      authority_granted: false as const,
+      policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
+      evaluated_at: new Date(now).toISOString(),
+      expires_at: new Date(now + 1500).toISOString(),
+    })
+    await expect(assertNativeCartLegalSeller(cart, revokedMidflight.deps)).rejects.toThrow(
+      "Documentary restriction denied",
+    )
+    expect(revokedMidflight.ready).toHaveBeenCalledTimes(1)
+    expect(revokedMidflight.documentary).toHaveBeenCalledTimes(2)
   })
 
   it("denies revocation or mandate replacement occurring during provider readiness", async () => {
