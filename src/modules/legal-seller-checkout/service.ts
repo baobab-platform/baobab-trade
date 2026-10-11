@@ -2,6 +2,7 @@ import { MedusaService } from "@medusajs/framework/utils"
 import { getBaobabTradeEnvironment } from "../../baobab/config/environment"
 import { HttpControlPlaneClient, type ControlPlaneClient } from "../../baobab/control-plane/client"
 import { HttpLegalActorAssessmentClient } from "../../baobab/control-plane/legal-actor-assessment"
+import { HttpDocumentaryRestrictionClient } from "../../baobab/control-plane/documentary-restriction"
 import { ClientCredentialsWorkloadTokenProvider } from "../../baobab/control-plane/workload-token"
 import type {
   NativeCartIdentity,
@@ -54,6 +55,11 @@ class NativeSellerCheckoutModuleService
   })
 
   readonly cp = new HttpLegalActorAssessmentClient(requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL"))
+
+  // Fail closed if the independent, client-scoped documentary veto is not configured.
+  readonly documentary = new HttpDocumentaryRestrictionClient(
+    requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL"),
+  )
 
   readonly readiness = new HttpPaymentsMerchantReadinessAdapter({
     url: requireEnv("BAOBAB_PAYMENTS_SELLER_READINESS_URL"),
