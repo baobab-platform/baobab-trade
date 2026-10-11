@@ -1,0 +1,52 @@
+name: Format LA-05C6 guarded checkout source (temporary)
+on:
+  pull_request:
+    paths:
+      - src/baobab/control-plane/documentary-restriction.ts
+      - src/baobab/orders/native-cart-legal-seller.ts
+      - src/modules/legal-seller-checkout/service.ts
+      - tests/documentary-restriction-checkout.test.ts
+      - tests/native-cart-legal-seller.test.ts
+      - .github/workflows/la05c6-formatter.yml
+permissions:
+  contents: write
+jobs:
+  prettier:
+    if: >-
+      github.event.pull_request.head.repo.full_name == 'baobab-platform/baobab-trade' &&
+      github.event.pull_request.head.ref == 'feat/la05c6-documentary-restriction-checkout-gate'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts --no-fund
+      - name: Apply canonical formatting to only LA-05C6 source files
+        run: |
+          npx prettier --write \
+            src/baobab/control-plane/documentary-restriction.ts \
+            src/baobab/orders/native-cart-legal-seller.ts \
+            src/modules/legal-seller-checkout/service.ts \
+            tests/documentary-restriction-checkout.test.ts \
+            tests/native-cart-legal-seller.test.ts
+      - name: Commit only formatting changes to this reviewed branch
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet -- src tests; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- \
+            src/baobab/control-plane/documentary-restriction.ts \
+            src/baobab/orders/native-cart-legal-seller.ts \
+            src/modules/legal-seller-checkout/service.ts \
+            tests/documentary-restriction-checkout.test.ts \
+            tests/native-cart-legal-seller.test.ts
+          git commit -m 'style(la-05c6): apply canonical Prettier formatting'
+          git push origin 'HEAD:refs/heads/feat/la05c6-documentary-restriction-checkout-gate'
