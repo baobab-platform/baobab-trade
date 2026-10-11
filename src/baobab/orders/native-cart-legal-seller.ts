@@ -180,11 +180,18 @@ export async function enforceNativeCheckoutGate(
   enabled: boolean,
   production: boolean,
   resolveDependencies: () => NativeCartLegalSellerDependencies,
+  staging = false,
 ): Promise<void> {
   // An unset feature flag is NOT a licence to use Medusa's default
   // seller/issuer path in production. No provider is certified yet, so
   // native completion remains DENIED even when the gate is "disabled".
   if (production) throw new Error("Native legal seller gate not production-certified")
+  // ADR-BCP-027 Package 4: missing or disabled PEP must never reopen Medusa's
+  // legacy seller default in protected staging. Development/integration
+  // synthetic fixtures may still use the explicit off path.
+  if (staging && !enabled) {
+    throw new Error("Native legal seller denied: staging requires governed seller gate")
+  }
   if (!enabled) return
   let deps: NativeCartLegalSellerDependencies
   try {
