@@ -181,8 +181,11 @@ export async function enforceNativeCheckoutGate(
   production: boolean,
   resolveDependencies: () => NativeCartLegalSellerDependencies,
 ): Promise<void> {
-  if (!enabled) return
+  // An unset feature flag is NOT a licence to use Medusa's default
+  // seller/issuer path in production. No provider is certified yet, so
+  // native completion remains DENIED even when the gate is "disabled".
   if (production) throw new Error("Native legal seller gate not production-certified")
+  if (!enabled) return
   let deps: NativeCartLegalSellerDependencies
   try {
     deps = resolveDependencies()
