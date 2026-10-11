@@ -50,7 +50,8 @@ export function assertUnblockedDocumentaryScope(
   const evaluated = Date.parse(result.evaluated_at)
   const expires = Date.parse(result.expires_at)
   if (
-    !Number.isFinite(evaluated) || !Number.isFinite(expires) ||
+    !Number.isFinite(evaluated) ||
+    !Number.isFinite(expires) ||
     evaluated > nowMs + 1000 ||
     evaluated < nowMs - 3000 ||
     expires <= nowMs ||
@@ -61,11 +62,11 @@ export function assertUnblockedDocumentaryScope(
 }
 
 export class HttpDocumentaryRestrictionClient implements DocumentaryRestrictionPort {
-  constructor(private readonly baseUrl: string, private readonly timeoutMs = 3000) {
-    if (
-      !/^https:\/\//.test(baseUrl) &&
-      !/^http:\/\/localhost(?::\d+)?(?:\/|$)/.test(baseUrl)
-    ) {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly timeoutMs = 3000,
+  ) {
+    if (!/^https:\/\//.test(baseUrl) && !/^http:\/\/localhost(?::\d+)?(?:\/|$)/.test(baseUrl)) {
       throw new Error("Documentary restriction client requires HTTPS")
     }
   }
@@ -76,7 +77,8 @@ export class HttpDocumentaryRestrictionClient implements DocumentaryRestrictionP
     correlationId: string,
   ): Promise<DocumentaryRestrictionResponse> {
     if (
-      !workloadAccessToken.trim() || !request.context_id.trim() ||
+      !workloadAccessToken.trim() ||
+      !request.context_id.trim() ||
       !/^[a-z][a-z0-9._-]{2,199}$/.test(request.capability) ||
       !/^[A-Z]{2}$/.test(request.market) ||
       !request.operation_reference.trim() ||

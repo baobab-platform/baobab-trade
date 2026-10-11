@@ -109,7 +109,9 @@ export async function assertNativeCartLegalSeller(
   // restriction is NOT a legal-actor or Payments/provider permission.
   assertUnblockedDocumentaryScope(
     await deps.documentary.assess(
-      restrictionRequest, await deps.tokens.getAccessToken(), command.correlationId,
+      restrictionRequest,
+      await deps.tokens.getAccessToken(),
+      command.correlationId,
     ),
     { ...restrictionRequest, organisation_id: command.organisationId },
     now(),
@@ -159,7 +161,9 @@ export async function assertNativeCartLegalSeller(
   // Re-query CP immediately before Medusa's irreversible completeCart path.
   assertUnblockedDocumentaryScope(
     await deps.documentary.assess(
-      restrictionRequest, await deps.tokens.getAccessToken(), command.correlationId,
+      restrictionRequest,
+      await deps.tokens.getAccessToken(),
+      command.correlationId,
     ),
     { ...restrictionRequest, organisation_id: command.organisationId },
     now(),

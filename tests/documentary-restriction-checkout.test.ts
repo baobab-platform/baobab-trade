@@ -14,7 +14,9 @@ const request: DocumentaryRestrictionRequest = {
 }
 const expected = { ...request, organisation_id: "0190a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6c" }
 const fresh = () => ({
-  ...expected, blocked: false, authority_granted: false,
+  ...expected,
+  blocked: false,
+  authority_granted: false,
   policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
   evaluated_at: new Date(now).toISOString(),
   expires_at: new Date(now + 1500).toISOString(),
@@ -26,17 +28,21 @@ describe("PEO-02T native Trade negative restriction consumer", () => {
   it("accepts only an exact current non-authorizing scope with no active restriction", () => {
     expect(() => assertUnblockedDocumentaryScope(fresh(), expected, now)).not.toThrow()
     for (const mutation of [
-      { blocked: true }, { authority_granted: true },
-      { organisation_id: "other-org" }, { context_id: "other-context" },
-      { capability: "payments.capture" }, { market: "UG" },
+      { blocked: true },
+      { authority_granted: true },
+      { organisation_id: "other-org" },
+      { context_id: "other-context" },
+      { capability: "payments.capture" },
+      { market: "UG" },
       { operation_reference: "another-order" },
       { policy_reference: "untrusted" },
       { expires_at: new Date(now).toISOString() },
       { expires_at: new Date(now + 30_000).toISOString() },
       { evaluated_at: new Date(now - 30_000).toISOString() },
     ]) {
-      expect(() => assertUnblockedDocumentaryScope({ ...fresh(), ...mutation }, expected, now))
-        .toThrow("Documentary restriction denied")
+      expect(() =>
+        assertUnblockedDocumentaryScope({ ...fresh(), ...mutation }, expected, now),
+      ).toThrow("Documentary restriction denied")
     }
   })
 
@@ -49,13 +55,17 @@ describe("PEO-02T native Trade negative restriction consumer", () => {
     expect(url).toBe("https://cp.example/internal/documentary/v1/restrictions/assess")
     expect(init.method).toBe("POST")
     expect(init.headers).toMatchObject({
-      authorization: "Bearer workload-token", "cache-control": "no-store",
+      authorization: "Bearer workload-token",
+      "cache-control": "no-store",
     })
     expect(JSON.parse(init.body as string)).toEqual(request)
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503 })))
-    await expect(client.assess(request, "workload-token", "corr-1"))
-      .rejects.toThrow("current CP authority unavailable")
-    expect(() => new HttpDocumentaryRestrictionClient("http://cp.example"))
-      .toThrow("HTTPS")
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 503 })),
+    )
+    await expect(client.assess(request, "workload-token", "corr-1")).rejects.toThrow(
+      "current CP authority unavailable",
+    )
+    expect(() => new HttpDocumentaryRestrictionClient("http://cp.example")).toThrow("HTTPS")
   })
 })

@@ -59,9 +59,12 @@ const setup = () => {
   const token = vi.fn(async () => "staging-workload-token")
   const ready = vi.fn(async () => undefined)
   const documentary = vi.fn(async () => ({
-    context_id: cmd.legalContextId, organisation_id: cmd.organisationId,
-    capability: cmd.legalCapability, market: cmd.marketCode,
-    operation_reference: cmd.orderReference, blocked: false,
+    context_id: cmd.legalContextId,
+    organisation_id: cmd.organisationId,
+    capability: cmd.legalCapability,
+    market: cmd.marketCode,
+    operation_reference: cmd.orderReference,
+    blocked: false,
     authority_granted: false as const,
     policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
     evaluated_at: new Date(now).toISOString(),
@@ -127,9 +130,12 @@ describe("LA-05C2 native Medusa checkout guard", () => {
   it("denies negative remediation holds and a hold imposed while Payments is pending", async () => {
     const held = setup()
     held.documentary.mockResolvedValueOnce({
-      context_id: cmd.legalContextId, organisation_id: cmd.organisationId,
-      capability: cmd.legalCapability, market: cmd.marketCode,
-      operation_reference: cmd.orderReference, blocked: true,
+      context_id: cmd.legalContextId,
+      organisation_id: cmd.organisationId,
+      capability: cmd.legalCapability,
+      market: cmd.marketCode,
+      operation_reference: cmd.orderReference,
+      blocked: true,
       authority_granted: false as const,
       policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
       evaluated_at: new Date(now).toISOString(),
@@ -141,18 +147,24 @@ describe("LA-05C2 native Medusa checkout guard", () => {
     expect(held.ready).not.toHaveBeenCalled()
     const revokedMidflight = setup()
     revokedMidflight.documentary.mockResolvedValueOnce({
-      context_id: cmd.legalContextId, organisation_id: cmd.organisationId,
-      capability: cmd.legalCapability, market: cmd.marketCode,
-      operation_reference: cmd.orderReference, blocked: false,
+      context_id: cmd.legalContextId,
+      organisation_id: cmd.organisationId,
+      capability: cmd.legalCapability,
+      market: cmd.marketCode,
+      operation_reference: cmd.orderReference,
+      blocked: false,
       authority_granted: false as const,
       policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
       evaluated_at: new Date(now).toISOString(),
       expires_at: new Date(now + 1500).toISOString(),
     })
     revokedMidflight.documentary.mockResolvedValueOnce({
-      context_id: cmd.legalContextId, organisation_id: cmd.organisationId,
-      capability: cmd.legalCapability, market: cmd.marketCode,
-      operation_reference: cmd.orderReference, blocked: true,
+      context_id: cmd.legalContextId,
+      organisation_id: cmd.organisationId,
+      capability: cmd.legalCapability,
+      market: cmd.marketCode,
+      operation_reference: cmd.orderReference,
+      blocked: true,
       authority_granted: false as const,
       policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
       evaluated_at: new Date(now).toISOString(),
