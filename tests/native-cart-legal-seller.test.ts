@@ -247,6 +247,12 @@ describe("LA-05C2 native Medusa checkout guard", () => {
       throw new Error("no binding")
     }
     await expect(enforceNativeCheckoutGate(cart, false, false, missing)).resolves.toBeUndefined()
+    await expect(enforceNativeCheckoutGate(cart, false, false, missing, true)).rejects.toThrow(
+      "staging requires governed seller gate",
+    )
+    await expect(enforceNativeCheckoutGate(cart, true, false, missing, true)).rejects.toThrow(
+      "trusted dependency not registered",
+    )
     // Production is fail-closed EVEN when the rollout flag is missing/false:
     // a disabled gate must not silently restore Medusa's ungoverned issuer.
     await expect(enforceNativeCheckoutGate(cart, false, true, missing)).rejects.toThrow(
