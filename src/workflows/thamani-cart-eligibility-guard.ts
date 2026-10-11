@@ -139,7 +139,9 @@ completeCartWorkflow.hooks.validate(async ({ cart }, { container }) => {
   await enforceNativeCheckoutGate(
     cart as NativeCheckoutCart,
     process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD === "true",
-    process.env.NODE_ENV === "production",
+    process.env.NODE_ENV === "production" ||
+      process.env.BAOBAB_ENVIRONMENT === "production" ||
+      process.env.BAOBAB_DEPLOYMENT_ENV === "production",
     () => container.resolve<NativeCartLegalSellerDependencies>(NATIVE_SELLER_DEPENDENCY_KEY),
   )
 })
