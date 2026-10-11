@@ -143,5 +143,7 @@ completeCartWorkflow.hooks.validate(async ({ cart }, { container }) => {
       process.env.BAOBAB_ENVIRONMENT === "production" ||
       process.env.BAOBAB_DEPLOYMENT_ENV === "production",
     () => container.resolve<NativeCartLegalSellerDependencies>(NATIVE_SELLER_DEPENDENCY_KEY),
+    process.env.BAOBAB_ENVIRONMENT === "staging" ||
+      process.env.BAOBAB_DEPLOYMENT_ENV === "staging",
   )
 })
