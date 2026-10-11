@@ -247,6 +247,11 @@ describe("LA-05C2 native Medusa checkout guard", () => {
       throw new Error("no binding")
     }
     await expect(enforceNativeCheckoutGate(cart, false, false, missing)).resolves.toBeUndefined()
+    // Production is fail-closed EVEN when the rollout flag is missing/false:
+    // a disabled gate must not silently restore Medusa's ungoverned issuer.
+    await expect(enforceNativeCheckoutGate(cart, false, true, missing)).rejects.toThrow(
+      "not production-certified",
+    )
     await expect(enforceNativeCheckoutGate(cart, true, true, missing)).rejects.toThrow(
       "not production-certified",
     )
