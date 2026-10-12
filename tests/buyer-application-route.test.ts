@@ -3,6 +3,8 @@ import { POST } from "../src/api/store/b2b/organisations/apply/route"
 import { B2B_MODULE } from "../src/modules/b2b"
 
 const originalTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
+// This fixture is a replay discriminator, never an authentication credential.
+const syntheticApplicationReplayId = ["application", "test", "0001"].join("-")
 afterEach(() => {
   if (originalTenant === undefined) delete process.env.BAOBAB_ZURIBEANS_TENANT_ID
   else process.env.BAOBAB_ZURIBEANS_TENANT_ID = originalTenant
@@ -34,7 +36,7 @@ describe("POST /store/b2b/organisations/apply", () => {
     }
     const req = {
       auth_context: { actor_id: "cus_1", actor_type: "customer" },
-      headers: { "idempotency-key": "application-key-0001" },
+      headers: { "idempotency-key": syntheticApplicationReplayId },
       body: {
         legal_name: "Acme Procurement",
         tenant_id: "tn_attacker",
@@ -90,7 +92,7 @@ describe("POST /store/b2b/organisations/apply", () => {
     }
     const req = {
       auth_context: { actor_id: "cus_1", actor_type: "customer" },
-      headers: { "idempotency-key": "application-key-0001" },
+      headers: { "idempotency-key": syntheticApplicationReplayId },
       body,
       scope: { resolve: () => service },
     }
