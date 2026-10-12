@@ -57,8 +57,9 @@ export function resolveNativeCheckoutEnvironment(values: {
   baobab?: string
   deployment?: string
 }): { production: boolean; staging: boolean } {
-  const declared = [values.node, values.baobab, values.deployment]
-    .filter((value): value is string => typeof value === "string" && value.length > 0)
+  const declared = [values.node, values.baobab, values.deployment].filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  )
   const recognised = new Set(["development", "test", "integration", "staging", "production"])
   const production =
     declared.length === 0 ||
