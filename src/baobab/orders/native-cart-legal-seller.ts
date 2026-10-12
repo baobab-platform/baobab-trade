@@ -72,7 +72,6 @@ export function resolveNativeCheckoutEnvironment(values: {
   return { production, staging: !production && declared.includes("staging") }
 }
 
-
 /**
  * Called by the REAL completeCartWorkflow validate hook, immediately before
  * Medusa's commit path. It cannot create an order or grant provider authority.
