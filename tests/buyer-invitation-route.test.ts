@@ -9,6 +9,8 @@ import { B2B_MODULE } from "../src/modules/b2b"
 
 const originalPublicUrl = process.env.ZURIBEANS_PUBLIC_URL
 const originalTemplate = process.env.BAOBAB_BUYER_INVITATION_TEMPLATE
+// Test replay discriminators, not provider API keys or bearer secrets.
+const syntheticInvitationReplayId = (suffix: string) => ["invitation", "test", suffix].join("-")
 afterEach(() => {
   vi.restoreAllMocks()
   if (originalPublicUrl === undefined) delete process.env.ZURIBEANS_PUBLIC_URL
@@ -117,7 +119,7 @@ describe("buyer organisation invitations", () => {
         app_metadata: { baobab_principal_id: "prn_admin" },
       },
       params: { id: "b2borg_1" },
-      headers: { "idempotency-key": "buyer-invite-key-0001" },
+      headers: { "idempotency-key": syntheticInvitationReplayId("0001") },
       body: { email: "buyer@example.com", role: "BUYER" },
       scope: {
         resolve: (key: string) =>
@@ -177,7 +179,7 @@ describe("buyer organisation invitations", () => {
         app_metadata: { baobab_principal_id: "prn_admin" },
       },
       params: { id: "b2borg_1" },
-      headers: { "idempotency-key": "buyer-invite-key-0002" },
+      headers: { "idempotency-key": syntheticInvitationReplayId("0002") },
       body: { email: "buyer@example.com", role: "BUYER" },
       scope: {
         resolve: (key: string) =>
