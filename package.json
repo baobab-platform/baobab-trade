@@ -90,7 +90,7 @@
     "@medusajs/medusa": "2.21.2",
     "@medusajs/utils": "2.21.2",
     "awilix": "13.0.5",
-    "pg": "8.13.1"
+    "pg": "8.23.1"
   },
   "devDependencies": {
     "@medusajs/admin-sdk": "2.21.2",
