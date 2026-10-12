@@ -87,6 +87,8 @@ describe("LA-05C8 native checkout deployment authority", () => {
     const unknown = [
       {},
       { node: "development", baobab: "preview" },
+      { node: "development", baobab: "test" },
+      { node: "integration", deployment: "development" },
       { node: "testing" },
       { node: "test", deployment: "production" },
       { node: "integration", baobab: "PRODUCTION" },
