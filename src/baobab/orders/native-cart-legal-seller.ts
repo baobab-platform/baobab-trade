@@ -47,6 +47,32 @@ export type NativeCartLegalSellerDependencies = {
 export const NATIVE_SELLER_DEPENDENCY_KEY = "baobab_native_seller_checkout_dependencies"
 
 /**
+ * LA-05C8: explicit local modes alone may omit a protected checkout PEP.
+ * An unrecognised, contradictory or absent deployment profile is never
+ * evidence of a development sandbox. Production/unknown remains CLOSED;
+ * staging may proceed only through the full trusted seller/PSP assessment.
+ */
+export function resolveNativeCheckoutEnvironment(values: {
+  node?: string
+  baobab?: string
+  deployment?: string
+}): { production: boolean; staging: boolean } {
+  const declared = [values.node, values.baobab, values.deployment].filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  )
+  const recognised = new Set(["development", "test", "integration", "staging", "production"])
+  const local = new Set(["development", "test", "integration"])
+  const contradictoryLocal =
+    declared.every((value) => local.has(value)) && new Set(declared).size > 1
+  const production =
+    declared.length === 0 ||
+    declared.includes("production") ||
+    contradictoryLocal ||
+    declared.some((value) => !recognised.has(value))
+  return { production, staging: !production && declared.includes("staging") }
+}
+
+/**
  * Called by the REAL completeCartWorkflow validate hook, immediately before
  * Medusa's commit path. It cannot create an order or grant provider authority.
  */

@@ -43,6 +43,7 @@ import type {
 import { Modules } from "@medusajs/framework/utils"
 import {
   enforceNativeCheckoutGate,
+  resolveNativeCheckoutEnvironment,
   NATIVE_SELLER_DEPENDENCY_KEY,
   type NativeCartLegalSellerDependencies,
   type NativeCheckoutCart,
@@ -136,15 +137,16 @@ completeCartWorkflow.hooks.validate(async ({ cart }, { container }) => {
     (cart as { items?: GuardedItem[] }).items,
     container,
   )
+  const runtime = resolveNativeCheckoutEnvironment({
+    node: process.env.NODE_ENV,
+    baobab: process.env.BAOBAB_ENVIRONMENT,
+    deployment: process.env.BAOBAB_DEPLOYMENT_ENV,
+  })
   await enforceNativeCheckoutGate(
     cart as NativeCheckoutCart,
     process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD === "true",
-    process.env.NODE_ENV === "production" ||
-      process.env.BAOBAB_ENVIRONMENT === "production" ||
-      process.env.BAOBAB_DEPLOYMENT_ENV === "production",
+    runtime.production,
     () => container.resolve<NativeCartLegalSellerDependencies>(NATIVE_SELLER_DEPENDENCY_KEY),
-    process.env.NODE_ENV === "staging" ||
-      process.env.BAOBAB_ENVIRONMENT === "staging" ||
-      process.env.BAOBAB_DEPLOYMENT_ENV === "staging",
+    runtime.staging,
   )
 })

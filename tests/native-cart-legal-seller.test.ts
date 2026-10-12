@@ -4,6 +4,7 @@ import type { DocumentaryRestrictionPort } from "../src/baobab/control-plane/doc
 import {
   assertNativeCartLegalSeller,
   enforceNativeCheckoutGate,
+  resolveNativeCheckoutEnvironment,
   type NativeCartLegalSellerDependencies,
 } from "../src/baobab/orders/native-cart-legal-seller"
 import type { GovernedSellerOrderCommand } from "../src/baobab/orders/governed-legal-seller"
@@ -80,6 +81,47 @@ const setup = () => {
   }
   return { deps, resolveForCart, assess, documentary, token, ready }
 }
+
+describe("LA-05C8 native checkout deployment authority", () => {
+  it("treats missing, unknown and contradictory runtime profiles as protected", async () => {
+    const unknown = [
+      {},
+      { node: "development", baobab: "preview" },
+      { node: "development", baobab: "test" },
+      { node: "integration", deployment: "development" },
+      { node: "testing" },
+      { node: "test", deployment: "production" },
+      { node: "integration", baobab: "PRODUCTION" },
+    ]
+    const missing = () => {
+      throw new Error("no trusted provider")
+    }
+    for (const candidate of unknown) {
+      const state = resolveNativeCheckoutEnvironment(candidate)
+      expect(state).toEqual({ production: true, staging: false })
+      await expect(
+        enforceNativeCheckoutGate(cart, false, state.production, missing, state.staging),
+      ).rejects.toThrow("not production-certified")
+    }
+  })
+
+  it("requires full seller gate for staging and retains local synthetic test exemptions", async () => {
+    for (const candidate of [
+      { node: "development", deployment: "staging" },
+      { node: "test", baobab: "staging" },
+    ]) {
+      const mode = resolveNativeCheckoutEnvironment(candidate)
+      expect(mode).toEqual({ production: false, staging: true })
+      await expect(
+        enforceNativeCheckoutGate(cart, false, mode.production, () => setup().deps, mode.staging),
+      ).rejects.toThrow("staging requires governed seller gate")
+    }
+    for (const local of ["development", "test", "integration"]) {
+      const mode = resolveNativeCheckoutEnvironment({ node: local, deployment: local })
+      expect(mode).toEqual({ production: false, staging: false })
+    }
+  })
+})
 
 describe("LA-05C2 native Medusa checkout guard", () => {
   it("authorizes only a trusted cart-bound operation and rechecks after provider readiness", async () => {
