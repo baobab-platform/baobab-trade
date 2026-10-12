@@ -61,9 +61,13 @@ export function resolveNativeCheckoutEnvironment(values: {
     (value): value is string => typeof value === "string" && value.length > 0,
   )
   const recognised = new Set(["development", "test", "integration", "staging", "production"])
+  const local = new Set(["development", "test", "integration"])
+  const contradictoryLocal =
+    declared.every((value) => local.has(value)) && new Set(declared).size > 1
   const production =
     declared.length === 0 ||
     declared.includes("production") ||
+    contradictoryLocal ||
     declared.some((value) => !recognised.has(value))
   return { production, staging: !production && declared.includes("staging") }
 }
