@@ -1,3 +1,8 @@
+import {
+  documentaryRequestSchema,
+  documentaryResponseSchema,
+} from "../contracts/authority-validation"
+
 /** PEO-02T / LA-05C6: CP returns a current NEGATIVE veto, never a grant. */
 export type DocumentaryRestrictionRequest = {
   context_id: string
@@ -28,7 +33,7 @@ export function assertUnblockedDocumentaryScope(
   expected: DocumentaryRestrictionRequest & { organisation_id: string },
   nowMs: number,
 ): void {
-  if (!raw || typeof raw !== "object") {
+  if (!documentaryResponseSchema(raw)) {
     throw new Error("Documentary restriction denied: missing CP decision")
   }
   const result = raw as Record<string, unknown>
@@ -77,6 +82,7 @@ export class HttpDocumentaryRestrictionClient implements DocumentaryRestrictionP
     correlationId: string,
   ): Promise<DocumentaryRestrictionResponse> {
     if (
+      !documentaryRequestSchema(request) ||
       !workloadAccessToken.trim() ||
       !request.context_id.trim() ||
       !/^[a-z][a-z0-9._-]{2,199}$/.test(request.capability) ||
@@ -90,6 +96,7 @@ export class HttpDocumentaryRestrictionClient implements DocumentaryRestrictionP
       `${this.baseUrl.replace(/\/$/, "")}/internal/documentary/v1/restrictions/assess`,
       {
         method: "POST",
+        redirect: "error",
         headers: {
           authorization: `Bearer ${workloadAccessToken}`,
           "content-type": "application/json",
@@ -106,7 +113,7 @@ export class HttpDocumentaryRestrictionClient implements DocumentaryRestrictionP
     const payload: unknown = await response.json()
     // Caller still checks the exact Organisation binding and lease against
     // the server-owned cart row, immediately before native completion.
-    if (!payload || typeof payload !== "object") {
+    if (!documentaryResponseSchema(payload)) {
       throw new Error("Documentary restriction denied: invalid CP response")
     }
     return payload as DocumentaryRestrictionResponse

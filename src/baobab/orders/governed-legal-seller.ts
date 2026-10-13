@@ -4,6 +4,7 @@ import type {
   OrderSnapshot,
 } from "../orders/orchestration-port"
 import type { WorkloadTokenProvider } from "../control-plane/workload-token"
+import { isLegalActorDecision } from "../control-plane/legal-actor-assessment"
 import type {
   LegalActorAssessmentPort,
   LegalActorDecision,
@@ -117,7 +118,14 @@ export function assertFreshSellerFact(
 ): LegalSellerEvidence {
   const resolution = fact?.legal_actor_resolution
   if (
-    !fact ||
+    !isLegalActorDecision(fact, {
+      context_id: command.legalContextId,
+      operation_reference: command.orderReference,
+      role: "SELLER_OF_RECORD",
+      activity: command.legalActivity,
+      market: command.marketCode,
+      capability: command.legalCapability,
+    }) ||
     fact.context_id !== command.legalContextId ||
     fact.operation_reference !== command.orderReference ||
     fact.provider_permissions_granted !== false ||

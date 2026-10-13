@@ -20,8 +20,11 @@ COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev --ignore-scripts \
   && npm cache clean --force \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
-COPY --chown=node:node --from=build /app/.medusa ./.medusa
-COPY --chown=node:node medusa-config.ts ./medusa-config.ts
+# Medusa starts from the standalone compiled server root, not source TS.
+# Loading the validator here proves JSON assets and production dependencies
+# survive the image copy; a build alone would not catch an empty runtime.
+COPY --chown=node:node --from=build /app/.medusa/server ./
+RUN node -e "require('./src/baobab/contracts/authority-validation.js')"
 USER node
 EXPOSE 9000
 # Medusa's built-in liveness route; the runtime image has node but no curl.

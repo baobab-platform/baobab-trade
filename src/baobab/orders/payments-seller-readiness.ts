@@ -1,3 +1,8 @@
+import {
+  merchantReadinessRequestSchema,
+  merchantReadinessResponseSchema,
+} from "../contracts/authority-validation"
+
 import type {
   GovernedSellerOrderCommand,
   LegalSellerEvidence,
@@ -6,7 +11,7 @@ import type {
 import type { WorkloadTokenProvider } from "../control-plane/workload-token"
 
 /**
- * LA-05C3 candidate Payments-side contract. This adapter MUST fail closed
+ * P0-04A: pinned Shared LA-05C3 Payments merchant-readiness contract. This adapter MUST fail closed
  * until Payments publishes an authenticated, certified live implementation.
  * Neither Trade nor CP can self-certify PSP/merchant routing eligibility.
  */
@@ -36,7 +41,7 @@ export function assertCurrentPaymentsReadiness(
   expected: PaymentsReadinessRequest,
   now: number,
 ): void {
-  if (!input || typeof input !== "object") {
+  if (!merchantReadinessResponseSchema(input)) {
     throw new Error("Payments readiness denied: missing decision")
   }
   const result = input as Record<string, unknown>
@@ -114,10 +119,14 @@ export class HttpPaymentsMerchantReadinessAdapter implements LegalSellerProvider
       operation_reference: command.orderReference,
       mandate_id: evidence.mandateId,
     }
+    if (!merchantReadinessRequestSchema(request)) {
+      throw new Error("Payments readiness denied: invalid canonical request")
+    }
     const token = await this.config.tokens.getAccessToken()
     if (!nonempty(token)) throw new Error("Payments readiness denied: no workload credential")
     const response = await fetch(this.url, {
       method: "POST",
+      redirect: "error",
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",

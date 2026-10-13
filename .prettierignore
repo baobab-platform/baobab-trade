@@ -1,0 +1,3 @@
+# Immutable upstream schemas are byte-identical to the Shared Git blobs.
+# Their integrity is checked by the pinned conformance suite.
+src/baobab/contracts/shared/contracts/**/*.schema.json

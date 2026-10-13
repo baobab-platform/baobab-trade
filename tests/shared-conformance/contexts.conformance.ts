@@ -116,10 +116,10 @@ describe("platform context (POST /platform-context/resolve)", () => {
       trade: false,
     },
     {
-      name: "extra property: tolerant reader",
+      name: "extra property: reject undeclared wire authority",
       patch: { added_later: 1 },
       schema: false,
-      trade: true,
+      trade: false,
     },
   ])("$name", ({ patch, schema, trade }) => {
     const payload = { ...example.context, ...patch }

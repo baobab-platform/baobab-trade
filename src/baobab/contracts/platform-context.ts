@@ -4,9 +4,11 @@
  * the response of baobab-cp's POST /v1/platform-context/resolve. The Control
  * Plane persists the resolved context and returns its `context_id`, which a
  * workload redeems for mapping and capability resolution (ADR-SHARED-014).
- * Trade is a tolerant reader: it checks the fields it relies on and ignores
- * additions.
+ * P0-04A validates the pinned Shared wire shape before applying the
+ * consumer's additional organisation-attestation pairing rule.
  */
+import { platformContextSchema } from "./authority-validation"
+
 export type RawPlatformContextResolutionResponse = {
   context_id: string
   tenant_id: string
@@ -31,7 +33,7 @@ const isDateTime = (value: unknown): boolean =>
 export const isValidPlatformContextResolutionResponse = (
   candidate: unknown,
 ): candidate is RawPlatformContextResolutionResponse => {
-  if (typeof candidate !== "object" || candidate === null) return false
+  if (!platformContextSchema(candidate)) return false
   const value = candidate as Partial<RawPlatformContextResolutionResponse>
   const hasOrganisationId = value.organisation_id !== undefined
   const hasOrganisationType = value.organisation_type !== undefined

@@ -3,6 +3,11 @@
  * FACT, not a parent-company inference or a tenant DEFAULT LegalEntity.
  * This client grants no downstream Medusa seller/provider permission.
  */
+import {
+  legalActorRequestSchema,
+  legalActorResponseSchema,
+} from "../contracts/authority-validation"
+
 export type LegalActorRequest = {
   context_id: string
   role: "SELLER_OF_RECORD"
@@ -46,7 +51,9 @@ export class HttpLegalActorAssessmentClient implements LegalActorAssessmentPort 
 
   async assess(request: LegalActorRequest, workloadAccessToken: string, correlationId: string) {
     if (
+      !legalActorRequestSchema(request) ||
       !workloadAccessToken.trim() ||
+      !correlationId.trim() ||
       !request.context_id.trim() ||
       !/^[A-Z]{2}$/.test(request.market) ||
       !request.operation_reference.trim() ||
@@ -60,6 +67,7 @@ export class HttpLegalActorAssessmentClient implements LegalActorAssessmentPort 
       `${this.baseUrl.replace(/\/$/, "")}/internal/legal-actor/v1/assess`,
       {
         method: "POST",
+        redirect: "error",
         headers: {
           authorization: `Bearer ${workloadAccessToken}`,
           "content-type": "application/json",
@@ -83,37 +91,10 @@ export function isLegalActorDecision(
   value: unknown,
   request: LegalActorRequest,
 ): value is LegalActorDecision {
-  if (!value || typeof value !== "object") return false
-  const result = value as Record<string, unknown>
-  if (
-    result.context_id !== request.context_id ||
-    result.operation_reference !== request.operation_reference ||
-    result.provider_permissions_granted !== false
+  if (!legalActorResponseSchema(value)) return false
+  const result = value as LegalActorDecision
+  return (
+    result.context_id === request.context_id &&
+    result.operation_reference === request.operation_reference
   )
-    return false
-  const r = result.legal_actor_resolution
-  if (!r || typeof r !== "object") return false
-  const authority = r as Record<string, unknown>
-  if (
-    typeof authority.outcome !== "string" ||
-    typeof authority.evaluated_at !== "string" ||
-    typeof authority.policy_reference !== "string" ||
-    !Number.isFinite(Date.parse(authority.evaluated_at)) ||
-    authority.policy_reference.trim() === ""
-  )
-    return false
-  if (authority.outcome === "AUTHORIZED") {
-    return (
-      typeof authority.mandate_id === "string" &&
-      /^[a-f0-9-]{36}$/i.test(authority.mandate_id) &&
-      typeof authority.responsible_legal_entity_id === "string" &&
-      authority.responsible_legal_entity_id.trim().length > 0 &&
-      Array.isArray(authority.evidence_references) &&
-      authority.evidence_references.length > 0 &&
-      authority.evidence_references.every((e) => typeof e === "string" && e.length > 0) &&
-      typeof authority.valid_until === "string" &&
-      Number.isFinite(Date.parse(authority.valid_until))
-    )
-  }
-  return !("mandate_id" in authority) && !("responsible_legal_entity_id" in authority)
 }
