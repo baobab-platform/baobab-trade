@@ -74,12 +74,15 @@ function fixture(subject = "prn_operator") {
     })),
   }
   const persistence = {
-    load: vi.fn(async () => ({
-      proposal,
-      revision: 1,
-      status: "PROPOSED",
-      approvedBy: "prn_checker",
-    })),
+    load: vi.fn(
+      async (): Promise<Awaited<ReturnType<PostgresGovernedBindingPersistence["load"]>>> => ({
+        scope,
+        proposal,
+        revision: 1,
+        status: "PROPOSED",
+        approvedBy: "prn_checker",
+      }),
+    ),
     propose: vi.fn(),
     approve: vi.fn(),
     revoke: vi.fn(),
@@ -299,6 +302,39 @@ describe("actual authenticated binding command intake", () => {
     expect(f.cp.assess).toHaveBeenCalledTimes(2)
     expect(f.persistence.activate).not.toHaveBeenCalled()
   })
+  it("withdraws legacy ACTIVE scope without inventing a proposal snapshot", async () => {
+    const f = fixture()
+    f.persistence.load.mockResolvedValue({
+      scope,
+      revision: 0,
+      status: "ACTIVE",
+      approvedBy: "legacy-checker",
+    })
+    await f.service.execute(
+      "revoke",
+      scope.cartId,
+      { revision: 0, reason: "withdraw legacy scope" },
+      "human-token",
+    )
+    expect(f.persistence.revoke).toHaveBeenCalledWith(
+      scope,
+      expect.anything(),
+      "withdraw legacy scope",
+      expect.objectContaining({ expectedRevision: 0 }),
+    )
+    expect(f.cp.resolve).not.toHaveBeenCalled()
+  })
+  it.each(["approve", "activate"] as const)(
+    "keeps legacy rows ineligible for %s",
+    async (operation) => {
+      const f = fixture()
+      f.persistence.load.mockResolvedValue({ scope, revision: 0, status: "PROPOSED" })
+      await expect(
+        f.service.execute(operation, scope.cartId, { revision: 0 }, "human-token"),
+      ).rejects.toThrow()
+      expect(f.cp.authorize).not.toHaveBeenCalled()
+    },
+  )
   it("withdraws after old mandate/context/native lifecycle denial", async () => {
     const f = fixture()
     f.native.mockRejectedValue(new Error("closed cart"))
