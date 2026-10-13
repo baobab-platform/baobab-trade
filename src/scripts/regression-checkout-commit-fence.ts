@@ -360,12 +360,19 @@ export default async function regressionCheckoutCommitFence({ container }: ExecA
 
     // 6. Saga compensation that reopens the cart releases (never reuses) the
     //    receipt; completing again needs a fresh authorization.
+    //    Two hook runs leave two receipts; completion consumes the newest and
+    //    voids the older, so neither can authorize a later completion.
     const compensated = await activated()
     await authorize(compensated)
+    await authorize(compensated)
     await carts.updateCarts(compensated, { completed_at: new Date() })
+    stored = await receipts(compensated)
+    assert.equal(stored.length, 2)
+    assert.ok(stored[0].consumed_at && stored[0].released_at) // older: voided
+    assert.ok(stored[1].consumed_at && !stored[1].released_at) // newest: consumed
     await carts.updateCarts(compensated, { completed_at: null })
     stored = await receipts(compensated)
-    assert.ok(stored[0].consumed_at && stored[0].released_at)
+    assert.ok(stored.every((receipt) => receipt.consumed_at && receipt.released_at))
     await assert.rejects(
       pool.query("UPDATE cart SET completed_at=now() WHERE id=$1", [compensated]),
       /current checkout authorization required/,
@@ -374,8 +381,8 @@ export default async function regressionCheckoutCommitFence({ container }: ExecA
     const { result: retried } = await complete(compensated)
     assert.deepEqual(await orders(compensated), [retried.id])
     stored = await receipts(compensated)
-    assert.equal(stored.length, 2)
-    assert.ok(stored[1].consumed_at && !stored[1].released_at)
+    assert.equal(stored.length, 3)
+    assert.ok(stored[2].consumed_at && !stored[2].released_at)
 
     // 7. Concurrent completions of one authorized cart place exactly one order.
     const raced = await activated()

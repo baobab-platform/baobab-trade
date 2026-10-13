@@ -80,6 +80,8 @@ export class Migration20261014090000 extends Migration {
            (to_jsonb(OLD) - ARRAY['consumed_at','released_at'])
         OR NOT (
           (OLD.consumed_at IS NULL AND NEW.consumed_at IS NOT NULL AND NEW.released_at IS NULL)
+          -- Superseded: voided when another receipt for the cart is consumed or released.
+          OR (OLD.consumed_at IS NULL AND NEW.consumed_at IS NOT NULL AND NEW.released_at = NEW.consumed_at)
           OR (OLD.consumed_at IS NOT NULL AND OLD.released_at IS NULL
               AND NEW.consumed_at = OLD.consumed_at AND NEW.released_at IS NOT NULL)) THEN
         RAISE EXCEPTION 'Checkout authorization is append-only';
@@ -89,7 +91,7 @@ export class Migration20261014090000 extends Migration {
     CREATE TRIGGER la05_checkout_authorization_guard BEFORE INSERT OR UPDATE OR DELETE
       ON la05_checkout_authorization FOR EACH ROW EXECUTE FUNCTION la05_checkout_authorization_guard();`)
     this.addSql(`CREATE FUNCTION la05_checkout_commit_fence() RETURNS trigger LANGUAGE plpgsql AS $$
-    DECLARE authorization_id uuid;
+    DECLARE authorization_id uuid; at timestamptz := clock_timestamp();
     BEGIN
       IF OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL THEN
         -- Never-activated carts keep the application-level gate only; requiring
@@ -116,12 +118,18 @@ export class Migration20261014090000 extends Migration {
         IF authorization_id IS NULL THEN
           RAISE EXCEPTION 'P0-04B-03 denied: current checkout authorization required at cart completion';
         END IF;
-        UPDATE la05_checkout_authorization SET consumed_at = clock_timestamp() WHERE id = authorization_id;
+        UPDATE la05_checkout_authorization SET consumed_at = at WHERE id = authorization_id;
+        -- Exactly one receipt may ever authorize this completion: older ones
+        -- recorded by earlier hook runs are voided, never left live for reuse.
+        UPDATE la05_checkout_authorization SET consumed_at = at, released_at = at
+          WHERE cart_id = NEW.id AND consumed_at IS NULL;
       ELSIF OLD.completed_at IS NOT NULL AND NEW.completed_at IS NULL THEN
         -- Saga compensation (e.g. payment authorization failed) reopens the cart.
         -- The consumed receipt is released, never reused; a retry needs a new one.
-        UPDATE la05_checkout_authorization SET released_at = clock_timestamp()
+        UPDATE la05_checkout_authorization SET released_at = at
           WHERE cart_id = NEW.id AND consumed_at IS NOT NULL AND released_at IS NULL;
+        UPDATE la05_checkout_authorization SET consumed_at = at, released_at = at
+          WHERE cart_id = NEW.id AND consumed_at IS NULL;
       END IF;
       RETURN NEW;
     END $$;

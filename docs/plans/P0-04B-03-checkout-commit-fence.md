@@ -50,11 +50,11 @@ A partial unique index allows exactly one live consumption per checkout key.
 
 1. takes the same advisory lock;
 2. requires the newest unconsumed authorization whose lease, binding `expires_at` and activation-context expiry are still in the future by `clock_timestamp()`, with the binding still ACTIVE at the authorized revision and matching coordinates;
-3. consumes that authorization.
+3. consumes that authorization and voids any older unconsumed receipt for the cart, so exactly one receipt can ever authorize the completion.
 
 Any failure raises and Medusa compensates.
 
-When compensation reopens a completed cart, NOT NULL→NULL, the consumed receipt is **released, never reused**, and a retry needs a fresh authorization.
+When compensation reopens a completed cart, NOT NULL→NULL, the consumed receipt is **released, never reused**, and any unconsumed receipt is voided, and a retry needs a fresh authorization.
 
 **Writing the authorization.** `enforceNativeCheckoutGate` now refuses unless an authorization store is registered. After `assertNativeCartLegalSeller` passes, it records the authorization through `PostgresGovernedBindingPersistence.record()`. That method reuses the existing transaction, advisory-lock and timeout helper.
 
@@ -72,19 +72,19 @@ Carts that were never activated or have no binding keep the existing application
 
 **Native acceptance.** `npm run regression:checkout-commit-fence` runs in the `core-module-integration` job after the Thamani simulation pack. It uses real Thamani Uganda carts, real `completeCartWorkflow` runs and applied migrations. CP and Payments are explicitly synthetic, and the LA-05 hook flag stays off, so the database fence is proved alone. The cases are:
 
-| Case                                     | Expected result                                                                         |
-| ---------------------------------------- | --------------------------------------------------------------------------------------- |
-| Activated cart with no authorization     | Denied; compensated, no order link, cart still open                                     |
-| Authorized cart                          | Completes and consumes once                                                             |
-| Replayed completion                      | Returns the original order with no second consumption                                   |
-| Hook re-run on a replay                  | Recording is an idempotent no-op; a direct new receipt for a completed cart is refused  |
-| Rewriting or deleting a receipt          | Refused                                                                                 |
-| Revocation committed after authorization | Denied                                                                                  |
-| Lease expired before commit              | Denied                                                                                  |
-| Direct SQL completion bypass             | Denied                                                                                  |
-| Direct pre-consumed insert               | Denied                                                                                  |
-| Compensation                             | Releases the receipt; the old receipt cannot be reused; a fresh authorization completes |
-| Concurrent completions                   | Exactly one order and one live consumption                                              |
+| Case                                     | Expected result                                                                                                                              |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Activated cart with no authorization     | Denied; compensated, no order link, cart still open                                                                                          |
+| Authorized cart                          | Completes and consumes once                                                                                                                  |
+| Replayed completion                      | Returns the original order with no second consumption                                                                                        |
+| Hook re-run on a replay                  | Recording is an idempotent no-op; a direct new receipt for a completed cart is refused                                                       |
+| Rewriting or deleting a receipt          | Refused                                                                                                                                      |
+| Revocation committed after authorization | Denied                                                                                                                                       |
+| Lease expired before commit              | Denied                                                                                                                                       |
+| Direct SQL completion bypass             | Denied                                                                                                                                       |
+| Direct pre-consumed insert               | Denied                                                                                                                                       |
+| Two hook runs, then compensation         | Completion consumes the newest receipt and voids the older; compensation releases it; neither can be reused; a fresh authorization completes |
+| Concurrent completions                   | Exactly one order and one live consumption                                                                                                   |
 
 **Unit tests:**
 
