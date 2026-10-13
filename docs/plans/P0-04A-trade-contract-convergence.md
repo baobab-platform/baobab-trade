@@ -38,9 +38,9 @@ npm test
 npm run build
 ```
 
-The generator reads immutable Git blobs, rejects remote schema references and undeclared closure paths, and commits the complete static schema bundle with per-file SHA-256 provenance. Regenerate, review compatibility and include generated artifacts in the same PR when changing the pin. The conformance suite checks byte identity against the owner checkout and verifies hashes and declarations. Upstream schema JSON alone is excluded from Prettier to preserve exact upstream bytes; it remains parsed and validated by conformance.
+The generator reads immutable Git blobs, rejects remote schema references and undeclared closure paths, replaces the previous generated closure only after validation (removing obsolete schema files), and commits the complete static schema bundle with per-file SHA-256 provenance. Regenerate, review compatibility and include generated artifacts in the same PR when changing the pin. The conformance suite checks byte identity against the owner checkout and verifies hashes, declarations and the complete directory inventory. Upstream schema JSON alone is excluded from Prettier to preserve exact upstream bytes; it remains parsed and validated by conformance.
 
-Ajv 2020 and ajv-formats are production dependencies. Runtime compiles validators once from static imports, without network schema loading, coercion, defaults or property removal. The Medusa build copies the imported JSON into `dist/src/baobab/contracts/shared`; the compiled validator module was loaded successfully from the build output.
+Ajv 2020 and ajv-formats are production dependencies. Runtime compiles validators once from static imports, without network schema loading, coercion, defaults or property removal. The Medusa build copies the imported JSON into `.medusa/server/src/baobab/contracts/shared`; the postbuild step copies original schema bytes over TypeScript's reformatted JSON, verifies hashes and loads all compiled validators. The audited legacy `dist` output did not match Docker's `.medusa` copy. TypeScript now emits to the [documented standalone server directory](https://docs.medusajs.com/learn/build), and Docker copies that directory into its application root. An image-build smoke check loads the validators using only production dependencies.
 
 ## Runtime boundaries
 

@@ -4,7 +4,7 @@
  */
 import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join, posix, resolve } from "node:path"
 import { parse } from "yaml"
 import { format, resolveConfig } from "prettier"
@@ -48,6 +48,9 @@ const files = [...schemas.keys()].sort()
 for (const path of files) {
   if (!lock.contracts.includes(path)) throw new Error(`Declare consumed closure in lock: ${path}`)
 }
+// Replace only the generated closure after all reads/declarations succeeded.
+// Removed upstream references must not leave stale, undeclared schemas behind.
+rmSync(join(target, "contracts"), { recursive: true, force: true })
 for (const path of files) {
   const output = join(target, path)
   mkdirSync(dirname(output), { recursive: true })

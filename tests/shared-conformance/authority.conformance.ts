@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { resolve } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import provenance from "../../src/baobab/contracts/shared/provenance.json"
@@ -91,6 +91,15 @@ describe("P0-04A pinned consequential authority contracts", () => {
     expect(provenance.commit).toBe(lock.source.commit)
     expect(CONTRACT_PROVENANCE.sharedCommit).toBe(lock.source.commit)
     expect(CONTRACT_PROVENANCE.sharedRepository).toBe(lock.source.repository)
+    // Inspect the entire directory, not just manifest entries: obsolete files
+    // from a previous reference closure must fail conformance too.
+    const embeddedRoot = resolve(__dirname, "../../src/baobab/contracts/shared")
+    const inventory = (path: string): string[] =>
+      readdirSync(resolve(embeddedRoot, path), { withFileTypes: true }).flatMap((entry) => {
+        const child = `${path}/${entry.name}`
+        return entry.isDirectory() ? inventory(child) : [child]
+      })
+    expect(inventory("contracts").sort()).toEqual(Object.keys(provenance.files).sort())
     for (const [path, hash] of Object.entries(provenance.files)) {
       expect(lock.contracts).toContain(path)
       const embedded = readFileSync(
