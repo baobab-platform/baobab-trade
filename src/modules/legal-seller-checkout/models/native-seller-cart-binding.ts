@@ -34,6 +34,9 @@ const NativeSellerCartBinding = model.define(
       .enum(["PROPOSED", "ACTIVE", "REJECTED", "REVOKED", "EXPIRED"])
       .default("PROPOSED"),
     correlation_id: model.text(),
+    // Inactive legacy rows without a snapshot cannot be approved.
+    proposal_snapshot: model.json().nullable(),
+    revision: model.number().default(0),
   },
 )
 export default NativeSellerCartBinding

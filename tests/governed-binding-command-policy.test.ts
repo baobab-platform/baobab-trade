@@ -66,6 +66,19 @@ describe("LA-05C5 command policy (no provider certification)", () => {
     ])
       expect(() => assertBindingProposal(candidate, now)).toThrow("LA-05C5 denied")
   })
+  it("denies omitted scope keys, non-array claims and normalised invalid dates", () => {
+    const missing = { ...scope }
+    delete (missing as Partial<typeof scope>).cartId
+    for (const candidate of [
+      { ...proposal, scope: missing },
+      {
+        ...proposal,
+        maker: { ...maker, scopes: "trade:legal-seller-binding:propose" as unknown as string[] },
+      },
+      { ...proposal, proposedAt: "2026-02-30T06:00:00Z" },
+    ])
+      expect(() => assertBindingProposal(candidate, now)).toThrow("LA-05C5 denied")
+  })
   it("requires revocation authority, reason and evidence", () => {
     const revoker = { ...maker, scopes: ["trade:legal-seller-binding:revoke"] }
     expect(() =>

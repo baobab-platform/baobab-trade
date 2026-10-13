@@ -35,7 +35,7 @@ BAOBAB_PAYMENTS_WORKLOAD_CLIENT_SECRET=<separate secret from staging secret stor
 
 **Contract convergence:** Shared `contracts/payments/v1/merchant-readiness.schema.json` was merged in Shared PR #264 at `c85e4a90ae64d7e3c0d11d9ef3ec6513b153bb82`. The proposed private Payments endpoint is `POST /internal/merchant-readiness/v1/assess`; Payments PR #27 implements a workload-authenticated **503 refusal**, not production READY. The Trade HTTP adapter uses the Shared request/positive-response shape but cannot complete checkout while Payments has no certified provider. No real account IDs, secret values or activation grants are in this PR.
 
-The module is conditionally registered only when `BAOBAB_LA05_NATIVE_CHECKOUT_GUARD=true` and `NODE_ENV` is not production. The native guard rejects production enablement even if somebody sets the environment flag. Missing any required secret, binding or readiness result fails closed in staging. When the flag is absent, prior checkout behavior remains unguarded and **must not be advertised as LA-05 accepted**.
+P0-04B-01 always registers the empty storage module so Medusa applies the governed lifecycle migrations. External checkout clients and credentials are built lazily only when the protected guard is enabled in a recognised non-production profile. The native guard rejects production enablement even if somebody sets the environment flag. Missing any required secret, binding or readiness result fails closed in staging. When the flag is absent, protected staging and production checkout deny; only explicit local test/development/integration modes retain the synthetic off path.
 
 ## Operational gates still required for LA-05C3 acceptance
 
@@ -52,7 +52,7 @@ Medusa rejects two `completeCartWorkflow.hooks.validate` registrations. LA-05C2'
 
 ## Rollback and safety
 
-Disable the flag to restore previously unaccepted behavior only in controlled test environments; doing so must **not** be accepted as production remediation. Revoke compromised cart bindings, CP mandates and IAM scopes independently. Disabling the flag never revokes an already ACTIVE legal mandate. Never create synthetic Nabhold/Thamani/ZuriBeans legal records, fabricated merchant certifications or automatically granted provider rights to get a green test.
+The always-loaded storage module remains installed when the flag is disabled; only controlled local test environments may use the synthetic checkout off path; doing so must **not** be accepted as production remediation. Revoke compromised cart bindings, CP mandates and IAM scopes independently. Disabling the flag never revokes an already ACTIVE legal mandate. Never create synthetic Nabhold/Thamani/ZuriBeans legal records, fabricated merchant certifications or automatically granted provider rights to get a green test.
 
 ## LA-05C4 — strict market and revocation-window reassessment (candidate)
 
@@ -65,3 +65,12 @@ The final Control Plane `SELLER_OF_RECORD` assessment still runs after that rere
 ## P0-04A follow-up (2026-10-13)
 
 The published Shared merchant-readiness wire contract is explicitly declared in the consumer lock and generated with its reference closure. Native checkout applies exact request/response schema validation before seller, provider-reference and freshness checks. Regeneration, workload prerequisites and separate live acceptance are recorded in [the convergence plan](../plans/P0-04A-trade-contract-convergence.md).
+
+## P0-04B-01 — applied binding lifecycle
+
+The [durable lifecycle increment](../plans/P0-04B-01-trade-binding-lifecycle.md)
+installs decision/local audit tables, immutable proposal/revision checks and
+commit-time expiry/receipt constraints. Its composed internal PostgreSQL port
+records inactive proposal/approval/revocation; the generated SDK cannot activate
+or rewrite those bindings. No human mutation API, actual IAM/evidence gateway,
+CP-owned RUNTIME issuance or merchant certification is established by this gate.

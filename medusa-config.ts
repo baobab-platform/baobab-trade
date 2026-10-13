@@ -66,12 +66,10 @@ export default defineConfig({
     },
     { resolve: "./src/modules/erp-integration" },
     { resolve: "./src/modules/event-outbox" },
-    // LA-05C3 gated staging only: no credentials, module or producer rights
-    // are constructed when disabled; production deliberately refuses enablement.
-    ...(process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD === "true" &&
-    process.env.NODE_ENV !== "production"
-      ? [{ resolve: "./src/modules/legal-seller-checkout" }]
-      : []),
+    // P0-04B-01: install the empty governed binding/audit schema everywhere.
+    // External checkout credentials are constructed lazily only for the guard;
+    // registration grants no ACTIVE binding, merchant or producer rights.
+    { resolve: "./src/modules/legal-seller-checkout" },
     {
       resolve: "@medusajs/medusa/auth",
       options: {

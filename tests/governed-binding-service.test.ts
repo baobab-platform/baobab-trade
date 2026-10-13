@@ -61,19 +61,24 @@ function ports(actor = maker): BindingAuthorityPorts {
 describe("LA-05C5 verified boundary", () => {
   it("requires independent IAM verification, current authority and verified evidence", async () => {
     const p = ports()
-    await proposeBinding(p, "token", proposal, now)
+    await proposeBinding(p, "token", proposal, () => now)
     expect(p.legalAuthority.assertCurrent).toHaveBeenCalledWith(scope)
     expect(p.persistence.propose).toHaveBeenCalledTimes(1)
   })
   it("rejects spoofed maker before writing", async () => {
     const p = ports({ ...maker, subject: "attacker" })
-    await expect(proposeBinding(p, "token", proposal, now)).rejects.toThrow("maker mismatch")
+    await expect(proposeBinding(p, "token", proposal, () => now)).rejects.toThrow("maker mismatch")
     expect(p.persistence.propose).not.toHaveBeenCalled()
   })
   it("rejects self-approval and evidence disagreement", async () => {
     const p = ports({ ...checker, subject: "maker" })
     await expect(
-      approveBinding(p, "token", { ...approval, checker: { ...checker, subject: "maker" } }, now),
+      approveBinding(
+        p,
+        "token",
+        { ...approval, checker: { ...checker, subject: "maker" } },
+        () => now,
+      ),
     ).rejects.toThrow()
     expect(p.persistence.approve).not.toHaveBeenCalled()
     const q = ports(checker)
@@ -82,12 +87,46 @@ describe("LA-05C5 verified boundary", () => {
       decisionId: "id",
       verifiedAt: new Date(now).toISOString(),
     })
-    await expect(approveBinding(q, "token", approval, now)).rejects.toThrow("evidence")
+    await expect(approveBinding(q, "token", approval, () => now)).rejects.toThrow("evidence")
     expect(q.persistence.approve).not.toHaveBeenCalled()
   })
   it("denies revocation without IAM revocation scope", async () => {
     const p = ports(maker)
     await expect(revokeBinding(p, "token", scope, "revoked", "evidence/revoke")).rejects.toThrow()
     expect(p.persistence.revoke).not.toHaveBeenCalled()
+  })
+  it("denies expiry or revoked IAM authority after remote evidence I/O", async () => {
+    let at = now
+    const p = ports()
+    vi.mocked(p.evidence.verify).mockImplementation(async (reference) => {
+      at = now + 20_000
+      return { reference, decisionId: "decision-test", verifiedAt: new Date(at).toISOString() }
+    })
+    await expect(proposeBinding(p, "token", proposal, () => at)).rejects.toThrow()
+    expect(p.persistence.propose).not.toHaveBeenCalled()
+    const q = ports()
+    vi.mocked(q.iam.verify)
+      .mockResolvedValueOnce(maker)
+      .mockResolvedValueOnce({ ...maker, scopes: [] })
+    await expect(proposeBinding(q, "token", proposal, () => now)).rejects.toThrow(
+      "authority changed",
+    )
+    expect(q.persistence.propose).not.toHaveBeenCalled()
+  })
+  it("denies stale, future and invalid-calendar evidence without writing", async () => {
+    for (const verifiedAt of [
+      new Date(now - 30_001).toISOString(),
+      new Date(now + 1).toISOString(),
+      "2026-02-30T06:00:00Z",
+    ]) {
+      const p = ports()
+      vi.mocked(p.evidence.verify).mockResolvedValue({
+        reference: proposal.evidenceReference,
+        decisionId: "test",
+        verifiedAt,
+      })
+      await expect(proposeBinding(p, "token", proposal, () => now)).rejects.toThrow("evidence")
+      expect(p.persistence.propose).not.toHaveBeenCalled()
+    }
   })
 })
