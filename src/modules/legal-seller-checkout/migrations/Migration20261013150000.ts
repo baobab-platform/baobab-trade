@@ -98,7 +98,7 @@ export class Migration20261013150000 extends Migration {
           OR receipt.authorization_snapshot->>'decision_id' IS DISTINCT FROM receipt.evidence_decision_id
           OR receipt.evidence_reference IS DISTINCT FROM 'cp/trade-binding/' || receipt.evidence_decision_id
           OR receipt.authorization_snapshot->>'scope_name' IS DISTINCT FROM
-            'trade-binding:' || CASE expected WHEN 'PROPOSED' THEN 'propose' WHEN 'APPROVED' THEN 'approve' WHEN 'ACTIVATED' THEN 'activate' ELSE 'revoke' END
+            ('trade-binding:' || CASE expected WHEN 'PROPOSED' THEN 'propose' WHEN 'APPROVED' THEN 'approve' WHEN 'ACTIVATED' THEN 'activate' ELSE 'revoke' END)
           OR (receipt.authorization_snapshot->>'valid_until')::timestamptz <= clock_timestamp()
           OR (receipt.authorization_snapshot->>'evaluated_at')::timestamptz > clock_timestamp()
           OR (receipt.authorization_snapshot->>'valid_until')::timestamptz > (receipt.authorization_snapshot->>'evaluated_at')::timestamptz + interval '5 seconds' THEN
@@ -112,6 +112,15 @@ export class Migration20261013150000 extends Migration {
         IF NOT FOUND THEN RAISE EXCEPTION 'Current native cart coordinates required at COMMIT'; END IF;
       END IF;
       IF expected = 'ACTIVATED' THEN
+        IF NOT EXISTS (SELECT 1 FROM la05_binding_decision maker JOIN la05_binding_decision checker ON checker.binding_id=maker.binding_id
+          WHERE maker.binding_id=NEW.id AND maker.binding_revision=0 AND maker.decision='PROPOSED'
+            AND checker.binding_revision=1 AND checker.decision='APPROVED'
+            AND maker.actor_subject=NEW.proposed_by AND checker.actor_subject=NEW.approved_by
+            AND maker.authorization_snapshot->>'scope_name'='trade-binding:propose'
+            AND checker.authorization_snapshot->>'scope_name'='trade-binding:approve'
+            AND maker.authorization_snapshot->'scope'=scoped AND checker.authorization_snapshot->'scope'=scoped) THEN
+          RAISE EXCEPTION 'Authenticated original maker and checker history required';
+        END IF;
         IF receipt.authorization_snapshot IS NULL OR NOT EXISTS (
           SELECT 1 FROM la05_binding_activation a WHERE a.binding_id=NEW.id AND a.binding_revision=NEW.revision
             AND a.proof=NEW.activation_snapshot

@@ -57,7 +57,7 @@ activation table plus CP admission snapshots on decisions. It permits exactly on
 approved PROPOSED-to-ACTIVE transition, advances revision and requires exact
 activation/decision/local candidate audit proof in the same transaction. Generated
 CRUD, rewriting context/seller/expiry, repeated activation and deletion remain
-blocked. Legacy ACTIVE records without the new proof cannot pass the native read.
+blocked. Legacy ACTIVE records without the new proof cannot pass the native read. Original maker/checker decisions must both retain authenticated CP admission snapshots; old storage-only approvals cannot be promoted by a later operator.
 Rollback refuses to discard or reinterpret recorded activation history.
 
 Each mutation takes the per-cart advisory fence, row lock and bounded SQL waits.

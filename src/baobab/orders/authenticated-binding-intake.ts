@@ -84,6 +84,31 @@ export class AuthenticatedBindingIntake {
     )
       deny()
   }
+  private assertLegal(
+    scope: GovernedBindingScope,
+    context: RawPlatformContextResolutionResponse,
+    legalDecision: LegalActorDecision,
+  ): void {
+    assertCurrentSellerMarketContext(context, scope, this.now())
+    if (!context.expires_at || Date.parse(context.expires_at) <= this.now() || !context.market_id)
+      deny()
+    assertFreshSellerFact(
+      legalDecision,
+      {
+        ...scope,
+        legalContextId: context.context_id,
+        legalSellerKey: scope.responsibleLegalEntityId,
+        legalActivity: BINDING_ACTIVITY,
+        legalCapability: BINDING_CAPABILITY,
+        marketKey: context.market_id,
+        orderReference: `cart/${scope.cartId}/complete`,
+        correlationId: crypto.randomUUID(),
+        idempotencyKey: `native-checkout/${scope.cartId}`,
+        totalMinor: 0,
+      },
+      this.now(),
+    )
+  }
   private async legal(scope: GovernedBindingScope) {
     const token = await this.workloadToken()
     const context = await this.cp.resolve(scope, token)
@@ -100,22 +125,7 @@ export class AuthenticatedBindingIntake {
       operation_reference: `cart/${scope.cartId}/complete`,
     }
     const legalDecision = await this.cp.assess(request, token)
-    assertFreshSellerFact(
-      legalDecision,
-      {
-        ...scope,
-        legalContextId: context.context_id,
-        legalSellerKey: scope.responsibleLegalEntityId,
-        legalActivity: BINDING_ACTIVITY,
-        legalCapability: BINDING_CAPABILITY,
-        marketKey: context.market_id,
-        orderReference: request.operation_reference,
-        correlationId: crypto.randomUUID(),
-        idempotencyKey: `native-checkout/${scope.cartId}`,
-        totalMinor: 0,
-      },
-      this.now(),
-    )
+    this.assertLegal(scope, context, legalDecision)
     return { context, legalDecision }
   }
   async execute(
@@ -222,6 +232,7 @@ export class AuthenticatedBindingIntake {
       deny()
     if (operation !== "revoke") await this.currentNative(scope)
     assertBindingAdmission(final, operation, scope, digest, this.now())
+    if (proof) this.assertLegal(scope, proof.context, proof.legalDecision)
     const evidence = { ...evidenceOf(final), expectedRevision: revision }
     if (operation === "propose")
       await this.persistence.propose(

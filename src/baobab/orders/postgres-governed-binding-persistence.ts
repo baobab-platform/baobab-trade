@@ -222,6 +222,20 @@ export class PostgresGovernedBindingPersistence implements Persistence {
         [row.proposed_by, row.approved_by].includes(proof.actor.subject)
       )
         deny()
+      const previous = await db.query(
+        `SELECT decision,actor_subject,authorization_snapshot FROM la05_binding_decision
+        WHERE binding_id=$1 AND decision IN ('PROPOSED','APPROVED') ORDER BY binding_revision`,
+        [row.id],
+      )
+      if (
+        previous.rows.length !== 2 ||
+        previous.rows[0].decision !== "PROPOSED" ||
+        previous.rows[1].decision !== "APPROVED" ||
+        previous.rows[0].actor_subject !== row.proposed_by ||
+        previous.rows[1].actor_subject !== row.approved_by ||
+        !previous.rows.every((receipt) => receipt.authorization_snapshot)
+      )
+        deny()
       assertBindingAdmission(
         proof.admission,
         "activate",

@@ -217,6 +217,55 @@ describe("actual authenticated binding command intake", () => {
     ).rejects.toThrow()
     expect(f.persistence.activate).not.toHaveBeenCalled()
   })
+  it("denies a seller proof that expires during final human authorization", async () => {
+    const f = fixture("prn_maker")
+    vi.mocked(f.cp.assess).mockImplementation(async (r) => ({
+      context_id: r.context_id,
+      operation_reference: r.operation_reference,
+      provider_permissions_granted: false,
+      legal_actor_resolution: {
+        outcome: "AUTHORIZED",
+        evaluated_at: new Date(now).toISOString(),
+        valid_until: new Date(now + 1000).toISOString(),
+        policy_reference: "synthetic",
+        mandate_id: "00000000-0000-4000-8000-000000000002",
+        responsible_legal_entity_id: scope.responsibleLegalEntityId,
+        evidence_references: ["synthetic"],
+      },
+    }))
+    vi.mocked(f.cp.authorize).mockImplementation(async (_t, op, s, d) => {
+      const current = vi.mocked(f.cp.authorize).mock.calls.length === 2 ? now + 2000 : now
+      if (current > now) f.advance(2000)
+      return {
+        scope: s,
+        command_digest: d,
+        decision_id: crypto.randomUUID(),
+        principal_id: "prn_maker",
+        issuer: "https://iam.example.test",
+        token_id: "t",
+        scope_name: `trade-binding:${op}`,
+        evaluated_at: new Date(current).toISOString(),
+        valid_until: new Date(current + 5000).toISOString(),
+        matched_grant_ids: ["g"],
+        provider_permissions_granted: false,
+      }
+    })
+    await expect(
+      f.service.execute(
+        "propose",
+        scope.cartId,
+        {
+          tenantId: scope.tenantId,
+          organisationId: scope.organisationId,
+          responsibleLegalEntityId: scope.responsibleLegalEntityId,
+          marketCode: "ZA",
+          expiresAt: new Date(now + 60000).toISOString(),
+        },
+        "human-token",
+      ),
+    ).rejects.toThrow("stale")
+    expect(f.persistence.propose).not.toHaveBeenCalled()
+  })
   it("withdraws after old mandate/context/native lifecycle denial", async () => {
     const f = fixture()
     f.native.mockRejectedValue(new Error("closed cart"))

@@ -116,6 +116,64 @@ export async function acceptAuthenticatedBindingIntake(
   }
   const row = async (id: string) =>
     (await pool.query("SELECT * FROM native_seller_cart_binding WHERE cart_id=$1", [id])).rows[0]
+  // Historical internal/storage-only receipts must never be promoted to
+  // authenticated maker/checker approval by a later real operator.
+  const legacyCart = await carts.createCarts({
+    region_id: region.id,
+    sales_channel_id: channel.id,
+    currency_code: "zar",
+  })
+  const legacyScope = {
+    cartId: legacyCart.id,
+    tenantId: "tn_synthetic01",
+    organisationId: "00000000-0000-4000-8000-000000000001",
+    responsibleLegalEntityId: "LE-SYNTHETIC-SELLER",
+    marketCode: "ZA",
+    currencyCode: "ZAR",
+    salesChannelId: channel.id,
+    regionId: region.id,
+  }
+  const legacyMaker = {
+    subject: "synthetic-cp-maker",
+    issuer: "https://synthetic-iam.example.test",
+    tokenId: "old-storage-token",
+    tenantId: legacyScope.tenantId,
+    organisationId: legacyScope.organisationId,
+    audience: "baobab-control-plane",
+    scopes: ["trade-binding:propose"],
+  }
+  const legacyProposal = {
+    scope: legacyScope,
+    maker: legacyMaker,
+    proposedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 120000).toISOString(),
+    evidenceReference: "synthetic-old-evidence",
+  }
+  const oldEvidence = {
+    reference: "synthetic-old-evidence",
+    decisionId: randomUUID(),
+    verifiedAt: new Date().toISOString(),
+  }
+  await persistence.propose(legacyProposal, oldEvidence)
+  await persistence.approve(
+    {
+      proposal: legacyProposal,
+      checker: {
+        ...legacyMaker,
+        subject: "synthetic-cp-checker",
+        scopes: ["trade-binding:approve"],
+      },
+      approvedAt: new Date().toISOString(),
+      approvalReference: oldEvidence.reference,
+    },
+    oldEvidence,
+  )
+  subject = "synthetic-cp-operator"
+  await assert.rejects(
+    intake().execute("activate", legacyCart.id, { revision: 1 }, "synthetic-human-token"),
+  )
+  assert.equal((await row(legacyCart.id)).status, "PROPOSED")
+
   const ordinary = await create()
   assert.equal((await row(ordinary.id)).status, "PROPOSED")
   for (const actor of ["synthetic-cp-maker", "synthetic-cp-checker"]) {
