@@ -1,5 +1,5 @@
 /**
- * LA-05C5 candidate: validate governed command inputs before any persistence.
+ * LA-05C5 / P0-04B-02: validate canonical governed inputs before persistence.
  * This is NOT an issuance API, IAM verifier, CP legal-actor grant, or PSP certification.
  * Callers must authenticate the actor and verify its audience/scopes independently.
  */
@@ -49,8 +49,7 @@ export function parseBindingTimestamp(value: unknown): number {
     return NaN
   return Date.parse(value)
 }
-const requiredScope = (operation: "propose" | "approve" | "revoke") =>
-  `trade:legal-seller-binding:${operation}`
+const requiredScope = (operation: "propose" | "approve" | "revoke") => `trade-binding:${operation}`
 function assertActor(
   actor: GovernedActor,
   scope: GovernedBindingScope,
@@ -59,7 +58,7 @@ function assertActor(
   if (
     !actor ||
     !valid(actor.subject) ||
-    actor.audience !== "baobab-trade" ||
+    actor.audience !== "baobab-control-plane" ||
     actor.tenantId !== scope.tenantId ||
     actor.organisationId !== scope.organisationId ||
     !Array.isArray(actor.scopes) ||

@@ -1,3 +1,16 @@
+import {
+  AuthenticatedBindingIntake,
+  type NativeBindingCoordinates,
+  type BindingActivation,
+} from "../../baobab/orders/authenticated-binding-intake"
+import {
+  HttpBindingAuthorityClient,
+  type BindingOperation,
+} from "../../baobab/orders/binding-authority-client"
+import {
+  bindingAuthorizationResponseSchema,
+  legalActorResponseSchema,
+} from "../../baobab/contracts/authority-validation"
 import { Pool } from "pg"
 import { resolveNativeCheckoutEnvironment } from "../../baobab/orders/native-cart-legal-seller"
 import { PostgresGovernedBindingPersistence } from "../../baobab/orders/postgres-governed-binding-persistence"
@@ -114,8 +127,8 @@ class NativeSellerCheckoutModuleService
     return this.runtime().controlPlane
   }
 
-  /** Internal persistence port only; no HTTP mutation or auth bypass is exposed.
-   * The caller must compose verified IAM/evidence authorities through the
+  /** Internal persistence port: HTTP intake composes current CP authority.
+   * The caller must compose actual CP admission/context/legal authorities through the
    * governed command service; the database independently fences receipts. */
   get bindingPersistence(): PostgresGovernedBindingPersistence {
     if (!this.governancePersistence) {
@@ -148,6 +161,35 @@ class NativeSellerCheckoutModuleService
       })
     }
     return this.governancePersistence
+  }
+  /** The actual CP human token is sent only to the trusted CP origin. No
+   * Medusa administrator identity is promoted into platform authority. */
+  async executeBindingCommand(
+    operation: BindingOperation,
+    cartId: string,
+    input: unknown,
+    token: string,
+    native: (id: string) => Promise<NativeBindingCoordinates>,
+  ): Promise<void> {
+    const profile = resolveNativeCheckoutEnvironment({
+      node: process.env.NODE_ENV,
+      baobab: process.env.BAOBAB_ENVIRONMENT,
+      deployment: process.env.BAOBAB_DEPLOYMENT_ENV,
+    })
+    if (process.env.BAOBAB_BINDING_INTAKE_ENABLED !== "true" || profile.production)
+      throw new Error("Binding intake requires explicit non-production enablement")
+    const tokens = new ClientCredentialsWorkloadTokenProvider({
+      tokenUrl: requireEnv("BAOBAB_IAM_WORKLOAD_TOKEN_URL"),
+      clientId: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_ID"),
+      clientSecret: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_SECRET"),
+    })
+    const intake = new AuthenticatedBindingIntake(
+      new HttpBindingAuthorityClient(requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL")),
+      this.bindingPersistence,
+      native,
+      () => tokens.getAccessToken(),
+    )
+    await intake.execute(operation, cartId, input, token)
   }
   __hooks = {
     onApplicationShutdown: async () => {
@@ -195,6 +237,21 @@ class NativeSellerCheckoutModuleService
     ) {
       throw new Error("LA-05C3 denied: invalid or expired governed cart binding")
     }
+    const activation = row.activation_snapshot as BindingActivation | null
+    if (
+      !activation ||
+      !bindingAuthorizationResponseSchema(activation.admission) ||
+      !legalActorResponseSchema(activation.legalDecision) ||
+      activation.context.context_id !== row.context_id ||
+      activation.context.tenant_id !== row.tenant_id ||
+      activation.context.organisation_id !== row.organisation_id ||
+      activation.context.country_code !== row.market_code ||
+      activation.context.currency_code !== row.currency_code ||
+      !activation.context.expires_at ||
+      Date.parse(activation.context.expires_at) <= now ||
+      [row.proposed_by, row.approved_by].includes(activation.actor.subject)
+    )
+      throw new Error("Native seller binding requires current recorded CP activation")
     assertIndependentlyApprovedBinding(
       {
         cartId: row.cart_id,
@@ -218,6 +275,8 @@ class NativeSellerCheckoutModuleService
       row.organisation_id,
       await this.tokens.getAccessToken(),
       row.correlation_id,
+      "ORGANISATION",
+      row.market_code,
     )
     assertCurrentSellerMarketContext(
       canonical,

@@ -20,13 +20,13 @@ const maker = {
   subject: "human-maker",
   tenantId: scope.tenantId,
   organisationId: scope.organisationId,
-  audience: "baobab-trade",
-  scopes: ["trade:legal-seller-binding:propose"],
+  audience: "baobab-control-plane",
+  scopes: ["trade-binding:propose"],
 }
 const checker = {
   ...maker,
   subject: "human-checker",
-  scopes: ["trade:legal-seller-binding:approve"],
+  scopes: ["trade-binding:approve"],
 }
 const proposal = {
   scope,
@@ -73,14 +73,14 @@ describe("LA-05C5 command policy (no provider certification)", () => {
       { ...proposal, scope: missing },
       {
         ...proposal,
-        maker: { ...maker, scopes: "trade:legal-seller-binding:propose" as unknown as string[] },
+        maker: { ...maker, scopes: "trade-binding:propose" as unknown as string[] },
       },
       { ...proposal, proposedAt: "2026-02-30T06:00:00Z" },
     ])
       expect(() => assertBindingProposal(candidate, now)).toThrow("LA-05C5 denied")
   })
   it("requires revocation authority, reason and evidence", () => {
-    const revoker = { ...maker, scopes: ["trade:legal-seller-binding:revoke"] }
+    const revoker = { ...maker, scopes: ["trade-binding:revoke"] }
     expect(() =>
       assertBindingRevocation(scope, revoker, "mandate revoked", "evidence/test"),
     ).not.toThrow()

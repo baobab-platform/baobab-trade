@@ -37,6 +37,7 @@ const NativeSellerCartBinding = model.define(
     // Inactive legacy rows without a snapshot cannot be approved.
     proposal_snapshot: model.json().nullable(),
     revision: model.number().default(0),
+    activation_snapshot: model.json().nullable(),
   },
 )
 export default NativeSellerCartBinding

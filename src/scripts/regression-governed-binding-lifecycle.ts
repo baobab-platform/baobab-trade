@@ -1,7 +1,10 @@
+import { acceptAuthenticatedBindingIntake } from "./acceptance-authenticated-binding-intake"
 /**
  * P0-04B-01 disposable PostgreSQL 17 / real Medusa module acceptance.
  * Synthetic principals/evidence exercise STORAGE ONLY, never IAM, CP, signing,
- * merchant certification or successful native checkout. No fixture is ACTIVE.
+ * merchant certification or successful native checkout. Original lifecycle fixtures
+ * stay inactive; the explicitly synthetic CP/native intake acceptance tests
+ * contain isolated ACTIVE rows that are revoked or expire in the disposable DB.
  * Refuses a non-test or unmarked database; append-only receipts remain until CI
  * disposes the database (they are not deleted through an audit bypass).
  */
@@ -50,8 +53,8 @@ export default async function ({ container }: ExecArgs) {
       subject: `synthetic-maker-${key}`,
       tenantId: scope.tenantId,
       organisationId: scope.organisationId,
-      audience: "baobab-trade",
-      scopes: ["trade:legal-seller-binding:propose"],
+      audience: "baobab-control-plane",
+      scopes: ["trade-binding:propose"],
       issuer: "synthetic-storage-fixture",
       tokenId: key,
     }
@@ -72,7 +75,7 @@ export default async function ({ container }: ExecArgs) {
       checker: {
         ...maker,
         subject: `synthetic-checker-${suffix}-${key}`,
-        scopes: ["trade:legal-seller-binding:approve"],
+        scopes: ["trade-binding:approve"],
       },
       approvedAt: new Date().toISOString(),
       approvalReference: `synthetic/approval/${suffix}/${key}`,
@@ -144,7 +147,7 @@ export default async function ({ container }: ExecArgs) {
     )
     await persistence.revoke(
       ordinary.scope,
-      { ...ordinary.maker, scopes: ["trade:legal-seller-binding:revoke"] },
+      { ...ordinary.maker, scopes: ["trade-binding:revoke"] },
       "synthetic authority withdrawn",
       { ...ordinary.evidence, reference: "synthetic/revocation" },
     )
@@ -154,7 +157,7 @@ export default async function ({ container }: ExecArgs) {
     await assert.rejects(
       persistence.revoke(
         ordinary.scope,
-        { ...ordinary.maker, scopes: ["trade:legal-seller-binding:revoke"] },
+        { ...ordinary.maker, scopes: ["trade-binding:revoke"] },
         "duplicate",
         ordinary.evidence,
       ),
@@ -181,7 +184,7 @@ export default async function ({ container }: ExecArgs) {
       persistence.approve(raceApproval, raced.approvedEvidence(raceApproval)),
       persistence.revoke(
         raced.scope,
-        { ...raced.maker, scopes: ["trade:legal-seller-binding:revoke"] },
+        { ...raced.maker, scopes: ["trade-binding:revoke"] },
         "synthetic withdrawal",
         raced.evidence,
       ),
@@ -278,13 +281,15 @@ export default async function ({ container }: ExecArgs) {
     )
     assert.equal(await receipts(commitExpiry.scope.cartId), 0)
 
+    await acceptAuthenticatedBindingIntake(container, persistence, pool)
+
     // Receipt enforcement is independent of the application adapter: a direct
     // deletion or approval cannot bypass the same applied database constraints.
     const invalid = await pool.query(`SELECT count(*)::int AS count FROM la05_binding_decision d
       LEFT JOIN la05_binding_outbox o ON o.decision_id=d.id WHERE o.id IS NULL`)
     assert.equal(invalid.rows[0].count, 0)
     console.log(
-      "P0-04B-01: native Medusa/PostgreSQL binding lifecycle, races, immutable snapshots and atomic expiry/receipts passed; no ACTIVE fixture",
+      "P0-04B-01: native Medusa/PostgreSQL binding lifecycle, races, immutable snapshots and atomic expiry/receipts passed; original fixtures remain inactive",
     )
   } finally {
     await pool.end()
