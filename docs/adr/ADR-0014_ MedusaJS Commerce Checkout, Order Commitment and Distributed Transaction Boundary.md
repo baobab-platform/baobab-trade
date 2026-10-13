@@ -2794,3 +2794,12 @@ The ERP rule is:
 And the long-term architectural rule is:
 
 > **Every future capability proposed for synchronous checkout must prove that it is genuinely required before Order commitment. Otherwise, it belongs beyond the distributed transaction boundary.**
+
+## P0-04B-01 implementation follow-up — 13 October 2026
+
+[Durable seller-binding lifecycle](../plans/P0-04B-01-trade-binding-lifecycle.md)
+adds applied Medusa/PostgreSQL mutation, immutable proposal scope and atomic
+revision/decision/local-audit receipts. Independent approval remains inactive;
+CP-owned context issuance, current legal/provider facts and protected execution
+acceptance remain separate. This does not change the accepted ownership model,
+activate a provider or introduce a cross-engine transaction.

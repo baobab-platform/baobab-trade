@@ -1,5 +1,6 @@
 import {
   assertBindingApproval,
+  parseBindingTimestamp,
   assertBindingProposal,
   assertBindingRevocation,
   type BindingApproval,
@@ -41,51 +42,81 @@ const requireVerified = (actor: VerifiedActor): void => {
     throw new Error("LA-05C5 denied: verified IAM identity required")
   }
 }
-const requireEvidence = (evidence: VerifiedEvidence, reference: string): void => {
+const requireEvidence = (evidence: VerifiedEvidence, reference: string, at: number): void => {
   if (
     !evidence ||
     evidence.reference !== reference ||
     !evidence.decisionId?.trim() ||
-    !Number.isFinite(Date.parse(evidence.verifiedAt))
+    !Number.isFinite(parseBindingTimestamp(evidence.verifiedAt)) ||
+    parseBindingTimestamp(evidence.verifiedAt) > at ||
+    at - parseBindingTimestamp(evidence.verifiedAt) > 30_000
   ) {
     throw new Error("LA-05C5 denied: canonical evidence verification failed")
   }
+}
+async function reverifyActor(
+  ports: BindingAuthorityPorts,
+  token: string,
+  operation: "propose" | "approve" | "revoke",
+  original: VerifiedActor,
+): Promise<VerifiedActor> {
+  const current = await ports.iam.verify(token, operation)
+  requireVerified(current)
+  if (
+    ["subject", "issuer", "tokenId", "tenantId", "organisationId", "audience"].some(
+      (key) => current[key as keyof VerifiedActor] !== original[key as keyof VerifiedActor],
+    ) ||
+    !current.scopes?.includes(`trade:legal-seller-binding:${operation}`)
+  ) {
+    throw new Error("LA-05C5 denied: IAM identity or command authority changed")
+  }
+  return current
 }
 export async function proposeBinding(
   ports: BindingAuthorityPorts,
   token: string,
   proposal: BindingProposal,
-  nowMs: number,
+  now: () => number = Date.now,
 ): Promise<void> {
   const actor = await ports.iam.verify(token, "propose")
   requireVerified(actor)
   // Never trust the maker supplied in a request; bind to the verified principal.
   if (actor.subject !== proposal.maker.subject) throw new Error("LA-05C5 denied: maker mismatch")
   const canonical = { ...proposal, maker: actor }
-  assertBindingProposal(canonical, nowMs)
+  assertBindingProposal(canonical, now())
   await ports.legalAuthority.assertCurrent(canonical.scope)
   const evidence = await ports.evidence.verify(canonical.evidenceReference, canonical.scope)
-  requireEvidence(evidence, canonical.evidenceReference)
+  requireEvidence(evidence, canonical.evidenceReference, now())
+  // Remote evidence verification may outlive a human session, proposal or CP
+  // attestation. Recheck the actual principal/scope and authority after that I/O.
+  await reverifyActor(ports, token, "propose", actor)
+  await ports.legalAuthority.assertCurrent(canonical.scope)
+  assertBindingProposal(canonical, now())
+  requireEvidence(evidence, canonical.evidenceReference, now())
   await ports.persistence.propose(canonical, evidence)
 }
 export async function approveBinding(
   ports: BindingAuthorityPorts,
   token: string,
   approval: BindingApproval,
-  nowMs: number,
+  now: () => number = Date.now,
 ): Promise<void> {
   const actor = await ports.iam.verify(token, "approve")
   requireVerified(actor)
   if (actor.subject !== approval.checker.subject)
     throw new Error("LA-05C5 denied: checker mismatch")
   const canonical = { ...approval, checker: actor }
-  assertBindingApproval(canonical, nowMs)
+  assertBindingApproval(canonical, now())
   await ports.legalAuthority.assertCurrent(canonical.proposal.scope)
   const evidence = await ports.evidence.verify(
     canonical.approvalReference,
     canonical.proposal.scope,
   )
-  requireEvidence(evidence, canonical.approvalReference)
+  requireEvidence(evidence, canonical.approvalReference, now())
+  await reverifyActor(ports, token, "approve", actor)
+  await ports.legalAuthority.assertCurrent(canonical.proposal.scope)
+  assertBindingApproval(canonical, now())
+  requireEvidence(evidence, canonical.approvalReference, now())
   await ports.persistence.approve(canonical, evidence)
 }
 export async function revokeBinding(
@@ -94,11 +125,17 @@ export async function revokeBinding(
   scope: GovernedBindingScope,
   reason: string,
   reference: string,
+  now: () => number = Date.now,
 ): Promise<void> {
   const actor = await ports.iam.verify(token, "revoke")
   requireVerified(actor)
   assertBindingRevocation(scope, actor, reason, reference)
   const evidence = await ports.evidence.verify(reference, scope)
-  requireEvidence(evidence, reference)
+  requireEvidence(evidence, reference, now())
+  // Revocation never requires a still-valid legal mandate: withdrawing a local
+  // binding must remain possible after CP has revoked the original mandate.
+  const current = await reverifyActor(ports, token, "revoke", actor)
+  assertBindingRevocation(scope, current, reason, reference)
+  requireEvidence(evidence, reference, now())
   await ports.persistence.revoke(scope, actor, reason, evidence)
 }

@@ -14,6 +14,14 @@ Contract provenance is pinned in `contracts.lock.yaml`. Runtime needs are declar
 
 P0-04A now generates exact pinned Shared schemas for legal-actor assessment, documentary restrictions, merchant readiness and platform context. Runtime rejects malformed or undeclared authority fields before scope and freshness checks. See [contract convergence and maintenance](docs/plans/P0-04A-trade-contract-convergence.md) for regeneration, validation and remaining workload/live acceptance prerequisites. Genuine founding-record acceptance remains pending.
 
+P0-04B-01 installs the durable seller-binding lifecycle in the real Medusa module:
+immutable proposals, current-clock expiry, independent approval, revocation and
+atomic append-only decision/audit receipts. The storage module loads without
+checkout credentials; protected checkout clients remain lazy and gated. Approval
+cannot activate a binding. See [lifecycle maintenance and acceptance](docs/plans/P0-04B-01-trade-binding-lifecycle.md)
+for native PostgreSQL regression, rollback safeguards and the next authenticated
+CP-owned issuance gate. The wider P0-04B programme remains unfinished.
+
 ## Local development
 
 Prerequisites: Node.js 24, Git, PostgreSQL and Redis.

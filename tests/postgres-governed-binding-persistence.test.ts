@@ -36,9 +36,12 @@ function mockDb(existing: Record<string, unknown>[] = [], updateCount = 1) {
     query: vi.fn().mockImplementation(async (sql: string, values: unknown[] = []) => {
       queries.push(sql)
       params.push(values)
+      if (sql.includes("AS valid")) return { rows: [{ valid: true }], rowCount: 1 }
+      if (sql.trimStart().startsWith("UPDATE"))
+        return { rows: [{ id: "lsbind_test", revision: 1 }], rowCount: updateCount }
       if (sql.startsWith("SELECT")) return { rows: existing, rowCount: existing.length }
       if (sql.includes("RETURNING id"))
-        return { rows: [{ id: "00000000-0000-4000-8000-000000000001" }], rowCount: 1 }
+        return { rows: [{ id: "00000000-0000-4000-8000-000000000001", revision: 0 }], rowCount: 1 }
       if (sql.trimStart().startsWith("UPDATE")) return { rows: [], rowCount: updateCount }
       return { rows: [], rowCount: 1 }
     }),
@@ -50,7 +53,9 @@ function mockDb(existing: Record<string, unknown>[] = [], updateCount = 1) {
 describe("LA-05C5 PostgreSQL transaction boundary", () => {
   it("commits proposed binding, decision and outbox atomically", async () => {
     const db = mockDb()
-    await new PostgresGovernedBindingPersistence(db.pool).propose(
+    await new PostgresGovernedBindingPersistence(db.pool, () =>
+      Date.parse("2026-10-10T06:00:00Z"),
+    ).propose(
       {
         scope,
         maker: actor,
@@ -68,7 +73,9 @@ describe("LA-05C5 PostgreSQL transaction boundary", () => {
   it("rolls back duplicate cart proposals", async () => {
     const db = mockDb([{ cart_id: scope.cartId }])
     await expect(
-      new PostgresGovernedBindingPersistence(db.pool).propose(
+      new PostgresGovernedBindingPersistence(db.pool, () =>
+        Date.parse("2026-10-10T06:00:00Z"),
+      ).propose(
         {
           scope,
           maker: actor,
@@ -102,38 +109,45 @@ describe("LA-05C5 PostgreSQL transaction boundary", () => {
       expiresAt: "2026-10-11T05:00:00Z",
       evidenceReference: evidence.reference,
     },
-    checker: { ...actor, subject: "checker" },
+    checker: { ...actor, subject: "checker", scopes: ["trade:legal-seller-binding:approve"] },
     approvedAt: "2026-10-10T05:30:00Z",
     approvalReference: "review/test",
   }
   it("records the approval on the binding row without activating it", async () => {
     const db = mockDb([stored])
-    await new PostgresGovernedBindingPersistence(db.pool).approve(approval, evidence)
+    await new PostgresGovernedBindingPersistence(db.pool, () =>
+      Date.parse("2026-10-10T06:00:00Z"),
+    ).approve(approval, { ...evidence, reference: approval.approvalReference })
     const update = db.queries.find((q) => q.startsWith("UPDATE native_seller_cart_binding"))
-    expect(update).toContain("approved_by = $2")
+    expect(update).toContain("approved_by=$2")
     expect(update).toContain("approved_by IS NULL")
-    expect(update).toContain("proposed_by <> $2")
-    expect(update).toContain("expires_at > transaction_timestamp()")
+    expect(update).toContain("proposed_by<>$2")
+    expect(update).toContain("expires_at>clock_timestamp()")
+    expect(update).toContain("proposal_snapshot=$4::jsonb")
     expect(db.queries.some((q) => /status = 'ACTIVE'/.test(q))).toBe(false)
     expect(db.queries.at(-1)).toBe("COMMIT")
   })
   it("rolls back approval when the guarded update matches no row (replay, self-approval or expired)", async () => {
     const db = mockDb([stored], 0)
     await expect(
-      new PostgresGovernedBindingPersistence(db.pool).approve(approval, evidence),
+      new PostgresGovernedBindingPersistence(db.pool, () =>
+        Date.parse("2026-10-10T06:00:00Z"),
+      ).approve(approval, { ...evidence, reference: approval.approvalReference }),
     ).rejects.toThrow("transition rejected")
     expect(db.queries).toContain("ROLLBACK")
     expect(db.queries.some((q) => q.includes("la05_binding_outbox"))).toBe(false)
   })
   it("persists the revocation reason with the decision", async () => {
     const db = mockDb([{ ...stored, status: "ACTIVE" }])
-    await new PostgresGovernedBindingPersistence(db.pool).revoke(
+    await new PostgresGovernedBindingPersistence(db.pool, () =>
+      Date.parse("2026-10-10T06:00:00Z"),
+    ).revoke(
       scope,
       { ...actor, scopes: ["trade:legal-seller-binding:revoke"] },
       "mandate withdrawn by CP",
       evidence,
     )
-    const index = db.queries.findIndex((q) => q.includes("'REVOKED',$6,$7,$8,$9"))
+    const index = db.queries.findIndex((q) => q.includes("INSERT INTO la05_binding_decision"))
     expect(index).toBeGreaterThan(-1)
     expect(db.params[index]).toContain("mandate withdrawn by CP")
     expect(db.queries.at(-1)).toBe("COMMIT")

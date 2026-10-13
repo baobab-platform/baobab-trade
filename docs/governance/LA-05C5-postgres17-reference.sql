@@ -1,3 +1,8 @@
+-- Historical C5 reference only: superseded for runtime use by
+-- src/modules/legal-seller-checkout/migrations/Migration20261013130000.ts.
+-- Do NOT apply this archival DDL. Medusa db:migrate owns the full lifecycle,
+-- immutable snapshots, revision/receipt fences and append-only audit constraints.
+-- See docs/plans/P0-04B-01-trade-binding-lifecycle.md.
 -- LA-05C5 reference PostgreSQL 17 DDL; NOT an applied Medusa migration.
 -- Requires a reviewed integration migration and transactional adapter before use.
 CREATE TABLE IF NOT EXISTS la05_binding_decision (

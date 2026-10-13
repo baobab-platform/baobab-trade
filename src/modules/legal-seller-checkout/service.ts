@@ -1,3 +1,6 @@
+import { Pool } from "pg"
+import { resolveNativeCheckoutEnvironment } from "../../baobab/orders/native-cart-legal-seller"
+import { PostgresGovernedBindingPersistence } from "../../baobab/orders/postgres-governed-binding-persistence"
 import { MedusaService } from "@medusajs/framework/utils"
 import { getBaobabTradeEnvironment } from "../../baobab/config/environment"
 import { HttpControlPlaneClient, type ControlPlaneClient } from "../../baobab/control-plane/client"
@@ -31,7 +34,7 @@ const seconds = (v: unknown): number => new Date(String(v)).getTime()
 /**
  * Real Medusa module backed by a governed PostgreSQL cart-binding table.
  * An empty table is DENY, not an invitation to derive seller identity from
- * the storefront. This module is registered only for guarded staging.
+ * the storefront. The module always installs storage; external checkout ports remain guarded.
  */
 class NativeSellerCheckoutModuleService
   extends MedusaService({ NativeSellerCartBinding })
@@ -39,36 +42,115 @@ class NativeSellerCheckoutModuleService
 {
   private readonly environment = getBaobabTradeEnvironment()
 
-  readonly tokens = new ClientCredentialsWorkloadTokenProvider({
-    tokenUrl: requireEnv("BAOBAB_IAM_WORKLOAD_TOKEN_URL"),
-    clientId: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_ID"),
-    clientSecret: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_SECRET"),
-  })
+  private checkoutRuntime?: {
+    tokens: ClientCredentialsWorkloadTokenProvider
+    controlPlane: ControlPlaneClient
+    cp: HttpLegalActorAssessmentClient
+    documentary: HttpDocumentaryRestrictionClient
+    readiness: HttpPaymentsMerchantReadinessAdapter
+  }
+  private governancePool?: Pool
+  private governancePersistence?: PostgresGovernedBindingPersistence
 
-  private readonly controlPlane: ControlPlaneClient = new HttpControlPlaneClient({
-    baseUrl: requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL"),
-    contextPath: this.environment.controlPlaneContextPath,
-    productId: this.environment.controlPlaneProductId,
-    marketPathTemplate: this.environment.controlPlaneMarketPathTemplate,
-    mappingResolutionPath: this.environment.controlPlaneMappingResolutionPath,
-    platformContextPath: this.environment.controlPlanePlatformContextPath,
-  })
+  /** Schema/storage is always installed; credentials are built only for the
+   * protected gate. An empty module is never a merchant/checkout activation. */
+  private runtime() {
+    const profile = resolveNativeCheckoutEnvironment({
+      node: process.env.NODE_ENV,
+      baobab: process.env.BAOBAB_ENVIRONMENT,
+      deployment: process.env.BAOBAB_DEPLOYMENT_ENV,
+    })
+    if (process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD !== "true" || profile.production) {
+      throw new Error("Native legal seller denied: guarded non-production runtime required")
+    }
+    if (!this.checkoutRuntime)
+      this.checkoutRuntime = {
+        tokens: new ClientCredentialsWorkloadTokenProvider({
+          tokenUrl: requireEnv("BAOBAB_IAM_WORKLOAD_TOKEN_URL"),
+          clientId: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_ID"),
+          clientSecret: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_SECRET"),
+        }),
 
-  readonly cp = new HttpLegalActorAssessmentClient(requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL"))
+        controlPlane: new HttpControlPlaneClient({
+          baseUrl: requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL"),
+          contextPath: this.environment.controlPlaneContextPath,
+          productId: this.environment.controlPlaneProductId,
+          marketPathTemplate: this.environment.controlPlaneMarketPathTemplate,
+          mappingResolutionPath: this.environment.controlPlaneMappingResolutionPath,
+          platformContextPath: this.environment.controlPlanePlatformContextPath,
+        }),
 
-  // Fail closed if the independent, client-scoped documentary veto is not configured.
-  readonly documentary = new HttpDocumentaryRestrictionClient(
-    requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL"),
-  )
+        cp: new HttpLegalActorAssessmentClient(requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL")),
 
-  readonly readiness = new HttpPaymentsMerchantReadinessAdapter({
-    url: requireEnv("BAOBAB_PAYMENTS_SELLER_READINESS_URL"),
-    tokens: new ClientCredentialsWorkloadTokenProvider({
-      tokenUrl: requireEnv("BAOBAB_PAYMENTS_WORKLOAD_TOKEN_URL"),
-      clientId: requireEnv("BAOBAB_PAYMENTS_WORKLOAD_CLIENT_ID"),
-      clientSecret: requireEnv("BAOBAB_PAYMENTS_WORKLOAD_CLIENT_SECRET"),
-    }),
-  })
+        // Fail closed if the independent, client-scoped documentary veto is not configured.
+        documentary: new HttpDocumentaryRestrictionClient(
+          requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL"),
+        ),
+
+        readiness: new HttpPaymentsMerchantReadinessAdapter({
+          url: requireEnv("BAOBAB_PAYMENTS_SELLER_READINESS_URL"),
+          tokens: new ClientCredentialsWorkloadTokenProvider({
+            tokenUrl: requireEnv("BAOBAB_PAYMENTS_WORKLOAD_TOKEN_URL"),
+            clientId: requireEnv("BAOBAB_PAYMENTS_WORKLOAD_CLIENT_ID"),
+            clientSecret: requireEnv("BAOBAB_PAYMENTS_WORKLOAD_CLIENT_SECRET"),
+          }),
+        }),
+      }
+    return this.checkoutRuntime
+  }
+  get tokens() {
+    return this.runtime().tokens
+  }
+  get cp() {
+    return this.runtime().cp
+  }
+  get documentary() {
+    return this.runtime().documentary
+  }
+  get readiness() {
+    return this.runtime().readiness
+  }
+  private get controlPlane() {
+    return this.runtime().controlPlane
+  }
+
+  /** Internal persistence port only; no HTTP mutation or auth bypass is exposed.
+   * The caller must compose verified IAM/evidence authorities through the
+   * governed command service; the database independently fences receipts. */
+  get bindingPersistence(): PostgresGovernedBindingPersistence {
+    if (!this.governancePersistence) {
+      const url = process.env.DATABASE_URL
+      if (!url || !["postgres:", "postgresql:"].includes(new URL(url).protocol)) {
+        throw new Error("Governed binding persistence requires the trusted runtime database")
+      }
+      this.governancePool = new Pool({
+        connectionString: url,
+        max: 4,
+        connectionTimeoutMillis: 3000,
+        idleTimeoutMillis: 30000,
+        application_name: "baobab-trade-binding-lifecycle",
+      })
+      const pool = this.governancePool
+      this.governancePersistence = new PostgresGovernedBindingPersistence({
+        connect: async () => {
+          const client = await pool.connect()
+          return {
+            query: (sql, values) => client.query(sql, values ? [...values] : []),
+            release: () => client.release(),
+          }
+        },
+      })
+    }
+    return this.governancePersistence
+  }
+  __hooks = {
+    onApplicationShutdown: async () => {
+      const pool = this.governancePool
+      this.governancePool = undefined
+      this.governancePersistence = undefined
+      await pool?.end()
+    },
+  }
 
   readonly bindings = {
     resolveForCart: (cart: NativeCartIdentity): Promise<TrustedNativeSellerBinding> =>
