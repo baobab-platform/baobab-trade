@@ -1,3 +1,4 @@
+import { isValidPlatformContextResolutionResponse } from "../contracts/platform-context"
 import type { BindingActivation } from "./authenticated-binding-intake"
 import { BINDING_ACTIVITY, BINDING_CAPABILITY } from "./authenticated-binding-intake"
 import { assertBindingAdmission } from "./binding-authority-client"
@@ -23,6 +24,8 @@ export function assertBindingActivation(p: BindingActivation, now: number): void
   )
     throw new Error("Invalid binding activation actor")
   assertBindingAdmission(p.admission, "activate", p.scope, p.admission.command_digest, now)
+  if (!isValidPlatformContextResolutionResponse(p.context))
+    throw new Error("Invalid CP activation context schema")
   assertCurrentSellerMarketContext(p.context, p.scope, now)
   if (!p.context.expires_at || Date.parse(p.context.expires_at) <= now || !p.context.market_id)
     throw new Error("Bounded CP binding context required")

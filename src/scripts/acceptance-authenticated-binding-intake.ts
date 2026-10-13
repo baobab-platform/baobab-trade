@@ -32,19 +32,22 @@ export async function acceptAuthenticatedBindingIntake(
   let legal = true
   let lease = 5000
   const cp: BindingAuthorityClient = {
-    authorize: async (_token, operation, scope, digest) => ({
-      scope,
-      command_digest: digest,
-      decision_id: randomUUID(),
-      principal_id: subject,
-      issuer: "https://synthetic-iam.example.test",
-      token_id: `synthetic-token-${subject}`,
-      scope_name: `trade-binding:${operation}`,
-      evaluated_at: new Date().toISOString(),
-      valid_until: new Date(Date.now() + lease).toISOString(),
-      matched_grant_ids: ["synthetic-exact-grant"],
-      provider_permissions_granted: false,
-    }),
+    authorize: async (_token, operation, scope, digest) => {
+      const evaluated = Date.now()
+      return {
+        scope,
+        command_digest: digest,
+        decision_id: randomUUID(),
+        principal_id: subject,
+        issuer: "https://synthetic-iam.example.test",
+        token_id: `synthetic-token-${subject}`,
+        scope_name: `trade-binding:${operation}`,
+        evaluated_at: new Date(evaluated).toISOString(),
+        valid_until: new Date(evaluated + lease).toISOString(),
+        matched_grant_ids: ["synthetic-exact-grant"],
+        provider_permissions_granted: false,
+      }
+    },
     resolve: async (scope) => ({
       context_id: randomUUID(),
       tenant_id: scope.tenantId,

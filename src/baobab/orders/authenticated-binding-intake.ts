@@ -11,7 +11,10 @@ import {
 } from "./governed-binding-command-policy"
 import type { VerifiedActor, VerifiedEvidence } from "./governed-binding-service"
 import type { PostgresGovernedBindingPersistence } from "./postgres-governed-binding-persistence"
-import type { RawPlatformContextResolutionResponse } from "../contracts/platform-context"
+import {
+  isValidPlatformContextResolutionResponse,
+  type RawPlatformContextResolutionResponse,
+} from "../contracts/platform-context"
 import type { LegalActorDecision } from "../control-plane/legal-actor-assessment"
 import { assertCurrentSellerMarketContext } from "./seller-market-context"
 import { assertFreshSellerFact } from "./governed-legal-seller"
@@ -89,6 +92,7 @@ export class AuthenticatedBindingIntake {
     context: RawPlatformContextResolutionResponse,
     legalDecision: LegalActorDecision,
   ): void {
+    if (!isValidPlatformContextResolutionResponse(context)) deny()
     assertCurrentSellerMarketContext(context, scope, this.now())
     if (!context.expires_at || Date.parse(context.expires_at) <= this.now() || !context.market_id)
       deny()
@@ -112,6 +116,7 @@ export class AuthenticatedBindingIntake {
   private async legal(scope: GovernedBindingScope) {
     const token = await this.workloadToken()
     const context = await this.cp.resolve(scope, token)
+    if (!isValidPlatformContextResolutionResponse(context)) deny()
     assertCurrentSellerMarketContext(context, scope, this.now())
     // CP assessment itself redeems ownership, purpose and current lifecycle.
     if (!context.expires_at || Date.parse(context.expires_at) <= this.now() || !context.market_id)
