@@ -15,6 +15,10 @@ import type {
   VerifiedActor,
   VerifiedEvidence,
 } from "./governed-binding-service"
+import type {
+  NativeCheckoutAuthorization,
+  NativeCheckoutAuthorizationStore,
+} from "./native-cart-legal-seller"
 
 /** Trusted runtime pool only; a Store request must never supply database access. */
 export interface PgClient {
@@ -176,7 +180,9 @@ async function lockNativeCoordinates(db: PgClient, scope: GovernedBindingScope):
  * revision/decision/audit receipts. Approval deliberately does NOT activate:
  * authenticated intake and CP-owned RUNTIME issuance are separate gates.
  */
-export class PostgresGovernedBindingPersistence implements Persistence {
+export class PostgresGovernedBindingPersistence
+  implements Persistence, NativeCheckoutAuthorizationStore
+{
   constructor(
     private readonly pool: PgPool,
     private readonly now: () => number = Date.now,
@@ -369,6 +375,75 @@ export class PostgresGovernedBindingPersistence implements Persistence {
       if (changed.rowCount !== 1) deny()
       await record(db, changed.rows[0], s, "APPROVED", command.checker, evidence)
       await requireUnexpired(db, s.cartId)
+    })
+  }
+  /**
+   * P0-04B-03: durable receipt of the validate hook's CP/Payments assessment.
+   * The database re-verifies the ACTIVE binding revision and open cart under
+   * the seller-binding fence; the cart commit-point trigger consumes it once.
+   */
+  async record(authorization: NativeCheckoutAuthorization): Promise<void> {
+    const a = authorization
+    const legal = parseBindingTimestamp(a?.legalValidUntil)
+    const ready = parseBindingTimestamp(a?.readinessValidUntil)
+    if (
+      !a?.cartId?.trim() ||
+      a.idempotencyKey !== `native-checkout/${a.cartId}` ||
+      ![
+        a.contextId,
+        a.responsibleLegalEntityId,
+        a.mandateId,
+        a.providerCertificationReference,
+        a.merchantActivationReference,
+        a.policyReference,
+      ].every((value) => typeof value === "string" && value.trim().length > 0) ||
+      !Number.isFinite(legal) ||
+      !Number.isFinite(ready) ||
+      Math.min(legal, ready) <= this.now()
+    )
+      throw new Error("P0-04B-03 denied: checkout authorization incomplete or expired")
+    await transaction(this.pool, a.cartId, async (db) => {
+      // Medusa runs the validate hook on a completeCart replay too. A checkout
+      // already committed under a live consumption resolves to the original
+      // order (ADR-0014 §26–30); it needs, and may record, nothing new.
+      const committed = await db.query(
+        `SELECT 1 FROM la05_checkout_authorization receipt
+        JOIN cart ON cart.id = receipt.cart_id AND cart.completed_at IS NOT NULL
+        WHERE receipt.idempotency_key=$1 AND receipt.consumed_at IS NOT NULL
+          AND receipt.released_at IS NULL`,
+        [a.idempotencyKey],
+      )
+      if (committed.rows.length) return
+      const binding = await db.query(
+        `SELECT id,revision FROM native_seller_cart_binding
+        WHERE cart_id=$1 AND status='ACTIVE' AND deleted_at IS NULL`,
+        [a.cartId],
+      )
+      if (binding.rows.length !== 1)
+        throw new Error("P0-04B-03 denied: no ACTIVE seller binding for checkout")
+      const inserted = await db.query(
+        `INSERT INTO la05_checkout_authorization
+        (cart_id,binding_id,binding_revision,context_id,responsible_legal_entity_id,mandate_id,
+         legal_valid_until,provider_certification_reference,merchant_activation_reference,policy_reference,
+         readiness_valid_until,lease_expires_at,idempotency_key)
+        VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8,$9,$10,$11::timestamptz,
+          LEAST($7::timestamptz,$11::timestamptz),$12) RETURNING id`,
+        [
+          a.cartId,
+          binding.rows[0].id,
+          binding.rows[0].revision,
+          a.contextId,
+          a.responsibleLegalEntityId,
+          a.mandateId,
+          a.legalValidUntil,
+          a.providerCertificationReference,
+          a.merchantActivationReference,
+          a.policyReference,
+          a.readinessValidUntil,
+          a.idempotencyKey,
+        ],
+      )
+      if (inserted.rowCount !== 1) throw new Error("P0-04B-03 denied: authorization not recorded")
     })
   }
   async revoke(

@@ -85,7 +85,8 @@
     "test:zb04": "vitest run tests/buyer-application-route.test.ts tests/buyer-application-staff-review.test.ts tests/buyer-kyb-evidence.test.ts tests/buyer-admission-decision.test.ts tests/buyer-erp-projection-request.test.ts tests/buyer-commercial-profile-consumer.test.ts tests/buyer-organisation-status-route.test.ts tests/buyer-invitation-route.test.ts tests/buyer-invitation-lifecycle.test.ts tests/zb04-certification.test.ts",
     "contracts:sync": "node scripts/sync-authority-contracts.mjs",
     "postbuild": "node scripts/verify-authority-build.mjs",
-    "regression:governed-binding-lifecycle": "medusa exec ./src/scripts/regression-governed-binding-lifecycle.ts"
+    "regression:governed-binding-lifecycle": "medusa exec ./src/scripts/regression-governed-binding-lifecycle.ts",
+    "regression:checkout-commit-fence": "medusa exec ./src/scripts/regression-checkout-commit-fence.ts"
   },
   "dependencies": {
     "@medusajs/auth-oidc": "2.21.2",

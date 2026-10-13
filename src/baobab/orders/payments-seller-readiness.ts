@@ -7,6 +7,7 @@ import type {
   GovernedSellerOrderCommand,
   LegalSellerEvidence,
   LegalSellerProviderReadiness,
+  ProviderReadinessReceipt,
 } from "./governed-legal-seller"
 import type { WorkloadTokenProvider } from "../control-plane/workload-token"
 
@@ -99,7 +100,7 @@ export class HttpPaymentsMerchantReadinessAdapter implements LegalSellerProvider
   async assertReadyForSeller(
     command: GovernedSellerOrderCommand,
     evidence: LegalSellerEvidence,
-  ): Promise<void> {
+  ): Promise<ProviderReadinessReceipt> {
     const bound = command as GovernedSellerOrderCommand & { tenantId?: string }
     if (
       !nonempty(bound.tenantId) ||
@@ -139,5 +140,12 @@ export class HttpPaymentsMerchantReadinessAdapter implements LegalSellerProvider
     if (!response.ok) throw new Error("Payments readiness denied: provider unavailable")
     const result: unknown = await response.json()
     assertCurrentPaymentsReadiness(result, request, this.now())
+    const ready = result as PaymentsReadinessDecision
+    return {
+      providerCertificationReference: ready.provider_certification_reference,
+      merchantActivationReference: ready.merchant_activation_reference,
+      policyReference: ready.policy_reference,
+      validUntil: ready.valid_until,
+    }
   }
 }

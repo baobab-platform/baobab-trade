@@ -35,12 +35,34 @@ export interface TrustedNativeSellerBindingResolver {
   resolveForCart(cart: NativeCartIdentity): Promise<TrustedNativeSellerBinding>
 }
 
+/**
+ * P0-04B-03: what the validate hook proved, recorded durably so the database
+ * commit-point fence can consume it exactly once at cart completion.
+ */
+export type NativeCheckoutAuthorization = {
+  cartId: string
+  contextId: string
+  responsibleLegalEntityId: string
+  mandateId: string
+  legalValidUntil: string
+  providerCertificationReference: string
+  merchantActivationReference: string
+  policyReference: string
+  readinessValidUntil: string
+  idempotencyKey: string
+}
+
+export interface NativeCheckoutAuthorizationStore {
+  record(authorization: NativeCheckoutAuthorization): Promise<void>
+}
+
 export type NativeCartLegalSellerDependencies = {
   bindings: TrustedNativeSellerBindingResolver
   cp: LegalActorAssessmentPort
   documentary: DocumentaryRestrictionPort
   tokens: WorkloadTokenProvider
   readiness: LegalSellerProviderReadiness
+  authorizations?: NativeCheckoutAuthorizationStore
   now?: () => number
 }
 
@@ -79,7 +101,7 @@ export function resolveNativeCheckoutEnvironment(values: {
 export async function assertNativeCartLegalSeller(
   cart: NativeCheckoutCart,
   deps: NativeCartLegalSellerDependencies,
-): Promise<void> {
+): Promise<NativeCheckoutAuthorization> {
   if (!cart?.id || typeof cart.id !== "string") {
     throw new Error("Native legal seller denied: no canonical cart ID")
   }
@@ -107,6 +129,7 @@ export async function assertNativeCartLegalSeller(
     !command.legalActivity ||
     !command.legalCapability ||
     !command.correlationId ||
+    command.idempotencyKey !== `native-checkout/${identity.cartId}` ||
     !/^[A-Z]{2}$/.test(command.marketCode)
   ) {
     throw new Error("Native legal seller denied: no matching trusted cart binding")
@@ -143,7 +166,16 @@ export async function assertNativeCartLegalSeller(
     now(),
   )
   // Native provider readiness is independent of BOTH CP authority checks.
-  await deps.readiness.assertReadyForSeller(command, initial)
+  const readiness = await deps.readiness.assertReadyForSeller(command, initial)
+  if (
+    !readiness ||
+    !readiness.providerCertificationReference ||
+    !readiness.merchantActivationReference ||
+    !readiness.policyReference ||
+    !readiness.validUntil
+  ) {
+    throw new Error("Native legal seller denied: no recorded certified merchant readiness")
+  }
   // LA-05C4: a local cart binding may be revoked, expire, or be replaced
   // WHILE the provider is assessed. Re-read the server-owned row and fresh CP
   // market attestation before the final CP mandate assessment.
@@ -194,6 +226,18 @@ export async function assertNativeCartLegalSeller(
     { ...restrictionRequest, organisation_id: command.organisationId },
     now(),
   )
+  return {
+    cartId: identity.cartId,
+    contextId: final.contextId,
+    responsibleLegalEntityId: final.responsibleLegalEntityId,
+    mandateId: final.mandateId,
+    legalValidUntil: final.validUntil,
+    providerCertificationReference: readiness.providerCertificationReference,
+    merchantActivationReference: readiness.merchantActivationReference,
+    policyReference: readiness.policyReference,
+    readinessValidUntil: readiness.validUntil,
+    idempotencyKey: command.idempotencyKey,
+  }
 }
 
 /**
@@ -225,5 +269,11 @@ export async function enforceNativeCheckoutGate(
   } catch {
     throw new Error("Native legal seller denied: trusted dependency not registered")
   }
-  await assertNativeCartLegalSeller(cart, deps)
+  // P0-04B-03: without a durable authorization the commit-point fence denies
+  // completion anyway; refuse here first rather than create an order to compensate.
+  if (!deps?.authorizations) {
+    throw new Error("Native legal seller denied: checkout authorization store not registered")
+  }
+  const authorization = await assertNativeCartLegalSeller(cart, deps)
+  await deps.authorizations.record(authorization)
 }

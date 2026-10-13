@@ -57,6 +57,7 @@ describe("LA-05C legal-seller PEP", () => {
     const cp: LegalActorAssessmentPort = { assess }
     const seller = vi.fn(async () => {
       if (!ready) throw new Error("Provider merchant not onboarded")
+      return undefined
     })
     const readiness: LegalSellerProviderReadiness = { assertReadyForSeller: seller }
     const adapter = new GovernedMedusaOrderOrchestrationAdapter(
