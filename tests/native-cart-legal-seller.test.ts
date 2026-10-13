@@ -25,7 +25,7 @@ const cmd: GovernedSellerOrderCommand & {
   salesChannelId: cart.sales_channel_id,
   regionId: cart.region_id,
   orderReference: `cart/${cart.id}/complete`,
-  organisationId: "org-synthetic",
+  organisationId: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6a",
   tenantId: "tn_synthetic",
   marketKey: "za",
   legalSellerKey: "LE-SYNTHETIC-ZA",

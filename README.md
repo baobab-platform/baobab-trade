@@ -12,6 +12,8 @@ Baobab Trade is the independently deployable Trade Engine of the Baobab Platform
 
 Contract provenance is pinned in `contracts.lock.yaml`. Runtime needs are declared in `runtime/requirements.yaml`.
 
+P0-04A now generates exact pinned Shared schemas for legal-actor assessment, documentary restrictions, merchant readiness and platform context. Runtime rejects malformed or undeclared authority fields before scope and freshness checks. See [contract convergence and maintenance](docs/plans/P0-04A-trade-contract-convergence.md) for regeneration, validation and remaining workload/live acceptance prerequisites. Genuine founding-record acceptance remains pending.
+
 ## Local development
 
 Prerequisites: Node.js 24, Git, PostgreSQL and Redis.

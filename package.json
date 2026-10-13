@@ -82,7 +82,8 @@
     "verify:core-modules": "medusa exec ./src/scripts/verify-core-modules.ts",
     "verify:infrastructure": "medusa exec ./src/scripts/verify-infrastructure.ts",
     "verify:observability": "medusa exec ./src/scripts/verify-observability.ts",
-    "test:zb04": "vitest run tests/buyer-application-route.test.ts tests/buyer-application-staff-review.test.ts tests/buyer-kyb-evidence.test.ts tests/buyer-admission-decision.test.ts tests/buyer-erp-projection-request.test.ts tests/buyer-commercial-profile-consumer.test.ts tests/buyer-organisation-status-route.test.ts tests/buyer-invitation-route.test.ts tests/buyer-invitation-lifecycle.test.ts tests/zb04-certification.test.ts"
+    "test:zb04": "vitest run tests/buyer-application-route.test.ts tests/buyer-application-staff-review.test.ts tests/buyer-kyb-evidence.test.ts tests/buyer-admission-decision.test.ts tests/buyer-erp-projection-request.test.ts tests/buyer-commercial-profile-consumer.test.ts tests/buyer-organisation-status-route.test.ts tests/buyer-invitation-route.test.ts tests/buyer-invitation-lifecycle.test.ts tests/zb04-certification.test.ts",
+    "contracts:sync": "node scripts/sync-authority-contracts.mjs"
   },
   "dependencies": {
     "@medusajs/auth-oidc": "2.21.2",
@@ -90,7 +91,9 @@
     "@medusajs/medusa": "2.21.2",
     "@medusajs/utils": "2.21.2",
     "awilix": "13.0.5",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
   },
   "devDependencies": {
     "@medusajs/admin-sdk": "2.21.2",
@@ -98,8 +101,6 @@
     "@types/node": "24.13.6",
     "@typescript-eslint/eslint-plugin": "8.69.0",
     "@typescript-eslint/parser": "8.69.0",
-    "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1",
     "eslint": "9.39.5",
     "eslint-config-prettier": "10.1.8",
     "jsonwebtoken": "^9.0.3",

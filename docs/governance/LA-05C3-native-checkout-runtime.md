@@ -61,3 +61,7 @@ The original LA-05C3 implementation accepted a current CP tenant/Organisation re
 A separately governed cart binding can be revoked while Payments assesses the merchant. LA-05C4 now reloads the server-owned `ACTIVE` binding **after** Payments I/O and checks that the cart, channel, region, tenant, Organisation, CP RUNTIME context, responsible LegalEntity, market, currency, activity, capability, operation reference and idempotency identity remain exactly stable. If the binding disappeared, expired, was revoked or changed, checkout fails before the second CP mandate read.
 
 The final Control Plane `SELLER_OF_RECORD` assessment still runs after that reread. This narrows the checkout race window; it does **not** create a serializable transaction spanning the two engines, solve a revocation happening after the final external response, issue the missing maker/checker binding mutation APIs, or certify any real merchant. Required production acceptance remains unchanged.
+
+## P0-04A follow-up (2026-10-13)
+
+The published Shared merchant-readiness wire contract is explicitly declared in the consumer lock and generated with its reference closure. Native checkout applies exact request/response schema validation before seller, provider-reference and freshness checks. Regeneration, workload prerequisites and separate live acceptance are recorded in [the convergence plan](../plans/P0-04A-trade-contract-convergence.md).

@@ -242,6 +242,7 @@ describe("HttpControlPlaneClient.resolveStoredContext", () => {
     resolved_at: "2026-09-07T10:00:00Z",
     market_id: "zuribeans_za_b2b",
     country_code: "ZA",
+    currency_code: "ZAR",
   }
 
   it("POSTs only the tenant and country to /v1/platform-context/resolve and returns the context_id", async () => {

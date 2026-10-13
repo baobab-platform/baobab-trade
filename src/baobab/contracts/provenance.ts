@@ -3,9 +3,11 @@
  * They are intentionally not presented as canonical definitions themselves.
  * Update them together with contracts.lock.yaml after compatibility review.
  */
+import provenance from "./shared/provenance.json"
+
 export const CONTRACT_PROVENANCE = {
-  sharedRepository: "nabhold/shared",
-  sharedCommit: "c518b9aa7be1e67c2b9d360c75a97123ee47382f",
+  sharedRepository: provenance.repository,
+  sharedCommit: provenance.commit,
   tenancyPath: "contracts/tenancy/tenancy.yaml",
   legalEntityRegistryPath: "contracts/legal-entity/registry.yaml",
   contextResolutionPath: "contracts/control-plane/v1/context-resolution.schema.json",
@@ -13,5 +15,5 @@ export const CONTRACT_PROVENANCE = {
   canonicalMappingPath: "contracts/control-plane/v1/canonical-mapping.schema.json",
   problemDetailsPath: "contracts/errors/v1/problem-details.schema.json",
   eventEnvelopePath: "contracts/events/v1/envelope.schema.json",
-  tenancyVersion: "1.0",
+  tenancyVersion: provenance.tenancy_version,
 } as const

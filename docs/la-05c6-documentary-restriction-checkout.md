@@ -37,3 +37,7 @@ and correlation ID, and never caches. The client response alone is not trusted:
 
 This change does **not** declare Medusa checkout production-certified and
 does not alter the default-off/production-denied behaviour of the native guard.
+
+## P0-04A follow-up (2026-10-13)
+
+Transport and native checkout boundaries now enforce the exact pinned Shared documentary response schema, including UUID/date formats and rejection of unknown authority fields, before existing scope, freshness and negative-only veto checks. The staging assessor remains PROVISIONED and lacks the documentary assessment scope; contract convergence does not admit it. See [the convergence plan](plans/P0-04A-trade-contract-convergence.md).
