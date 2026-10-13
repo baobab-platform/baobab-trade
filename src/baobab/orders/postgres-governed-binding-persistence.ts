@@ -1,3 +1,6 @@
+import { bindingCommandDigest, assertBindingAdmission } from "./binding-authority-client"
+import type { BindingActivation } from "./authenticated-binding-intake"
+import { assertBindingActivation } from "./binding-activation-policy"
 import {
   assertBindingApproval,
   parseBindingTimestamp,
@@ -95,7 +98,7 @@ async function record(
   db: PgClient,
   binding: Record<string, unknown>,
   scope: GovernedBindingScope,
-  kind: "PROPOSED" | "APPROVED" | "REVOKED",
+  kind: "PROPOSED" | "APPROVED" | "REVOKED" | "ACTIVATED",
   actor: Partial<VerifiedActor>,
   evidence: VerifiedEvidence,
   reason: string | null = null,
@@ -103,8 +106,8 @@ async function record(
   const result = await db.query(
     `INSERT INTO la05_binding_decision
     (id,binding_id,binding_revision,cart_id,tenant_id,organisation_id,market_code,currency_code,
-     decision,actor_subject,actor_issuer,actor_token_id,evidence_reference,evidence_decision_id,scope_snapshot,reason)
-    VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15) RETURNING id`,
+     decision,actor_subject,actor_issuer,actor_token_id,evidence_reference,evidence_decision_id,scope_snapshot,reason,authorization_snapshot)
+    VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16::jsonb) RETURNING id`,
     [
       binding.id,
       binding.revision,
@@ -121,6 +124,7 @@ async function record(
       evidence.decisionId,
       JSON.stringify(scope),
       reason,
+      evidence.admission ? JSON.stringify(evidence.admission) : null,
     ],
   )
   if (result.rows.length !== 1 || typeof result.rows[0].id !== "string") deny()
@@ -150,6 +154,23 @@ async function requireUnexpired(db: PgClient, cartId: string): Promise<void> {
   )
   if (current.rows.length !== 1 || current.rows[0].valid !== true) deny()
 }
+/** Native cart row stays locked until COMMIT. The HTTP graph read alone is
+ * insufficient: cart region/channel/currency/completion may change during I/O. */
+async function lockNativeCoordinates(db: PgClient, scope: GovernedBindingScope): Promise<void> {
+  const result = await db.query(
+    "SELECT sales_channel_id,region_id,currency_code,completed_at FROM cart WHERE id=$1 AND deleted_at IS NULL FOR SHARE",
+    [scope.cartId],
+  )
+  const c = result.rows[0]
+  if (
+    !c ||
+    c.sales_channel_id !== scope.salesChannelId ||
+    c.region_id !== scope.regionId ||
+    String(c.currency_code).toUpperCase() !== scope.currencyCode ||
+    c.completed_at
+  )
+    deny()
+}
 /**
  * P0-04B-01: applied Medusa lifecycle, immutable proposal comparison and atomic
  * revision/decision/audit receipts. Approval deliberately does NOT activate:
@@ -160,12 +181,111 @@ export class PostgresGovernedBindingPersistence implements Persistence {
     private readonly pool: PgPool,
     private readonly now: () => number = Date.now,
   ) {}
+  async load(
+    cartId: string,
+  ): Promise<
+    { proposal: BindingProposal; revision: number; status: string; approvedBy?: string } | undefined
+  > {
+    const db = await this.pool.connect()
+    try {
+      const result = await db.query(
+        "SELECT proposal_snapshot,revision,status,approved_by FROM native_seller_cart_binding WHERE cart_id=$1 AND deleted_at IS NULL",
+        [cartId],
+      )
+      const row = result.rows[0]
+      if (!row || !row.proposal_snapshot) return undefined
+      return {
+        proposal: row.proposal_snapshot as BindingProposal,
+        revision: Number(row.revision),
+        status: String(row.status),
+        approvedBy: typeof row.approved_by === "string" ? row.approved_by : undefined,
+      }
+    } finally {
+      db.release()
+    }
+  }
+  async activate(proof: BindingActivation): Promise<void> {
+    assertBindingActivation(proof, this.now())
+    await transaction(this.pool, proof.scope.cartId, async (db) => {
+      await lockNativeCoordinates(db, proof.scope)
+      const result = await db.query(
+        "SELECT * FROM native_seller_cart_binding WHERE cart_id=$1 FOR UPDATE",
+        [proof.scope.cartId],
+      )
+      const row = result.rows[0]
+      if (
+        !row ||
+        !exact(row, proof.scope) ||
+        row.status !== "PROPOSED" ||
+        !row.approved_by ||
+        row.revision !== proof.revision ||
+        [row.proposed_by, row.approved_by].includes(proof.actor.subject)
+      )
+        deny()
+      const previous = await db.query(
+        `SELECT decision,actor_subject,authorization_snapshot FROM la05_binding_decision
+        WHERE binding_id=$1 AND decision IN ('PROPOSED','APPROVED') ORDER BY binding_revision`,
+        [row.id],
+      )
+      if (
+        previous.rows.length !== 2 ||
+        previous.rows[0].decision !== "PROPOSED" ||
+        previous.rows[1].decision !== "APPROVED" ||
+        previous.rows[0].actor_subject !== row.proposed_by ||
+        previous.rows[1].actor_subject !== row.approved_by ||
+        !previous.rows.every((receipt) => receipt.authorization_snapshot)
+      )
+        deny()
+      assertBindingAdmission(
+        proof.admission,
+        "activate",
+        proof.scope,
+        bindingCommandDigest({
+          operation: "activate",
+          scope: proof.scope,
+          input: { revision: proof.revision },
+          revision: proof.revision,
+          proposal: row.proposal_snapshot,
+        }),
+        this.now(),
+      )
+      assertBindingActivation(proof, this.now())
+      const changed = await db.query(
+        `UPDATE native_seller_cart_binding SET status='ACTIVE',context_id=$2,market_key=$3,legal_activity=$4,legal_capability=$5,activation_snapshot=$6::jsonb,updated_at=clock_timestamp()
+        WHERE cart_id=$1 AND status='PROPOSED' AND approved_by IS NOT NULL AND revision=$7 AND expires_at>clock_timestamp() AND deleted_at IS NULL RETURNING id,revision`,
+        [
+          proof.scope.cartId,
+          proof.context.context_id,
+          proof.context.market_id,
+          "B2B_COFFEE_SALE",
+          "commerce.order.create",
+          JSON.stringify(proof),
+          proof.revision,
+        ],
+      )
+      if (changed.rowCount !== 1) deny()
+      const binding = changed.rows[0]
+      await db.query(
+        `INSERT INTO la05_binding_activation (binding_id,binding_revision,proof) VALUES ($1,$2,$3::jsonb)`,
+        [binding.id, binding.revision, JSON.stringify(proof)],
+      )
+      await record(db, binding, proof.scope, "ACTIVATED", proof.actor, {
+        reference: `cp/trade-binding/${proof.admission.decision_id}`,
+        decisionId: proof.admission.decision_id,
+        verifiedAt: proof.admission.evaluated_at,
+        admission: proof.admission,
+      })
+      await requireUnexpired(db, proof.scope.cartId)
+      assertBindingActivation(proof, this.now())
+    })
+  }
   async propose(command: BindingProposal, evidence: VerifiedEvidence): Promise<void> {
     assertBindingProposal(command, this.now())
     verified(command.maker, evidence)
     if (evidence.reference !== command.evidenceReference) deny()
     await transaction(this.pool, command.scope.cartId, async (db) => {
       const s = command.scope
+      if (evidence.admission) await lockNativeCoordinates(db, s)
       const existing = await db.query(
         "SELECT * FROM native_seller_cart_binding WHERE cart_id = $1 FOR UPDATE",
         [s.cartId],
@@ -201,6 +321,7 @@ export class PostgresGovernedBindingPersistence implements Persistence {
     if (evidence.reference !== command.approvalReference) deny()
     await transaction(this.pool, command.proposal.scope.cartId, async (db) => {
       const s = command.proposal.scope
+      if (evidence.admission) await lockNativeCoordinates(db, s)
       const locked = await db.query(
         "SELECT * FROM native_seller_cart_binding WHERE cart_id = $1 FOR UPDATE",
         [s.cartId],
@@ -208,6 +329,8 @@ export class PostgresGovernedBindingPersistence implements Persistence {
       if (
         locked.rows.length !== 1 ||
         !exact(locked.rows[0], s) ||
+        (evidence.expectedRevision !== undefined &&
+          locked.rows[0].revision !== evidence.expectedRevision) ||
         locked.rows[0].status !== "PROPOSED" ||
         locked.rows[0].proposed_by !== command.proposal.maker.subject
       )
@@ -249,6 +372,8 @@ export class PostgresGovernedBindingPersistence implements Persistence {
       if (
         locked.rows.length !== 1 ||
         !exact(locked.rows[0], scope) ||
+        (evidence.expectedRevision !== undefined &&
+          locked.rows[0].revision !== evidence.expectedRevision) ||
         !["PROPOSED", "ACTIVE"].includes(String(locked.rows[0].status))
       )
         deny()

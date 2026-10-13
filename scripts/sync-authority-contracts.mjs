@@ -17,6 +17,7 @@ const git = (...args) => execFileSync("git", ["-C", shared, ...args], { encoding
 if (git("rev-parse", "HEAD").trim() !== lock.source.commit) throw new Error("Shared pin mismatch")
 const target = join(root, "src/baobab/contracts/shared")
 const roots = [
+  "contracts/commerce/v1/seller-binding.schema.json",
   "contracts/payments/v1/merchant-readiness.schema.json",
   "contracts/organisation/v2/legal-actor-enforcement.schema.json",
   "contracts/admission/v2/documentary-restriction.schema.json",

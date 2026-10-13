@@ -21,12 +21,12 @@ const maker = {
   subject: "maker",
   tenantId: scope.tenantId,
   organisationId: scope.organisationId,
-  audience: "baobab-trade",
-  scopes: ["trade:legal-seller-binding:propose"],
+  audience: "baobab-control-plane",
+  scopes: ["trade-binding:propose"],
   issuer: "iam-test",
   tokenId: "jwt-test",
 }
-const checker = { ...maker, subject: "checker", scopes: ["trade:legal-seller-binding:approve"] }
+const checker = { ...maker, subject: "checker", scopes: ["trade-binding:approve"] }
 const proposal = {
   scope,
   maker,

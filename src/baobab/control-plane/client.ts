@@ -51,6 +51,7 @@ export interface ControlPlaneClient {
     accessToken: string,
     correlationId: string,
     expectedOrganisationType?: string,
+    countryCode?: string,
   ): Promise<RawPlatformContextResolutionResponse>
 }
 
@@ -302,6 +303,7 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
     accessToken: string,
     correlationId: string,
     expectedOrganisationType?: string,
+    countryCode?: string,
   ): Promise<RawPlatformContextResolutionResponse> {
     const response = await fetch(`${this.baseUrl}${this.platformContextPath}`, {
       method: "POST",
@@ -313,6 +315,7 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
       body: JSON.stringify({
         tenant_id: tenantId,
         organisation_id: organisationId,
+        ...(countryCode ? { country_code: countryCode } : {}),
         ...(expectedOrganisationType
           ? { expected_organisation_type: expectedOrganisationType }
           : {}),

@@ -1,7 +1,8 @@
 {
   "repository": "baobab-platform/shared",
-  "commit": "a9c53087d63caa356edf54ec8037ba1713c4827f",
+  "commit": "5dcff30de1bc6142ad4b8801bbe3b2b66a0670ae",
   "roots": [
+    "contracts/commerce/v1/seller-binding.schema.json",
     "contracts/payments/v1/merchant-readiness.schema.json",
     "contracts/organisation/v2/legal-actor-enforcement.schema.json",
     "contracts/admission/v2/documentary-restriction.schema.json",
@@ -10,6 +11,7 @@
   "tenancy_version": "2.0",
   "files": {
     "contracts/admission/v2/documentary-restriction.schema.json": "1d12d8ed0581e152444a36b31c9f42f971c58215fdae9648bd4cfbc66eb29937",
+    "contracts/commerce/v1/seller-binding.schema.json": "59d66dd8c394340c336f23a9d64456b1e818529ac2d154e92e4525dc6819fa64",
     "contracts/control-plane/v1/domain.schema.json": "d310ea065ba9445a27a83d50875a2616514608782345e7bb4413d9d1d69416ee",
     "contracts/control-plane/v1/market.schema.json": "acbdc4c1e8c716f1dcd9b855b79f5206ebcb69fd911f5a14b515bbcb78cca2f9",
     "contracts/control-plane/v1/platform-context.schema.json": "92a3584f1db3c192fa0315820b6054607d377a52028f43a6fe48deda14c7ed2f",

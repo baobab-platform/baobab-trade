@@ -125,3 +125,5 @@ fixture can stand in for these decisions.
 - [PostgreSQL 17 row locking](https://www.postgresql.org/docs/17/explicit-locking.html)
 - [PostgreSQL 17 current versus transaction clocks](https://www.postgresql.org/docs/17/functions-datetime.html)
 - [Vitest source include patterns](https://vitest.dev/config/include)
+
+P0-04B-02 now implements the separately governed activation extension; see [current intake and activation maintenance](P0-04B-02-authenticated-binding-intake.md). The no-activation behavior above describes this original #146 migration only.

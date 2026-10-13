@@ -49,3 +49,12 @@ export const merchantReadinessResponseSchema = validator(
   "payments/v1/merchant-readiness.schema.json",
   "ReadyDecision",
 )
+
+export const bindingAuthorizationRequestSchema = validator(
+  "commerce/v1/seller-binding.schema.json",
+  "AuthorizeBindingRequest",
+)
+export const bindingAuthorizationResponseSchema = validator(
+  "commerce/v1/seller-binding.schema.json",
+  "AuthorizeBindingResponse",
+)

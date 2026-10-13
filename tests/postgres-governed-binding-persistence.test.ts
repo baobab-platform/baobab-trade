@@ -19,8 +19,8 @@ const actor = {
   subject: "maker",
   tenantId: "tenant-test",
   organisationId: "org-test",
-  audience: "baobab-trade",
-  scopes: ["trade:legal-seller-binding:propose"],
+  audience: "baobab-control-plane",
+  scopes: ["trade-binding:propose"],
   issuer: "iam",
   tokenId: "jwt",
 }
@@ -109,7 +109,7 @@ describe("LA-05C5 PostgreSQL transaction boundary", () => {
       expiresAt: "2026-10-11T05:00:00Z",
       evidenceReference: evidence.reference,
     },
-    checker: { ...actor, subject: "checker", scopes: ["trade:legal-seller-binding:approve"] },
+    checker: { ...actor, subject: "checker", scopes: ["trade-binding:approve"] },
     approvedAt: "2026-10-10T05:30:00Z",
     approvalReference: "review/test",
   }
@@ -143,7 +143,7 @@ describe("LA-05C5 PostgreSQL transaction boundary", () => {
       Date.parse("2026-10-10T06:00:00Z"),
     ).revoke(
       scope,
-      { ...actor, scopes: ["trade:legal-seller-binding:revoke"] },
+      { ...actor, scopes: ["trade-binding:revoke"] },
       "mandate withdrawn by CP",
       evidence,
     )

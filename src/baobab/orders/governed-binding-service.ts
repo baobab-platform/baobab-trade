@@ -15,7 +15,13 @@ import {
  * Storage must commit binding transition AND outbox record atomically.
  */
 export type VerifiedActor = GovernedActor & { issuer: string; tokenId: string }
-export type VerifiedEvidence = { reference: string; decisionId: string; verifiedAt: string }
+export type VerifiedEvidence = {
+  reference: string
+  decisionId: string
+  verifiedAt: string
+  expectedRevision?: number
+  admission?: import("./binding-authority-client").BindingAdmission
+}
 export interface BindingAuthorityPorts {
   iam: {
     verify(token: string, operation: "propose" | "approve" | "revoke"): Promise<VerifiedActor>
@@ -66,7 +72,9 @@ async function reverifyActor(
     ["subject", "issuer", "tokenId", "tenantId", "organisationId", "audience"].some(
       (key) => current[key as keyof VerifiedActor] !== original[key as keyof VerifiedActor],
     ) ||
-    !current.scopes?.includes(`trade:legal-seller-binding:${operation}`)
+    !Array.isArray(current.scopes) ||
+    !current.scopes.every((scope) => typeof scope === "string") ||
+    !current.scopes.includes(`trade-binding:${operation}`)
   ) {
     throw new Error("LA-05C5 denied: IAM identity or command authority changed")
   }
