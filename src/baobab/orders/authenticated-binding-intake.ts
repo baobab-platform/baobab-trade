@@ -215,8 +215,9 @@ export class AuthenticatedBindingIntake {
       const stored = await this.persistence.load(cartId)
       if (!stored || !Number.isSafeInteger(body.revision) || body.revision !== stored.revision)
         deny()
-      scope = stored.proposal.scope
+      scope = stored.scope
       proposal = stored.proposal
+      if (operation !== "revoke" && !proposal) deny()
       revision = stored.revision
       approvedBy = stored.approvedBy
       if (operation === "approve" && (stored.status !== "PROPOSED" || approvedBy)) deny()

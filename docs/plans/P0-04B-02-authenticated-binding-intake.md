@@ -66,7 +66,7 @@ region/channel/currency/completion stable through COMMIT. Deferred constraints
 recheck native coordinates, binding expiry, exact CP admission lease and activation
 context/legal lease using `clock_timestamp()`. An expired authority after application
 checks rolls the transition, activation proof, decision and outbox back together.
-Revocation still works after the original context, tenant or mandate becomes invalid;
+Revocation reads the immutable stored scope even for legacy rows with no proposal snapshot; those rows cannot be approved or activated, and no proposal history is invented. Revocation still works after the original context, tenant or mandate becomes invalid;
 it requires current human withdrawal authority and preserves the activation receipt. Workload credential construction is lazy, so withdrawal also remains possible after workload credential configuration is removed.
 
 Native checkout uses only the recorded CP context while it remains unexpired and

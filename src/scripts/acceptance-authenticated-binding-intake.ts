@@ -1,3 +1,4 @@
+import { acceptLegacyBindingUpgrade } from "./acceptance-legacy-binding-upgrade"
 /** P0-04B-02 native storage/intake acceptance. Real Medusa carts and applied
  * PostgreSQL migrations; CP ports are explicitly synthetic. This does not
  * establish a live human grant, legal mandate, workload or provider acceptance. */
@@ -334,6 +335,7 @@ export async function acceptAuthenticatedBindingIntake(
     ).rows[0].n,
     3,
   )
+  await acceptLegacyBindingUpgrade(pool, cp, channel.id, region.id)
   console.log(
     "P0-04B-02: authenticated synthetic CP intake with real native carts, independent activation, concurrent/replay/direct rewrite denial and revocation history passed; no live authority or checkout certification",
   )

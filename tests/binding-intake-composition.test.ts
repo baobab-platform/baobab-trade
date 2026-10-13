@@ -56,6 +56,7 @@ it("the actual module withdraws with current human authority after workload conf
   Object.defineProperty(service, "bindingPersistence", {
     value: {
       load: async () => ({
+        scope,
         proposal: {
           scope,
           maker: { subject: "prn_maker" },

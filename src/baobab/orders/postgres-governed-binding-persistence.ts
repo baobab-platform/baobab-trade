@@ -181,21 +181,36 @@ export class PostgresGovernedBindingPersistence implements Persistence {
     private readonly pool: PgPool,
     private readonly now: () => number = Date.now,
   ) {}
-  async load(
-    cartId: string,
-  ): Promise<
-    { proposal: BindingProposal; revision: number; status: string; approvedBy?: string } | undefined
+  async load(cartId: string): Promise<
+    | {
+        scope: GovernedBindingScope
+        proposal?: BindingProposal
+        revision: number
+        status: string
+        approvedBy?: string
+      }
+    | undefined
   > {
     const db = await this.pool.connect()
     try {
       const result = await db.query(
-        "SELECT proposal_snapshot,revision,status,approved_by FROM native_seller_cart_binding WHERE cart_id=$1 AND deleted_at IS NULL",
+        "SELECT * FROM native_seller_cart_binding WHERE cart_id=$1 AND deleted_at IS NULL",
         [cartId],
       )
       const row = result.rows[0]
-      if (!row || !row.proposal_snapshot) return undefined
+      if (!row) return undefined
       return {
-        proposal: row.proposal_snapshot as BindingProposal,
+        scope: {
+          cartId: row.cart_id as string,
+          tenantId: row.tenant_id as string,
+          organisationId: row.organisation_id as string,
+          responsibleLegalEntityId: row.responsible_legal_entity_id as string,
+          marketCode: row.market_code as string,
+          currencyCode: row.currency_code as string,
+          salesChannelId: row.sales_channel_id as string,
+          regionId: row.region_id as string,
+        },
+        proposal: row.proposal_snapshot ? (row.proposal_snapshot as BindingProposal) : undefined,
         revision: Number(row.revision),
         status: String(row.status),
         approvedBy: typeof row.approved_by === "string" ? row.approved_by : undefined,
