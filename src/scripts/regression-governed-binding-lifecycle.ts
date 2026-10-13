@@ -201,7 +201,7 @@ export default async function ({ container }: ExecArgs) {
         approved_at=clock_timestamp(),approval_reference='synthetic/missing-receipt' WHERE cart_id=$1`,
         [unaudited.scope.cartId],
       )
-      await assert.rejects(direct.query("COMMIT"))
+      await assert.rejects(direct.query("COMMIT"), /Atomic binding decision receipt required/)
       await direct.query("ROLLBACK")
     } finally {
       direct.release()
@@ -252,6 +252,31 @@ export default async function ({ container }: ExecArgs) {
       0,
     )
     assert.equal(await receipts(slow.scope.cartId), 0)
+
+    // A valid final application check is still insufficient if expiry occurs
+    // immediately before COMMIT: the deferred database constraint must reject it.
+    const commitExpiry = fixture(2_000)
+    const delayedCommit = new PostgresGovernedBindingPersistence({
+      connect: async () => {
+        const client = await pool.connect()
+        return {
+          release: () => client.release(),
+          query: async (sql, values) => {
+            if (sql === "COMMIT") await client.query("SELECT pg_sleep(2.2)")
+            return client.query(sql, values ? [...values] : [])
+          },
+        }
+      },
+    })
+    await assert.rejects(
+      delayedCommit.propose(commitExpiry.proposal, commitExpiry.evidence),
+      /Original unexpired binding proposal required/,
+    )
+    assert.equal(
+      (await native.listNativeSellerCartBindings({ cart_id: commitExpiry.scope.cartId })).length,
+      0,
+    )
+    assert.equal(await receipts(commitExpiry.scope.cartId), 0)
 
     // Receipt enforcement is independent of the application adapter: a direct
     // deletion or approval cannot bypass the same applied database constraints.

@@ -97,7 +97,7 @@ runs `npm run regression:governed-binding-lifecycle` with
 refuses an unmarked/non-test database. It uses the actual module read/persistence
 paths and verifies proposal/approval/revocation, immutable snapshots and provenance,
 concurrent duplicate proposals/approvals, approval versus revocation, direct
-activation/audit bypass denial, lock-wait expiry and audit-insertion expiry rollback.
+activation/audit bypass denial, lock-wait expiry, audit-insertion expiry and deferred pre-COMMIT expiry rollback.
 Fixtures use explicitly synthetic identities/evidence and stay inactive. Append-only
 receipts remain until CI disposes the database. This proves native storage behavior,
 not current IAM/CP/legal/provider authority or successful checkout. Local PostgreSQL

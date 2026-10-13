@@ -130,6 +130,12 @@ class NativeSellerCheckoutModuleService
         idleTimeoutMillis: 30000,
         application_name: "baobab-trade-binding-lifecycle",
       })
+      // pg emits idle connection failures on the pool. Retain a listener so
+      // an idle socket failure cannot become an unhandled process exception;
+      // never log the database URL, credentials or raw driver error.
+      this.governancePool.on("error", () =>
+        console.error("Governed binding database connection unavailable"),
+      )
       const pool = this.governancePool
       this.governancePersistence = new PostgresGovernedBindingPersistence({
         connect: async () => {
