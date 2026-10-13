@@ -178,16 +178,22 @@ class NativeSellerCheckoutModuleService
     })
     if (process.env.BAOBAB_BINDING_INTAKE_ENABLED !== "true" || profile.production)
       throw new Error("Binding intake requires explicit non-production enablement")
-    const tokens = new ClientCredentialsWorkloadTokenProvider({
-      tokenUrl: requireEnv("BAOBAB_IAM_WORKLOAD_TOKEN_URL"),
-      clientId: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_ID"),
-      clientSecret: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_SECRET"),
-    })
+    // Withdrawing a binding must not require the old workload credential to
+    // remain configured/admitted. Only non-withdrawal legal checks request it.
+    let tokens: ClientCredentialsWorkloadTokenProvider | undefined
+    const workloadToken = () => {
+      tokens ??= new ClientCredentialsWorkloadTokenProvider({
+        tokenUrl: requireEnv("BAOBAB_IAM_WORKLOAD_TOKEN_URL"),
+        clientId: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_ID"),
+        clientSecret: requireEnv("BAOBAB_IAM_WORKLOAD_CLIENT_SECRET"),
+      })
+      return tokens.getAccessToken()
+    }
     const intake = new AuthenticatedBindingIntake(
       new HttpBindingAuthorityClient(requireEnv("BAOBAB_CONTROL_PLANE_BASE_URL")),
       this.bindingPersistence,
       native,
-      () => tokens.getAccessToken(),
+      workloadToken,
     )
     await intake.execute(operation, cartId, input, token)
   }

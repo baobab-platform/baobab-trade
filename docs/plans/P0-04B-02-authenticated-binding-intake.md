@@ -67,7 +67,7 @@ recheck native coordinates, binding expiry, exact CP admission lease and activat
 context/legal lease using `clock_timestamp()`. An expired authority after application
 checks rolls the transition, activation proof, decision and outbox back together.
 Revocation still works after the original context, tenant or mandate becomes invalid;
-it requires current human withdrawal authority and preserves the activation receipt.
+it requires current human withdrawal authority and preserves the activation receipt. Workload credential construction is lazy, so withdrawal also remains possible after workload credential configuration is removed.
 
 Native checkout uses only the recorded CP context while it remains unexpired and
 reassesses current legal actor, documentary veto and independent merchant readiness
