@@ -31,8 +31,12 @@ export async function acceptAuthenticatedBindingIntake(
   let subject = "synthetic-cp-maker"
   let legal = true
   let lease = 5000
+  let revokeOnFinalAuthorization = false
+  let authorizationReads = 0
   const cp: BindingAuthorityClient = {
     authorize: async (_token, operation, scope, digest) => {
+      authorizationReads++
+      if (revokeOnFinalAuthorization && authorizationReads === 2) legal = false
       const evaluated = Date.now()
       return {
         scope,
@@ -96,6 +100,8 @@ export async function acceptAuthenticatedBindingIntake(
     subject = "synthetic-cp-maker"
     legal = true
     lease = 5000
+    revokeOnFinalAuthorization = false
+    authorizationReads = 0
     const cart = await carts.createCarts({
       region_id: region.id,
       sales_channel_id: channel.id,
@@ -248,6 +254,23 @@ export async function acceptAuthenticatedBindingIntake(
     intake().execute("activate", completed.id, { revision: 1 }, "synthetic-human-token"),
   )
   assert.equal((await row(completed.id)).status, "PROPOSED")
+  const revokedDuringAuthorization = await create()
+  subject = "synthetic-cp-operator"
+  revokeOnFinalAuthorization = true
+  authorizationReads = 0
+  await assert.rejects(
+    intake().execute(
+      "activate",
+      revokedDuringAuthorization.id,
+      { revision: 1 },
+      "synthetic-human-token",
+    ),
+  )
+  const stillInactive = await row(revokedDuringAuthorization.id)
+  assert.equal(stillInactive.status, "PROPOSED")
+  assert.equal(stillInactive.revision, 1)
+  revokeOnFinalAuthorization = false
+
   const expiry = await create()
   subject = "synthetic-cp-operator"
   lease = 2000

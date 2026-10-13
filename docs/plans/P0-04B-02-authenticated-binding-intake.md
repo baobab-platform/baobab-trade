@@ -37,7 +37,7 @@ issuer/subject mapping, exact DIRECT Organisation HIGH administrative grant and
 assurance on every call. Canonical `trade-binding:*` scopes and
 `organisation.trade-binding.*` permissions are registered without any client,
 profile or workload assignment. No role fallback, delegation or sibling scope.
-Trade rechecks human admission after native/context/legal I/O. CP response expiry
+Trade rechecks human admission after native/context/legal I/O, then re-resolves the actual CP seller source after that authorization and native I/O. Observed revocation or a changed mandate denies before persistence; the first fact’s unexpired clock cannot substitute for current resolution. CP response expiry
 is at most five seconds, bounded by token/grant validity. A deterministic SHA-256
 covers exact command/scope/revision/original proposal. That admission decision is
 retained as local audit provenance; it is not verification of a documentary reference.

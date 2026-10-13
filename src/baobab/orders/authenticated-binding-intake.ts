@@ -133,6 +133,31 @@ export class AuthenticatedBindingIntake {
     this.assertLegal(scope, context, legalDecision)
     return { context, legalDecision }
   }
+  private async recheckLegal(
+    scope: GovernedBindingScope,
+    proof: { context: RawPlatformContextResolutionResponse; legalDecision: LegalActorDecision },
+  ) {
+    // Human authorization and native reads can observe a mandate revocation.
+    // Re-resolve the actual CP source afterwards, not just the first fact's clock.
+    const legalDecision = await this.cp.assess(
+      {
+        context_id: proof.context.context_id,
+        role: "SELLER_OF_RECORD",
+        activity: BINDING_ACTIVITY,
+        market: scope.marketCode,
+        capability: BINDING_CAPABILITY,
+        operation_reference: `cart/${scope.cartId}/complete`,
+      },
+      await this.workloadToken(),
+    )
+    this.assertLegal(scope, proof.context, legalDecision)
+    if (
+      legalDecision.legal_actor_resolution.mandate_id !==
+      proof.legalDecision.legal_actor_resolution.mandate_id
+    )
+      deny()
+    return { context: proof.context, legalDecision }
+  }
   async execute(
     operation: BindingOperation,
     cartId: string,
@@ -235,7 +260,11 @@ export class AuthenticatedBindingIntake {
       final.token_id !== first.token_id
     )
       deny()
-    if (operation !== "revoke") await this.currentNative(scope)
+    if (operation !== "revoke") {
+      await this.currentNative(scope)
+      if (!proof) deny()
+      proof = await this.recheckLegal(scope, proof)
+    }
     assertBindingAdmission(final, operation, scope, digest, this.now())
     if (proof) this.assertLegal(scope, proof.context, proof.legalDecision)
     const evidence = { ...evidenceOf(final), expectedRevision: revision }

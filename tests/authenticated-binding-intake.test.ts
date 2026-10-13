@@ -266,6 +266,39 @@ describe("actual authenticated binding command intake", () => {
     ).rejects.toThrow("stale")
     expect(f.persistence.propose).not.toHaveBeenCalled()
   })
+  it("denies mandate revocation observed after final human/native I/O", async () => {
+    const f = fixture()
+    vi.mocked(f.cp.assess)
+      .mockResolvedValueOnce({
+        context_id: "00000000-0000-4000-8000-000000000007",
+        operation_reference: `cart/${scope.cartId}/complete`,
+        provider_permissions_granted: false,
+        legal_actor_resolution: {
+          outcome: "AUTHORIZED",
+          evaluated_at: new Date(now).toISOString(),
+          valid_until: new Date(now + 30000).toISOString(),
+          policy_reference: "synthetic",
+          mandate_id: "00000000-0000-4000-8000-000000000002",
+          responsible_legal_entity_id: scope.responsibleLegalEntityId,
+          evidence_references: ["synthetic"],
+        },
+      })
+      .mockImplementation(async (r) => ({
+        context_id: r.context_id,
+        operation_reference: r.operation_reference,
+        provider_permissions_granted: false,
+        legal_actor_resolution: {
+          outcome: "REVOKED_OR_EXPIRED",
+          evaluated_at: new Date(now).toISOString(),
+          policy_reference: "synthetic",
+        },
+      }))
+    await expect(
+      f.service.execute("activate", scope.cartId, { revision: 1 }, "human-token"),
+    ).rejects.toThrow()
+    expect(f.cp.assess).toHaveBeenCalledTimes(2)
+    expect(f.persistence.activate).not.toHaveBeenCalled()
+  })
   it("withdraws after old mandate/context/native lifecycle denial", async () => {
     const f = fixture()
     f.native.mockRejectedValue(new Error("closed cart"))
