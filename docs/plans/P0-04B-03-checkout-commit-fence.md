@@ -26,7 +26,7 @@ Medusa 2.21.2 `completeCartWorkflow` is a compensating saga, not one transaction
 
 A failed step compensates the earlier ones. No write is atomic with order creation.
 
-The owner's decision of 13 October 2026 places the fence at the cart's `completed_at` NULL→NOT NULL write. That write commits **before payment authorization**, so a denial there removes the order and authorizes no payment. Money cannot move unless the fence passed.
+This implementation places the fence at the cart's `completed_at` NULL→NOT NULL write. That write commits **before payment authorization**, so a denial there removes the order and authorizes no payment. Money cannot move unless the fence passed.
 
 Medusa's `beforePaymentAuthorization` hook exists at runtime but is `@ignore` and absent from the typed workflow hooks. It is deliberately not used.
 
@@ -38,8 +38,9 @@ Migration `Migration20261014090000` adds the following.
 
 - the ACTIVE binding id and revision;
 - the CP context, legal entity and mandate, plus the CP decision lease;
+- the final negative-only documentary decision expiry (at most two seconds);
 - the Payments READY references (`provider_certification_reference`, `merchant_activation_reference`, `policy_reference`) and their lease;
-- `lease_expires_at`, which a CHECK constrains to the earliest of the two leases and to at most 31 seconds after creation;
+- `lease_expires_at`, which a CHECK constrains to the earliest of the legal, documentary and readiness leases and to at most 31 seconds after creation;
 - the key `native-checkout/{cartId}`.
 
 A partial unique index allows exactly one live consumption per checkout key.
@@ -52,13 +53,13 @@ A partial unique index allows exactly one live consumption per checkout key.
 2. requires the newest unconsumed authorization whose lease, binding `expires_at` and activation-context expiry are still in the future by `clock_timestamp()`, with the binding still ACTIVE at the authorized revision and matching coordinates;
 3. consumes that authorization and voids any older unconsumed receipt for the cart, so exactly one receipt can ever authorize the completion.
 
-Any failure raises and Medusa compensates.
+A deferred constraint rechecks the final receipt, binding, context, coordinates and all three leases with `clock_timestamp()` immediately before COMMIT. Expiry after the cart UPDATE rolls back both completion and consumption. Compensation takes the same per-cart fence; released or voided receipts never authorize a retry. Any failure raises and Medusa compensates.
 
 When compensation reopens a completed cart, NOT NULL→NULL, the consumed receipt is **released, never reused**, and any unconsumed receipt is voided, and a retry needs a fresh authorization.
 
 **Writing the authorization.** `enforceNativeCheckoutGate` now refuses unless an authorization store is registered. After `assertNativeCartLegalSeller` passes, it records the authorization through `PostgresGovernedBindingPersistence.record()`. That method reuses the existing transaction, advisory-lock and timeout helper.
 
-Medusa runs the validate hook on a completeCart replay too, so recording is a no-op when the checkout already holds a live consumption on a completed cart (ADR-0014 §26–30).
+Medusa runs the validate hook on a completeCart replay too. The enabled guard still requires current binding, legal, documentary and merchant standing; a replay after binding revocation denies while preserving the historical order. After successful current checks, recording is a no-op when the checkout already holds a live consumption on a completed cart (ADR-0014 §26–30).
 
 `assertNativeCartLegalSeller` now returns the final CP decision and the Payments READY receipt. Readiness that passes without certified references denies.
 
@@ -70,7 +71,7 @@ Carts that were never activated or have no binding keep the existing application
 
 ## Evidence
 
-**Native acceptance.** `npm run regression:checkout-commit-fence` runs in the `core-module-integration` job after the Thamani simulation pack. It uses real Thamani Uganda carts, real `completeCartWorkflow` runs and applied migrations. CP and Payments are explicitly synthetic, and the LA-05 hook flag stays off, so the database fence is proved alone. The cases are:
+**Native acceptance.** `npm run regression:checkout-commit-fence` runs in the `core-module-integration` job after the Thamani simulation pack. It uses real Thamani Uganda carts, real `completeCartWorkflow` runs and applied migrations. CP and Payments are explicitly synthetic. Initial cases keep the hook flag off to prove the database fence independently; additional cases enable the actual installed hook with synthetic external ports in a scoped container. Native carts, workflows, persistence, triggers and consumption remain real. The cases are:
 
 | Case                                     | Expected result                                                                                                                              |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -92,7 +93,7 @@ Carts that were never activated or have no binding keep the existing application
 - `postgres-governed-binding-persistence` covers the lock ordering and input rejection.
 - `payments-seller-readiness` covers the returned receipt.
 
-**Local run.** All of the following passed:
+**Original PR validation.** The initial implementation reported the following local checks; final-head CI and the continuation checks are authoritative:
 
 - format, lint, typecheck and build;
 - 500 unit tests;
@@ -108,8 +109,12 @@ The local database was PostgreSQL 16. The PostgreSQL 17 CI job is authoritative.
 
 **Still open:**
 
-- **Merchant readiness.** The pinned Shared `payments/v1/merchant-readiness` contract has no "qualified provider" field. Adding one is a Shared contract change.
+- **Merchant readiness.** The existing Shared contract carries provider certification and merchant activation references. No real provider qualification is established by synthetic references; qualified owning Payments operation and separate workload admission remain required.
 - **Not yet done:** real IAM workload and human admission, merchant certification, and the ERP, Payments, Subscriptions and Trade Docs execution points.
 - **Production** stays hard-denied.
+
+**Boundary limits.** This is the native cart-completion transaction fence for ever-activated bindings, not a serializable transaction spanning CP, Payments and Medusa. External mandate/documentary/merchant revocation after the last assessment is bounded by its lease, not synchronously fenced by this local database. Native order creation, link/event emission and payment authorization are separate saga steps; direct order creation and independently invoked payment paths are not covered by this cart trigger. Never-activated/unbound cart SQL writes are also outside its scope. Wider protected execution and real operational acceptance remain open; production stays denied.
+
+**Continuation acceptance.** The suite additionally requires pre-COMMIT lease-expiry rollback, guard-enabled native completion/replay, revoked replay denial preserving the historical order, documentary veto, independent merchant denial and missing-binding denial. The final documentary lease is persisted and positive leases are rechecked after its I/O. Generated Redis state is excluded from source.
 
 **Rollback.** The down migration refuses: removing the fence would reopen activated carts and discard consumption history.

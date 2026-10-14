@@ -386,6 +386,7 @@ export class PostgresGovernedBindingPersistence
     const a = authorization
     const legal = parseBindingTimestamp(a?.legalValidUntil)
     const ready = parseBindingTimestamp(a?.readinessValidUntil)
+    const documentary = parseBindingTimestamp(a?.documentaryValidUntil)
     if (
       !a?.cartId?.trim() ||
       a.idempotencyKey !== `native-checkout/${a.cartId}` ||
@@ -399,7 +400,8 @@ export class PostgresGovernedBindingPersistence
       ].every((value) => typeof value === "string" && value.trim().length > 0) ||
       !Number.isFinite(legal) ||
       !Number.isFinite(ready) ||
-      Math.min(legal, ready) <= this.now()
+      !Number.isFinite(documentary) ||
+      Math.min(legal, ready, documentary) <= this.now()
     )
       throw new Error("P0-04B-03 denied: checkout authorization incomplete or expired")
     await transaction(this.pool, a.cartId, async (db) => {
@@ -425,9 +427,9 @@ export class PostgresGovernedBindingPersistence
         `INSERT INTO la05_checkout_authorization
         (cart_id,binding_id,binding_revision,context_id,responsible_legal_entity_id,mandate_id,
          legal_valid_until,provider_certification_reference,merchant_activation_reference,policy_reference,
-         readiness_valid_until,lease_expires_at,idempotency_key)
+         readiness_valid_until,lease_expires_at,idempotency_key,documentary_valid_until)
         VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8,$9,$10,$11::timestamptz,
-          LEAST($7::timestamptz,$11::timestamptz),$12) RETURNING id`,
+          LEAST($7::timestamptz,$11::timestamptz,$13::timestamptz),$12,$13::timestamptz) RETURNING id`,
         [
           a.cartId,
           binding.rows[0].id,
@@ -441,6 +443,7 @@ export class PostgresGovernedBindingPersistence
           a.policyReference,
           a.readinessValidUntil,
           a.idempotencyKey,
+          a.documentaryValidUntil,
         ],
       )
       if (inserted.rowCount !== 1) throw new Error("P0-04B-03 denied: authorization not recorded")

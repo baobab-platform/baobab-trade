@@ -2,13 +2,15 @@
  * P0-04B-03 disposable PostgreSQL / real Medusa completeCartWorkflow acceptance
  * for the commit-point checkout fence. Real Thamani carts, applied migrations
  * and the real completion saga; CP and Payments are EXPLICITLY SYNTHETIC ports
- * and the LA-05 hook flag stays off, so the database fence is proved alone.
+ * with both database-only cases and the installed guard enabled against synthetic
+ * external ports. No real workload or provider is admitted.
  * This is not IAM, mandate, merchant or provider certification.
  * Refuses a non-test or unmarked database; receipts stay until CI disposes it.
  */
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
+import { asValue } from "@medusajs/framework/awilix"
 import {
   addShippingMethodToCartWorkflow,
   completeCartWorkflow,
@@ -32,6 +34,7 @@ import { findByCountryCode, findByMarketKey, findByMetadataKey } from "../baobab
 import { AuthenticatedBindingIntake } from "../baobab/orders/authenticated-binding-intake"
 import type { BindingAuthorityClient } from "../baobab/orders/binding-authority-client"
 import type { NativeCheckoutAuthorization } from "../baobab/orders/native-cart-legal-seller"
+import type { NativeCartLegalSellerDependencies } from "../baobab/orders/native-cart-legal-seller"
 import { NATIVE_SELLER_DEPENDENCY_KEY } from "../baobab/orders/native-cart-legal-seller"
 import type NativeSellerCheckoutModuleService from "../modules/legal-seller-checkout/service"
 import type ThamaniModuleService from "../modules/thamani/service"
@@ -116,19 +119,22 @@ export default async function regressionCheckoutCommitFence({ container }: ExecA
   // Synthetic CP: storage/fence proof only, never live authority.
   let subject = "synthetic-cp-maker"
   const cp: BindingAuthorityClient = {
-    authorize: async (_token, operation, scope, digest) => ({
-      scope,
-      command_digest: digest,
-      decision_id: randomUUID(),
-      principal_id: subject,
-      issuer: "https://synthetic-iam.example.test",
-      token_id: `synthetic-token-${subject}`,
-      scope_name: `trade-binding:${operation}`,
-      evaluated_at: new Date().toISOString(),
-      valid_until: new Date(Date.now() + 5000).toISOString(),
-      matched_grant_ids: ["synthetic-exact-grant"],
-      provider_permissions_granted: false,
-    }),
+    authorize: async (_token, operation, scope, digest) => {
+      const at = Date.now()
+      return {
+        scope,
+        command_digest: digest,
+        decision_id: randomUUID(),
+        principal_id: subject,
+        issuer: "https://synthetic-iam.example.test",
+        token_id: `synthetic-token-${subject}`,
+        scope_name: `trade-binding:${operation}`,
+        evaluated_at: new Date(at).toISOString(),
+        valid_until: new Date(at + 5000).toISOString(),
+        matched_grant_ids: ["synthetic-exact-grant"],
+        provider_permissions_granted: false,
+      }
+    },
     resolve: async (scope) => ({
       context_id: randomUUID(),
       tenant_id: scope.tenantId,
@@ -230,6 +236,7 @@ export default async function regressionCheckoutCommitFence({ container }: ExecA
       responsibleLegalEntityId: SELLER,
       mandateId: MANDATE,
       legalValidUntil: until,
+      documentaryValidUntil: new Date(Date.now() + Math.min(leaseMs, 2000)).toISOString(),
       providerCertificationReference: "synthetic/provider-certification",
       merchantActivationReference: "synthetic/merchant-activation",
       policyReference: "synthetic/payments-policy",
@@ -300,9 +307,9 @@ export default async function regressionCheckoutCommitFence({ container }: ExecA
       pool.query(
         `INSERT INTO la05_checkout_authorization (cart_id,binding_id,binding_revision,context_id,
           responsible_legal_entity_id,mandate_id,legal_valid_until,provider_certification_reference,
-          merchant_activation_reference,policy_reference,readiness_valid_until,lease_expires_at,idempotency_key)
+          merchant_activation_reference,policy_reference,readiness_valid_until,lease_expires_at,idempotency_key,documentary_valid_until)
         SELECT cart_id,id,revision,context_id,responsible_legal_entity_id,$2,now()+interval '10 seconds',
-          'x','x','x',now()+interval '10 seconds',now()+interval '10 seconds','native-checkout/'||cart_id
+          'x','x','x',now()+interval '10 seconds',now()+interval '1 second','native-checkout/'||cart_id,now()+interval '1 second'
         FROM native_seller_cart_binding WHERE cart_id=$1`,
         [ordinary, MANDATE],
       ),
@@ -349,9 +356,9 @@ export default async function regressionCheckoutCommitFence({ container }: ExecA
         `INSERT INTO la05_checkout_authorization (cart_id,binding_id,binding_revision,context_id,
           responsible_legal_entity_id,mandate_id,legal_valid_until,provider_certification_reference,
           merchant_activation_reference,policy_reference,readiness_valid_until,lease_expires_at,
-          idempotency_key,consumed_at)
+          idempotency_key,consumed_at,documentary_valid_until)
         SELECT cart_id,id,revision,context_id,responsible_legal_entity_id,$2,now()+interval '10 seconds',
-          'x','x','x',now()+interval '10 seconds',now()+interval '10 seconds','native-checkout/'||cart_id,now()
+          'x','x','x',now()+interval '10 seconds',now()+interval '1 second','native-checkout/'||cart_id,now(),now()+interval '1 second'
         FROM native_seller_cart_binding WHERE cart_id=$1`,
         [bypass, MANDATE],
       ),
@@ -397,8 +404,139 @@ export default async function regressionCheckoutCommitFence({ container }: ExecA
     assert.equal((await orders(raced)).length, 1)
     assert.equal((await receipts(raced)).filter((r) => r.consumed_at && !r.released_at).length, 1)
 
+    // 8. UPDATE can pass while its lease expires before the transaction COMMIT.
+    // The deferred constraint must roll back BOTH cart completion and consumption.
+    const commitExpired = await activated()
+    await authorize(commitExpired)
+    const transaction = await pool.connect()
+    try {
+      await transaction.query("BEGIN")
+      await transaction.query("UPDATE cart SET completed_at=clock_timestamp() WHERE id=$1", [
+        commitExpired,
+      ])
+      await transaction.query("SELECT pg_sleep(2.1)")
+      await assert.rejects(transaction.query("COMMIT"), /expired or changed before COMMIT/)
+    } finally {
+      await transaction.query("ROLLBACK")
+      transaction.release()
+    }
+    assert.equal(await completedAt(commitExpired), null)
+    assert.equal((await receipts(commitExpired))[0].consumed_at, null)
+
+    // 9. Exercise the actual installed validate hook with the guard ON. Only
+    // external authority ports are replaced in a scoped test container. The
+    // native workflow, governed rows, receipt store and database fence are real.
+    let documentaryBlocked = false
+    let merchantReady = true
+    // Medusa's intersection type exposes Awilix's older createScope overload;
+    // the framework scope is the same native container used by workflows.
+    const guardedContainer = container.createScope() as ExecArgs["container"]
+    const syntheticDependencies: NativeCartLegalSellerDependencies = {
+      bindings: {
+        resolveForCart: async (identity) => {
+          const row = await binding(identity.cartId)
+          if (
+            !row ||
+            row.status !== "ACTIVE" ||
+            row.deleted_at ||
+            Date.parse(row.expires_at) <= Date.now()
+          )
+            throw new Error("Synthetic authority seam denied: no current ACTIVE binding")
+          return {
+            cartId: row.cart_id,
+            salesChannelId: row.sales_channel_id,
+            regionId: row.region_id,
+            tenantId: row.tenant_id,
+            organisationId: row.organisation_id,
+            legalContextId: row.context_id,
+            legalSellerKey: row.responsible_legal_entity_id,
+            marketCode: row.market_code,
+            marketKey: row.market_key,
+            currencyCode: row.currency_code,
+            legalActivity: row.legal_activity,
+            legalCapability: row.legal_capability,
+            correlationId: row.correlation_id,
+            orderReference: `cart/${row.cart_id}/complete`,
+            idempotencyKey: `native-checkout/${row.cart_id}`,
+            totalMinor: 0,
+          }
+        },
+      },
+      cp: {
+        assess: async (request) => cp.assess(request, "synthetic-workload-token"),
+      },
+      tokens: { getAccessToken: async () => "synthetic-workload-token" },
+      documentary: {
+        assess: async (request) => {
+          const at = Date.now()
+          return {
+            ...request,
+            organisation_id: "00000000-0000-4000-8000-000000000001",
+            blocked: documentaryBlocked,
+            authority_granted: false,
+            policy_reference: "ADR-BCP-026/PEO-02T:negative-only",
+            evaluated_at: new Date(at).toISOString(),
+            expires_at: new Date(at + 2000).toISOString(),
+          }
+        },
+      },
+      readiness: {
+        assertReadyForSeller: async () => {
+          if (!merchantReady) throw new Error("Synthetic independent merchant readiness denied")
+          return {
+            providerCertificationReference: "synthetic/provider-certification",
+            merchantActivationReference: "synthetic/merchant-activation",
+            policyReference: "synthetic/payments-policy",
+            validUntil: new Date(Date.now() + 30_000).toISOString(),
+          }
+        },
+      },
+      authorizations: persistence,
+    }
+    guardedContainer.register(NATIVE_SELLER_DEPENDENCY_KEY, asValue(syntheticDependencies))
+    const originalGuard = process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD
+    const guardedComplete = (id: string) =>
+      completeCartWorkflow(guardedContainer).run({ input: { id } })
+    try {
+      process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD = "true"
+      const protectedCart = await activated()
+      const { result: protectedOrder } = await guardedComplete(protectedCart)
+      assert.deepEqual(await orders(protectedCart), [protectedOrder.id])
+      assert.equal((await receipts(protectedCart)).length, 1)
+      const { result: protectedReplay } = await guardedComplete(protectedCart)
+      assert.equal(protectedReplay.id, protectedOrder.id)
+      assert.equal((await receipts(protectedCart)).length, 1)
+      subject = "synthetic-cp-operator"
+      await intake("revoke", protectedCart, {
+        revision: 2,
+        reason: "synthetic current seller withdrawn after completion",
+      })
+      await denied(guardedComplete(protectedCart), /no current ACTIVE binding/)
+      assert.deepEqual(await orders(protectedCart), [protectedOrder.id])
+
+      const vetoed = await activated()
+      documentaryBlocked = true
+      await denied(guardedComplete(vetoed), /blocked or mismatched CP scope/)
+      assert.deepEqual(await orders(vetoed), [])
+      assert.deepEqual(await receipts(vetoed), [])
+      documentaryBlocked = false
+
+      const unready = await activated()
+      merchantReady = false
+      await denied(guardedComplete(unready), /independent merchant readiness denied/)
+      assert.deepEqual(await orders(unready), [])
+      assert.deepEqual(await receipts(unready), [])
+      merchantReady = true
+      const unbound = await checkoutCart()
+      await denied(guardedComplete(unbound), /no current ACTIVE binding/)
+      assert.deepEqual(await orders(unbound), [])
+    } finally {
+      if (originalGuard === undefined) delete process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD
+      else process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD = originalGuard
+    }
+
     console.log(
-      "P0-04B-03: real completeCartWorkflow commit-point fence (authorization required, single consumption, replay, revocation, lease expiry, direct bypass, compensation release, concurrency) passed with synthetic CP/Payments; no live authority or checkout certification",
+      "P0-04B-03: real completeCartWorkflow fence and protected validate hook (single consumption, guarded replay/current revocation, documentary veto, merchant denial, missing binding, deferred COMMIT expiry rollback, direct bypass, compensation release, concurrency) passed with synthetic CP/Payments; no live authority or checkout certification",
     )
   } finally {
     if (!eligible)

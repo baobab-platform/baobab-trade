@@ -2813,8 +2813,14 @@ applies §10/§11 to the native saga.
 the cart `completed_at` transition, which precedes payment authorization. For
 an activated seller binding, the fence consumes one current, append-only
 checkout authorization under the seller-binding lock. Revocation, lease expiry
-and direct bypass deny at that point and Medusa compensates the order. A replay
-resolves to the original order (§26–30).
+and direct cart-completion bypass deny at that point and Medusa compensates the order.
+Deferred checks revalidate legal, documentary, readiness and binding/context leases
+immediately before COMMIT. Compensation releases the receipt and voids outstanding
+ones. A replay resolves to the original order (§26–30) after the enabled hook
+rechecks current standing; revoked replay denies without rewriting that order.
+
+This fence covers ever-activated carts. Direct order creation, separate payment
+execution and synchronous external-source revocation remain wider P0-04B gates.
 
 This does not change the accepted ownership model, certify a provider or
 introduce a cross-engine transaction.

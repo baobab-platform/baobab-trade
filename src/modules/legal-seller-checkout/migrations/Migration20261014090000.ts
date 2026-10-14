@@ -34,13 +34,15 @@ export class Migration20261014090000 extends Migration {
       merchant_activation_reference text NOT NULL CHECK (length(btrim(merchant_activation_reference)) > 0),
       policy_reference text NOT NULL CHECK (length(btrim(policy_reference)) > 0),
       readiness_valid_until timestamptz NOT NULL,
+      documentary_valid_until timestamptz NOT NULL,
       lease_expires_at timestamptz NOT NULL,
       idempotency_key text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
       consumed_at timestamptz,
       released_at timestamptz,
-      CHECK (lease_expires_at = LEAST(legal_valid_until, readiness_valid_until)),
+      CHECK (lease_expires_at = LEAST(legal_valid_until, readiness_valid_until, documentary_valid_until)),
       CHECK (lease_expires_at <= created_at + interval '31 seconds'),
+      CHECK (documentary_valid_until <= created_at + interval '2 seconds'),
       CHECK (idempotency_key = 'native-checkout/' || cart_id),
       CHECK (released_at IS NULL OR consumed_at IS NOT NULL));
     CREATE INDEX la05_checkout_authorization_cart ON la05_checkout_authorization (cart_id, created_at DESC);
@@ -124,6 +126,7 @@ export class Migration20261014090000 extends Migration {
         UPDATE la05_checkout_authorization SET consumed_at = at, released_at = at
           WHERE cart_id = NEW.id AND consumed_at IS NULL;
       ELSIF OLD.completed_at IS NOT NULL AND NEW.completed_at IS NULL THEN
+        PERFORM pg_advisory_xact_lock(hashtextextended('seller-binding/' || NEW.id, 0));
         -- Saga compensation (e.g. payment authorization failed) reopens the cart.
         -- The consumed receipt is released, never reused; a retry needs a new one.
         UPDATE la05_checkout_authorization SET released_at = at
@@ -135,6 +138,34 @@ export class Migration20261014090000 extends Migration {
     END $$;
     CREATE TRIGGER la05_checkout_commit_fence BEFORE UPDATE ON cart
       FOR EACH ROW EXECUTE FUNCTION la05_checkout_commit_fence();`)
+    // A BEFORE trigger runs at statement time. Deferred receipt checks run
+    // immediately before COMMIT and inspect final rows, including compensation.
+    this.addSql(`CREATE FUNCTION la05_checkout_commit_lease() RETURNS trigger LANGUAGE plpgsql AS $$
+    DECLARE receipt la05_checkout_authorization%ROWTYPE;
+    BEGIN
+      SELECT * INTO receipt FROM la05_checkout_authorization WHERE id = NEW.id;
+      IF receipt.released_at IS NOT NULL THEN RETURN NULL; END IF;
+      PERFORM 1 FROM native_seller_cart_binding b JOIN cart c ON c.id = receipt.cart_id
+        WHERE b.id = receipt.binding_id AND b.cart_id = receipt.cart_id
+          AND b.deleted_at IS NULL AND c.deleted_at IS NULL
+          AND b.status = 'ACTIVE' AND b.revision = receipt.binding_revision
+          AND b.context_id = receipt.context_id
+          AND b.responsible_legal_entity_id = receipt.responsible_legal_entity_id
+          AND b.expires_at > clock_timestamp()
+          AND (b.activation_snapshot->'context'->>'expires_at')::timestamptz > clock_timestamp()
+          AND receipt.lease_expires_at > clock_timestamp()
+          AND b.sales_channel_id = c.sales_channel_id AND b.region_id = c.region_id
+          AND b.currency_code = upper(c.currency_code)
+          AND ((receipt.consumed_at IS NULL AND c.completed_at IS NULL)
+            OR (receipt.consumed_at IS NOT NULL AND c.completed_at IS NOT NULL));
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'P0-04B-03 denied: checkout authority expired or changed before COMMIT';
+      END IF;
+      RETURN NULL;
+    END $$;
+    CREATE CONSTRAINT TRIGGER la05_checkout_commit_lease AFTER INSERT OR UPDATE
+      ON la05_checkout_authorization DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW EXECUTE FUNCTION la05_checkout_commit_lease();`)
   }
 
   async down(): Promise<void> {

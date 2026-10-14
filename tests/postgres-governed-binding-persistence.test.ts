@@ -168,6 +168,7 @@ describe("P0-04B-03 checkout authorization receipt", () => {
     responsibleLegalEntityId: scope.responsibleLegalEntityId,
     mandateId: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6c",
     legalValidUntil: "2026-10-14T09:00:20Z",
+    documentaryValidUntil: "2026-10-14T09:00:02Z",
     providerCertificationReference: "synthetic/provider-certification",
     merchantActivationReference: "synthetic/merchant-activation",
     policyReference: "synthetic/payments-policy",
@@ -184,7 +185,7 @@ describe("P0-04B-03 checkout authorization receipt", () => {
       q.includes("INSERT INTO la05_checkout_authorization"),
     )
     expect(insert).toBeGreaterThan(lock)
-    expect(db.queries[insert]).toContain("LEAST($7::timestamptz,$11::timestamptz)")
+    expect(db.queries[insert]).toContain("LEAST($7::timestamptz,$11::timestamptz,$13::timestamptz)")
     expect(db.params[insert].slice(0, 3)).toEqual([scope.cartId, "lsbind_test", 2])
     expect(db.queries.at(-1)).toBe("COMMIT")
   })
@@ -214,6 +215,8 @@ describe("P0-04B-03 checkout authorization receipt", () => {
       { mandateId: " " },
       { merchantActivationReference: "" },
       { legalValidUntil: "not-a-time" },
+      { documentaryValidUntil: "not-a-time" },
+      { documentaryValidUntil: "2026-10-14T09:00:00Z" },
       { readinessValidUntil: "2026-10-14T09:00:00Z" },
       { legalValidUntil: "2026-10-14T08:59:59Z" },
     ]) {

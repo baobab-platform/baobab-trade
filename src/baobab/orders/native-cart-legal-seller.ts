@@ -45,6 +45,7 @@ export type NativeCheckoutAuthorization = {
   responsibleLegalEntityId: string
   mandateId: string
   legalValidUntil: string
+  documentaryValidUntil: string
   providerCertificationReference: string
   merchantActivationReference: string
   policyReference: string
@@ -156,12 +157,13 @@ export async function assertNativeCartLegalSeller(
   }
   // CP can veto the exact Organisation+capability+market; the absence of a
   // restriction is NOT a legal-actor or Payments/provider permission.
+  const documentary = await deps.documentary.assess(
+    restrictionRequest,
+    await deps.tokens.getAccessToken(),
+    command.correlationId,
+  )
   assertUnblockedDocumentaryScope(
-    await deps.documentary.assess(
-      restrictionRequest,
-      await deps.tokens.getAccessToken(),
-      command.correlationId,
-    ),
+    documentary,
     { ...restrictionRequest, organisation_id: command.organisationId },
     now(),
   )
@@ -204,11 +206,12 @@ export async function assertNativeCartLegalSeller(
     throw new Error("Native legal seller denied: cart binding changed or revoked during readiness")
   }
   // Do not commit using the pre-readiness authority (revocation race).
-  const final = assertFreshSellerFact(
-    await deps.cp.assess(request, await deps.tokens.getAccessToken(), command.correlationId),
-    command,
-    now(),
+  const finalFact = await deps.cp.assess(
+    request,
+    await deps.tokens.getAccessToken(),
+    command.correlationId,
   )
+  const final = assertFreshSellerFact(finalFact, command, now())
   if (
     final.mandateId !== initial.mandateId ||
     final.responsibleLegalEntityId !== initial.responsibleLegalEntityId
@@ -217,21 +220,30 @@ export async function assertNativeCartLegalSeller(
   }
   // A scoped remediation may have been imposed during the Payments wait.
   // Re-query CP immediately before Medusa's irreversible completeCart path.
+  const finalDocumentary = await deps.documentary.assess(
+    restrictionRequest,
+    await deps.tokens.getAccessToken(),
+    command.correlationId,
+  )
   assertUnblockedDocumentaryScope(
-    await deps.documentary.assess(
-      restrictionRequest,
-      await deps.tokens.getAccessToken(),
-      command.correlationId,
-    ),
+    finalDocumentary,
     { ...restrictionRequest, organisation_id: command.organisationId },
     now(),
   )
+  // The final documentary I/O can outlive either earlier positive lease.
+  assertFreshSellerFact(finalFact, command, now())
+  if (
+    !Number.isFinite(Date.parse(readiness.validUntil)) ||
+    Date.parse(readiness.validUntil) <= now()
+  )
+    throw new Error("Native legal seller denied: merchant readiness expired before recording")
   return {
     cartId: identity.cartId,
     contextId: final.contextId,
     responsibleLegalEntityId: final.responsibleLegalEntityId,
     mandateId: final.mandateId,
     legalValidUntil: final.validUntil,
+    documentaryValidUntil: finalDocumentary.expires_at,
     providerCertificationReference: readiness.providerCertificationReference,
     merchantActivationReference: readiness.merchantActivationReference,
     policyReference: readiness.policyReference,

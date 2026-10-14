@@ -9,3 +9,6 @@ coverage
 npm-debug.log*
 release-manifest.json
 .shared-contracts
+
+# Local Redis runtime state is not source.
+dump.rdb

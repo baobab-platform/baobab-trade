@@ -331,6 +331,7 @@ describe("P0-04B-03 durable checkout authorization", () => {
       responsibleLegalEntityId: cmd.legalSellerKey,
       mandateId: approved().legal_actor_resolution.mandate_id,
       legalValidUntil: approved().legal_actor_resolution.valid_until,
+      documentaryValidUntil: new Date(now + 1500).toISOString(),
       providerCertificationReference: t.receipt.providerCertificationReference,
       merchantActivationReference: t.receipt.merchantActivationReference,
       policyReference: t.receipt.policyReference,
@@ -351,6 +352,33 @@ describe("P0-04B-03 durable checkout authorization", () => {
       "no recorded certified merchant readiness",
     )
     expect(partial.assess).toHaveBeenCalledTimes(1)
+  })
+
+  it("records the final documentary lease and denies positive leases expired during its I/O", async () => {
+    const t = setup()
+    t.documentary.mockResolvedValueOnce({
+      ...(await t.documentary()),
+      expires_at: new Date(now + 1000).toISOString(),
+    })
+    const authorization = await assertNativeCartLegalSeller(cart, t.deps)
+    expect(authorization.documentaryValidUntil).toBe(new Date(now + 1500).toISOString())
+    const expired = setup()
+    let clock = now
+    expired.deps.now = () => clock
+    expired.documentary.mockImplementation(async () => {
+      const fact = {
+        ...(await setup().documentary()),
+        evaluated_at: new Date(clock).toISOString(),
+        expires_at: new Date(clock + 1500).toISOString(),
+      }
+      if (expired.assess.mock.calls.length === 2) {
+        clock = now + 21_000
+        fact.evaluated_at = new Date(clock).toISOString()
+        fact.expires_at = new Date(clock + 1500).toISOString()
+      }
+      return fact
+    })
+    await expect(assertNativeCartLegalSeller(cart, expired.deps)).rejects.toThrow()
   })
 
   it("denies a binding whose idempotency key is not this native checkout", async () => {

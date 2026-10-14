@@ -269,3 +269,5 @@ Never commit credentials. Production injects database, Redis, Medusa signing and
 Codespaces uses `ghcr.io/baobab-platform/baobab-dev:1.4.4`. The reusable, SHA-pinned
 Foundation gate validates the environment contract and reproducible inputs and
 scans source, dependencies, secrets, configuration, and the Trade image.
+
+P0-04B-03 adds a [native checkout consumption fence](docs/plans/P0-04B-03-checkout-commit-fence.md) for ever-activated seller bindings. Legal, documentary and independent merchant leases are rechecked immediately before cart-completion COMMIT; compensation voids earlier receipts. Native acceptance exercises the installed guard with synthetic external authority ports. Cross-engine execution and real provider/workload qualification remain open; production checkout stays denied.
