@@ -31,6 +31,7 @@ const evidence: LegalSellerEvidence = {
   marketCode: cmd.marketCode,
   capability: cmd.legalCapability,
   operationReference: cmd.orderReference,
+  validUntil: new Date(now + 20_000).toISOString(),
 }
 const decision = () => ({
   tenant_id: cmd.tenantId,
@@ -62,7 +63,12 @@ describe("LA-05C3 independently authenticated Payments readiness", () => {
   it("requires a live audience token and an exact operation-bound certified response", async () => {
     const f = vi.fn(async () => ({ ok: true, json: async () => decision() }))
     vi.stubGlobal("fetch", f)
-    await expect(build().assertReadyForSeller(cmd, evidence)).resolves.toBeUndefined()
+    await expect(build().assertReadyForSeller(cmd, evidence)).resolves.toEqual({
+      providerCertificationReference: "synthetic/provider-certification",
+      merchantActivationReference: "synthetic/merchant-activation",
+      policyReference: "synthetic/independent-payments-policy",
+      validUntil: decision().valid_until,
+    })
     expect(f).toHaveBeenCalledTimes(1)
     const [url, options] = f.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe("https://payments.example/internal/merchant-readiness/assess")

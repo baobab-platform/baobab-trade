@@ -32,6 +32,16 @@ export type LegalSellerEvidence = {
   marketCode: string
   capability: string
   operationReference: string
+  /** CP decision lease; the native checkout fence re-checks it at COMMIT. */
+  validUntil: string
+}
+
+/** P0-04B-03: the certified READY references a checkout authorization records. */
+export type ProviderReadinessReceipt = {
+  providerCertificationReference: string
+  merchantActivationReference: string
+  policyReference: string
+  validUntil: string
 }
 
 /** Separate provider/market/merchant readiness gate. Absence MUST deny. */
@@ -39,7 +49,7 @@ export interface LegalSellerProviderReadiness {
   assertReadyForSeller(
     command: GovernedSellerOrderCommand,
     evidence: LegalSellerEvidence,
-  ): Promise<void>
+  ): Promise<ProviderReadinessReceipt | undefined>
 }
 
 export class GovernedMedusaOrderOrchestrationAdapter implements OrderOrchestrationPort {
@@ -161,5 +171,6 @@ export function assertFreshSellerFact(
     marketCode: command.marketCode,
     capability: command.legalCapability,
     operationReference: command.orderReference,
+    validUntil: resolution.valid_until,
   }
 }

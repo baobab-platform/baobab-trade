@@ -206,6 +206,11 @@ class NativeSellerCheckoutModuleService
     },
   }
 
+  /** P0-04B-03: database-only store; the cart trigger is the commit fence. */
+  get authorizations(): PostgresGovernedBindingPersistence {
+    return this.bindingPersistence
+  }
+
   readonly bindings = {
     resolveForCart: (cart: NativeCartIdentity): Promise<TrustedNativeSellerBinding> =>
       this.resolveTrustedCart(cart),

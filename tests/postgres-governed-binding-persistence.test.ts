@@ -29,13 +29,19 @@ const evidence = {
   decisionId: "test-decision",
   verifiedAt: "2026-10-10T06:00:00Z",
 }
-function mockDb(existing: Record<string, unknown>[] = [], updateCount = 1) {
+function mockDb(
+  existing: Record<string, unknown>[] = [],
+  updateCount = 1,
+  committedReceipts: Record<string, unknown>[] = [],
+) {
   const queries: string[] = []
   const params: unknown[][] = []
   const client: PgClient = {
     query: vi.fn().mockImplementation(async (sql: string, values: unknown[] = []) => {
       queries.push(sql)
       params.push(values)
+      if (sql.includes("la05_checkout_authorization receipt"))
+        return { rows: committedReceipts, rowCount: committedReceipts.length }
       if (sql.includes("AS valid")) return { rows: [{ valid: true }], rowCount: 1 }
       if (sql.trimStart().startsWith("UPDATE"))
         return { rows: [{ id: "lsbind_test", revision: 1 }], rowCount: updateCount }
@@ -151,5 +157,79 @@ describe("LA-05C5 PostgreSQL transaction boundary", () => {
     expect(index).toBeGreaterThan(-1)
     expect(db.params[index]).toContain("mandate withdrawn by CP")
     expect(db.queries.at(-1)).toBe("COMMIT")
+  })
+})
+
+describe("P0-04B-03 checkout authorization receipt", () => {
+  const at = Date.parse("2026-10-14T09:00:00Z")
+  const authorization = {
+    cartId: scope.cartId,
+    contextId: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
+    responsibleLegalEntityId: scope.responsibleLegalEntityId,
+    mandateId: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6c",
+    legalValidUntil: "2026-10-14T09:00:20Z",
+    documentaryValidUntil: "2026-10-14T09:00:02Z",
+    providerCertificationReference: "synthetic/provider-certification",
+    merchantActivationReference: "synthetic/merchant-activation",
+    policyReference: "synthetic/payments-policy",
+    readinessValidUntil: "2026-10-14T09:00:15Z",
+    idempotencyKey: `native-checkout/${scope.cartId}`,
+  }
+  it("inserts under the seller-binding fence against the current ACTIVE revision", async () => {
+    const db = mockDb([{ id: "lsbind_test", revision: 2 }])
+    await new PostgresGovernedBindingPersistence(db.pool, () => at).record(authorization)
+    expect(db.queries[0]).toBe("BEGIN")
+    const lock = db.queries.findIndex((q) => q.includes("pg_advisory_xact_lock"))
+    expect(db.params[lock]).toEqual([`seller-binding/${scope.cartId}`])
+    const insert = db.queries.findIndex((q) =>
+      q.includes("INSERT INTO la05_checkout_authorization"),
+    )
+    expect(insert).toBeGreaterThan(lock)
+    expect(db.queries[insert]).toContain("LEAST($7::timestamptz,$11::timestamptz,$13::timestamptz)")
+    expect(db.params[insert].slice(0, 3)).toEqual([scope.cartId, "lsbind_test", 2])
+    expect(db.queries.at(-1)).toBe("COMMIT")
+  })
+  it("records nothing for a completeCart replay of an already committed checkout", async () => {
+    const db = mockDb([{ id: "lsbind_test", revision: 2 }], 1, [{ "?column?": 1 }])
+    await new PostgresGovernedBindingPersistence(db.pool, () => at).record(authorization)
+    const replay = db.queries.findIndex((q) => q.includes("la05_checkout_authorization receipt"))
+    expect(db.params[replay]).toEqual([`native-checkout/${scope.cartId}`])
+    expect(db.queries[replay]).toContain("JOIN order_cart link")
+    expect(db.queries[replay]).toContain('JOIN "order" historical_order')
+    expect(db.queries.some((q) => q.includes("INSERT INTO la05_checkout_authorization"))).toBe(
+      false,
+    )
+    expect(db.queries.at(-1)).toBe("COMMIT")
+  })
+  it("rolls back when no ACTIVE binding exists", async () => {
+    const db = mockDb([])
+    await expect(
+      new PostgresGovernedBindingPersistence(db.pool, () => at).record(authorization),
+    ).rejects.toThrow("no ACTIVE seller binding")
+    expect(db.queries).toContain("ROLLBACK")
+    expect(db.queries.some((q) => q.includes("INSERT INTO la05_checkout_authorization"))).toBe(
+      false,
+    )
+  })
+  it("refuses incomplete, foreign-keyed or already-expired authorizations before any I/O", async () => {
+    for (const change of [
+      { idempotencyKey: "native-checkout/another-cart" },
+      { mandateId: " " },
+      { merchantActivationReference: "" },
+      { legalValidUntil: "not-a-time" },
+      { documentaryValidUntil: "not-a-time" },
+      { documentaryValidUntil: "2026-10-14T09:00:00Z" },
+      { readinessValidUntil: "2026-10-14T09:00:00Z" },
+      { legalValidUntil: "2026-10-14T08:59:59Z" },
+    ]) {
+      const db = mockDb([{ id: "lsbind_test", revision: 2 }])
+      await expect(
+        new PostgresGovernedBindingPersistence(db.pool, () => at).record({
+          ...authorization,
+          ...change,
+        }),
+      ).rejects.toThrow("checkout authorization incomplete or expired")
+      expect(db.pool.connect).not.toHaveBeenCalled()
+    }
   })
 })

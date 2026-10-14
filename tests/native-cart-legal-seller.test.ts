@@ -31,7 +31,7 @@ const cmd: GovernedSellerOrderCommand & {
   legalSellerKey: "LE-SYNTHETIC-ZA",
   currencyCode: "ZAR",
   totalMinor: 1200,
-  idempotencyKey: "checkout/synthetic",
+  idempotencyKey: `native-checkout/${cart.id}`,
   correlationId: "test-correlation",
   legalContextId: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
   marketCode: "ZA",
@@ -58,7 +58,14 @@ const setup = () => {
   const resolveForCart = vi.fn(async () => cmd)
   const assess = vi.fn(async () => approved())
   const token = vi.fn(async () => "staging-workload-token")
-  const ready = vi.fn(async () => undefined)
+  const receipt = {
+    providerCertificationReference: "synthetic/provider-certification",
+    merchantActivationReference: "synthetic/merchant-activation",
+    policyReference: "synthetic/independent-payments-policy",
+    validUntil: new Date(now + 15_000).toISOString(),
+  }
+  const ready = vi.fn(async (): Promise<typeof receipt | undefined> => receipt)
+  const record = vi.fn(async () => undefined)
   const documentary = vi.fn(async () => ({
     context_id: cmd.legalContextId,
     organisation_id: cmd.organisationId,
@@ -77,9 +84,10 @@ const setup = () => {
     documentary: { assess: documentary } as DocumentaryRestrictionPort,
     tokens: { getAccessToken: token },
     readiness: { assertReadyForSeller: ready },
+    authorizations: { record },
     now: () => now,
   }
-  return { deps, resolveForCart, assess, documentary, token, ready }
+  return { deps, resolveForCart, assess, documentary, token, ready, record, receipt }
 }
 
 describe("LA-05C8 native checkout deployment authority", () => {
@@ -310,5 +318,90 @@ describe("LA-05C2 native Medusa checkout guard", () => {
     await expect(
       enforceNativeCheckoutGate(cart, true, false, () => t.deps),
     ).resolves.toBeUndefined()
+    expect(t.record).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("P0-04B-03 durable checkout authorization", () => {
+  it("returns the final CP decision and certified readiness references for the commit fence", async () => {
+    const t = setup()
+    await expect(assertNativeCartLegalSeller(cart, t.deps)).resolves.toEqual({
+      cartId: cart.id,
+      contextId: cmd.legalContextId,
+      responsibleLegalEntityId: cmd.legalSellerKey,
+      mandateId: approved().legal_actor_resolution.mandate_id,
+      legalValidUntil: approved().legal_actor_resolution.valid_until,
+      documentaryValidUntil: new Date(now + 1500).toISOString(),
+      providerCertificationReference: t.receipt.providerCertificationReference,
+      merchantActivationReference: t.receipt.merchantActivationReference,
+      policyReference: t.receipt.policyReference,
+      readinessValidUntil: t.receipt.validUntil,
+      idempotencyKey: `native-checkout/${cart.id}`,
+    })
+  })
+
+  it("denies when readiness passes without recording certified references", async () => {
+    const t = setup()
+    t.ready.mockResolvedValueOnce(undefined)
+    await expect(assertNativeCartLegalSeller(cart, t.deps)).rejects.toThrow(
+      "no recorded certified merchant readiness",
+    )
+    const partial = setup()
+    partial.ready.mockResolvedValueOnce({ ...partial.receipt, merchantActivationReference: "" })
+    await expect(assertNativeCartLegalSeller(cart, partial.deps)).rejects.toThrow(
+      "no recorded certified merchant readiness",
+    )
+    expect(partial.assess).toHaveBeenCalledTimes(1)
+  })
+
+  it("records the final documentary lease and denies positive leases expired during its I/O", async () => {
+    const t = setup()
+    t.documentary.mockResolvedValueOnce({
+      ...(await t.documentary()),
+      expires_at: new Date(now + 1000).toISOString(),
+    })
+    const authorization = await assertNativeCartLegalSeller(cart, t.deps)
+    expect(authorization.documentaryValidUntil).toBe(new Date(now + 1500).toISOString())
+    const expired = setup()
+    let clock = now
+    expired.deps.now = () => clock
+    expired.documentary.mockImplementation(async () => {
+      const fact = {
+        ...(await setup().documentary()),
+        evaluated_at: new Date(clock).toISOString(),
+        expires_at: new Date(clock + 1500).toISOString(),
+      }
+      if (expired.assess.mock.calls.length === 2) {
+        clock = now + 21_000
+        fact.evaluated_at = new Date(clock).toISOString()
+        fact.expires_at = new Date(clock + 1500).toISOString()
+      }
+      return fact
+    })
+    await expect(assertNativeCartLegalSeller(cart, expired.deps)).rejects.toThrow()
+  })
+
+  it("denies a binding whose idempotency key is not this native checkout", async () => {
+    const t = setup()
+    t.resolveForCart.mockResolvedValueOnce({ ...cmd, idempotencyKey: "native-checkout/other" })
+    await expect(assertNativeCartLegalSeller(cart, t.deps)).rejects.toThrow("trusted cart binding")
+    expect(t.assess).not.toHaveBeenCalled()
+  })
+
+  it("records exactly the asserted authorization and fails closed without a store", async () => {
+    const t = setup()
+    await enforceNativeCheckoutGate(cart, true, false, () => t.deps)
+    expect(t.record).toHaveBeenCalledWith(await assertNativeCartLegalSeller(cart, setup().deps))
+    const missing = setup()
+    delete missing.deps.authorizations
+    await expect(enforceNativeCheckoutGate(cart, true, false, () => missing.deps)).rejects.toThrow(
+      "checkout authorization store not registered",
+    )
+    expect(missing.assess).not.toHaveBeenCalled()
+    const failing = setup()
+    failing.record.mockRejectedValueOnce(new Error("P0-04B-03 denied: no ACTIVE seller binding"))
+    await expect(enforceNativeCheckoutGate(cart, true, false, () => failing.deps)).rejects.toThrow(
+      "no ACTIVE seller binding",
+    )
   })
 })

@@ -279,6 +279,11 @@ jobs:
       - name: Regression Gate 22 Thamani simulation pack — real orders, payments, returns, stock, imports, ERP
         run: npm run regression:thamani-simulation-pack
 
+      - name: Regression — P0-04B-03 checkout commit-point fence on real completeCartWorkflow (disposable PostgreSQL 17 only)
+        env:
+          BAOBAB_BINDING_LIFECYCLE_TEST_DB: baobab_trade_test
+        run: npm run regression:checkout-commit-fence
+
       - name: Verify Gate 20 reconciliation sweep
         run: npm run verify:observability
 
