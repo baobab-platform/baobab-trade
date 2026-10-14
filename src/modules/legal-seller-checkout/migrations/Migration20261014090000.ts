@@ -95,6 +95,12 @@ export class Migration20261014090000 extends Migration {
     this.addSql(`CREATE FUNCTION la05_checkout_commit_fence() RETURNS trigger LANGUAGE plpgsql AS $$
     DECLARE authorization_id uuid; at timestamptz := clock_timestamp();
     BEGIN
+      IF OLD.completed_at IS NOT NULL AND NEW.completed_at IS NOT NULL
+        AND OLD.completed_at IS DISTINCT FROM NEW.completed_at
+        AND EXISTS (SELECT 1 FROM native_seller_cart_binding
+          WHERE cart_id = NEW.id AND activation_snapshot IS NOT NULL) THEN
+        RAISE EXCEPTION 'P0-04B-03 denied: activated cart completion timestamp is immutable';
+      END IF;
       IF OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL THEN
         -- Never-activated carts keep the application-level gate only; requiring
         -- a binding for every cart is a separate owner decision.

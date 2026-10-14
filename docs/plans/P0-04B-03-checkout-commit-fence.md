@@ -59,7 +59,7 @@ When compensation reopens a completed cart, NOT NULL→NULL, the consumed receip
 
 **Writing the authorization.** `enforceNativeCheckoutGate` now refuses unless an authorization store is registered. After `assertNativeCartLegalSeller` passes, it records the authorization through `PostgresGovernedBindingPersistence.record()`. That method reuses the existing transaction, advisory-lock and timeout helper.
 
-Medusa runs the validate hook on a completeCart replay too. The enabled guard still requires current binding, legal, documentary and merchant standing; a replay after binding revocation denies while preserving the historical order. After successful current checks, recording is a no-op when the checkout already holds a live consumption on a completed cart (ADR-0014 §26–30).
+Medusa runs the validate hook on a completeCart replay too. The enabled guard still requires current binding, legal, documentary and merchant standing; a replay after binding revocation denies while preserving the historical order. After successful current checks, recording is a no-op only when the checkout already holds a live consumption on a completed cart with a live native order link and order (ADR-0014 §26–30).
 
 `assertNativeCartLegalSeller` now returns the final CP decision and the Payments READY receipt. Readiness that passes without certified references denies.
 
@@ -115,6 +115,6 @@ The local database was PostgreSQL 16. The PostgreSQL 17 CI job is authoritative.
 
 **Boundary limits.** This is the native cart-completion transaction fence for ever-activated bindings, not a serializable transaction spanning CP, Payments and Medusa. External mandate/documentary/merchant revocation after the last assessment is bounded by its lease, not synchronously fenced by this local database. Native order creation, link/event emission and payment authorization are separate saga steps; direct order creation and independently invoked payment paths are not covered by this cart trigger. Never-activated/unbound cart SQL writes are also outside its scope. Wider protected execution and real operational acceptance remain open; production stays denied.
 
-**Continuation acceptance.** The suite additionally requires pre-COMMIT lease-expiry rollback, guard-enabled native completion/replay, revoked replay denial preserving the historical order, documentary veto, independent merchant denial and missing-binding denial. The final documentary lease is persisted and positive leases are rechecked after its I/O. Generated Redis state is excluded from source.
+**Continuation acceptance.** The suite additionally requires pre-COMMIT lease-expiry rollback, guard-enabled native completion/replay, revoked replay denial preserving the historical order, documentary veto, independent merchant denial and missing-binding denial. A bare completion timestamp without a linked native order is refused as a replay, and an activated completion timestamp cannot be replaced. The final documentary lease is persisted and positive leases are rechecked after its I/O. Generated Redis state is excluded from source.
 
 **Rollback.** The down migration refuses: removing the fence would reopen activated carts and discard consumption history.

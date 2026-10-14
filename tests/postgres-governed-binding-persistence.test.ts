@@ -194,6 +194,8 @@ describe("P0-04B-03 checkout authorization receipt", () => {
     await new PostgresGovernedBindingPersistence(db.pool, () => at).record(authorization)
     const replay = db.queries.findIndex((q) => q.includes("la05_checkout_authorization receipt"))
     expect(db.params[replay]).toEqual([`native-checkout/${scope.cartId}`])
+    expect(db.queries[replay]).toContain("JOIN order_cart link")
+    expect(db.queries[replay]).toContain('JOIN "order" historical_order')
     expect(db.queries.some((q) => q.includes("INSERT INTO la05_checkout_authorization"))).toBe(
       false,
     )

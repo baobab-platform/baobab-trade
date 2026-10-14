@@ -411,6 +411,8 @@ export class PostgresGovernedBindingPersistence
       const committed = await db.query(
         `SELECT 1 FROM la05_checkout_authorization receipt
         JOIN cart ON cart.id = receipt.cart_id AND cart.completed_at IS NOT NULL
+        JOIN order_cart link ON link.cart_id = cart.id AND link.deleted_at IS NULL
+        JOIN "order" historical_order ON historical_order.id = link.order_id AND historical_order.deleted_at IS NULL
         WHERE receipt.idempotency_key=$1 AND receipt.consumed_at IS NOT NULL
           AND receipt.released_at IS NULL`,
         [a.idempotencyKey],

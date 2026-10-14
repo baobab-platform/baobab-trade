@@ -377,6 +377,13 @@ export default async function regressionCheckoutCommitFence({ container }: ExecA
     assert.equal(stored.length, 2)
     assert.ok(stored[0].consumed_at && stored[0].released_at) // older: voided
     assert.ok(stored[1].consumed_at && !stored[1].released_at) // newest: consumed
+    // A bare cart timestamp without its native order is NOT a replay. Neither
+    // the recorder nor a second non-NULL completion can reuse its consumption.
+    await assert.rejects(authorize(compensated), /open native cart required/)
+    await assert.rejects(
+      pool.query("UPDATE cart SET completed_at=clock_timestamp() WHERE id=$1", [compensated]),
+      /completion timestamp is immutable/,
+    )
     await carts.updateCarts(compensated, { completed_at: null })
     stored = await receipts(compensated)
     assert.ok(stored.every((receipt) => receipt.consumed_at && receipt.released_at))
