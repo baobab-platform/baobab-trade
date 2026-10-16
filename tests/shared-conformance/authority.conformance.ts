@@ -13,6 +13,10 @@ import {
   merchantReadinessResponseSchema,
   nativeConfigurationAttestationRequestSchema,
   nativeConfigurationAttestationSchema,
+  bindingResolveRequestSchema,
+  bindingResolutionSchema,
+  orderAuthorityRequestSchema,
+  orderAuthorityDecisionSchema,
 } from "../../src/baobab/contracts/authority-validation"
 import { LEGAL_ACTOR_OUTCOMES } from "../../src/baobab/contracts/authority-schemas.generated"
 import {
@@ -183,6 +187,31 @@ describe("P0-04A pinned consequential authority contracts", () => {
       attestation,
       nativeConfigurationAttestationSchema,
     ],
+    // Trade-A TA-03: the Shared examples themselves are the fixtures.
+    [
+      "trade/v2/seller-operating-binding.schema.json",
+      "BindingResolveRequest",
+      readJson("contracts/trade/v2/examples/binding-resolve-request.json"),
+      bindingResolveRequestSchema,
+    ],
+    [
+      "trade/v2/seller-operating-binding.schema.json",
+      "BindingResolution",
+      readJson("contracts/trade/v2/examples/binding-resolution-resolved.json"),
+      bindingResolutionSchema,
+    ],
+    [
+      "trade/v2/order-authority.schema.json",
+      "OrderAuthorityRequest",
+      readJson("contracts/trade/v2/examples/order-authority-request.json"),
+      orderAuthorityRequestSchema,
+    ],
+    [
+      "trade/v2/order-authority.schema.json",
+      "OrderAuthorityDecision",
+      readJson("contracts/trade/v2/examples/order-authority-decision-authorized.json"),
+      orderAuthorityDecisionSchema,
+    ],
   ] as const
 
   it.each(cases)(
@@ -305,14 +334,18 @@ describe("P0-04A pinned consequential authority contracts", () => {
     expect(assessor.allowed_scopes).toEqual(
       expect.arrayContaining(["context:resolve", "trade-seller-binding:attest"]),
     )
-    expect(profiles["baobab-trade-workload"].allowed_scopes).not.toContain(
+    // Trade-A TA-03 adds discovery; the same PROVISIONED assessor, never the general workload.
+    for (const name of [
       "trade-seller-binding:attest",
-    )
-    const scope = scopeRegistry.find(
-      (x: { name: string }) => x.name === "trade-seller-binding:attest",
-    )
-    expect(scope?.audience).toEqual(["baobab-control-plane"])
-    expect(scope?.grants_authority).toBe(false)
+      "trade-seller-binding:resolve",
+      "trade-order-authority:resolve",
+    ]) {
+      expect(assessor.allowed_scopes).toContain(name)
+      expect(profiles["baobab-trade-workload"].allowed_scopes).not.toContain(name)
+      const scope = scopeRegistry.find((x: { name: string }) => x.name === name)
+      expect(scope?.audience).toEqual(["baobab-control-plane"])
+      expect(scope?.grants_authority).toBe(false)
+    }
   })
 
   it("preserves ungranted scope gaps and PROVISIONED staging standing", () => {

@@ -1,6 +1,6 @@
 {
   "repository": "baobab-platform/shared",
-  "commit": "33950a4b716c14e7624090349d835af334dc2bc3",
+  "commit": "2f5a330fd09f1e62608ae7728897e35c053bf738",
   "roots": [
     "contracts/commerce/v1/seller-binding.schema.json",
     "contracts/payments/v1/merchant-readiness.schema.json",
@@ -24,6 +24,6 @@
     "contracts/organisation/v2/legal-actor-mandate.schema.json": "38510c700e1b448541c65e04a6a5463f8fa275017cae65f3c163495867e8285c",
     "contracts/payments/v1/merchant-readiness.schema.json": "c7131cdc3c726dfda60cfa1b0b9b03bbcfe015fb699a0fa78ceb8c402896fa1e",
     "contracts/trade/v2/order-authority.schema.json": "2950432bba92aee1f18dd7900484c900c57cf12782be3d85474b98e8dbb09487",
-    "contracts/trade/v2/seller-operating-binding.schema.json": "8bc2e29c0c05f91593e57833c8e56b1329eb56f51b27b11d97106d984b7b7fab"
+    "contracts/trade/v2/seller-operating-binding.schema.json": "543f77019d17695dfbe6971aa19736d1da1f3235fe396297c06a61391fee8d91"
   }
 }

@@ -24,6 +24,10 @@ import {
   type NativeSellerConfigurationScope,
 } from "../baobab/orders/native-seller-configuration"
 import { medusaNativeSellerFacts } from "./attest-native-seller-configuration"
+import {
+  PostgresAttestedNativeConfigurationReader,
+  resolveNativeConfiguration,
+} from "../baobab/orders/native-configuration-resolver"
 
 const refused = async (what: string, run: () => Promise<unknown>, code?: string) => {
   try {
@@ -186,6 +190,45 @@ export default async function ({ container }: ExecArgs) {
       ]),
     )
     await refused("TRUNCATE", () => pool.query("TRUNCATE trade_native_configuration_attestation"))
+
+    // Trade-A TA-03: the real reader maps a native record to its attested
+    // configuration and recomputes the live digest; drift is denied.
+    const reader = new PostgresAttestedNativeConfigurationReader({
+      connect: async () => {
+        const client = await pool.connect()
+        return {
+          query: (sql, values) => client.query(sql, values ? [...values] : []),
+          release: () => client.release(),
+        }
+      },
+    })
+    const mapped = await resolveNativeConfiguration(
+      { salesChannelId: channel.id, regionId: region.id, currency: "lsl" },
+      scope.engineInstanceId,
+      reader,
+      facts,
+    )
+    assert.equal(mapped.reference, scope.reference)
+    assert.equal(mapped.digest, first.digest)
+    assert.equal(mapped.attestationId, recorded.attestation_id)
+    await refused("record outside every attested configuration", () =>
+      resolveNativeConfiguration(
+        { salesChannelId: "sc_unattested", regionId: region.id, currency: "LSL" },
+        scope.engineInstanceId,
+        reader,
+        facts,
+      ),
+    )
+    await channels.updateSalesChannels(channel.id, { is_disabled: true })
+    await refused("drifted live configuration", () =>
+      resolveNativeConfiguration(
+        { salesChannelId: channel.id, regionId: region.id, currency: "LSL" },
+        scope.engineInstanceId,
+        reader,
+        facts,
+      ),
+    )
+    await channels.updateSalesChannels(channel.id, { is_disabled: false })
     console.info(
       "Trade-0 native-configuration attestation regression passed (synthetic CP, engine-local)",
     )
