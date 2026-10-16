@@ -11,6 +11,8 @@ import {
   legalActorResponseSchema,
   merchantReadinessRequestSchema,
   merchantReadinessResponseSchema,
+  nativeConfigurationAttestationRequestSchema,
+  nativeConfigurationAttestationSchema,
 } from "../../src/baobab/contracts/authority-validation"
 import { LEGAL_ACTOR_OUTCOMES } from "../../src/baobab/contracts/authority-schemas.generated"
 import {
@@ -29,6 +31,27 @@ const request = {
   market: "ZA",
   capability: "commerce.order.create",
   operation_reference: "cart/synthetic/complete",
+}
+// ADR-SHARED-039 Trade-0 native-configuration attestation wire shapes.
+const attestationRequest = {
+  context_id: context,
+  engine_instance_id: "ei_tradestaging01",
+  native_configuration_reference: "trade/native-seller-configuration/synthetic-za",
+  native_configuration_digest: "ab".repeat(32),
+  currency_scope: ["ZAR"],
+  attested_at: "2026-10-16T03:00:00Z",
+}
+const attestation = {
+  attestation_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a70",
+  tenant_id: "tn_synthetic",
+  operating_organisation_id: organisation,
+  market: "ZA",
+  engine_instance_id: attestationRequest.engine_instance_id,
+  native_configuration_reference: attestationRequest.native_configuration_reference,
+  native_configuration_digest: attestationRequest.native_configuration_digest,
+  currency_scope: ["ZAR"],
+  attested_at: attestationRequest.attested_at,
+  recorded_at: "2026-10-16T03:00:00.100Z",
 }
 const authorized = {
   context_id: context,
@@ -148,6 +171,18 @@ describe("P0-04A pinned consequential authority contracts", () => {
       merchant,
       merchantReadinessResponseSchema,
     ],
+    [
+      "trade/v2/seller-operating-binding.schema.json",
+      "NativeConfigurationAttestationRequest",
+      attestationRequest,
+      nativeConfigurationAttestationRequestSchema,
+    ],
+    [
+      "trade/v2/seller-operating-binding.schema.json",
+      "NativeConfigurationAttestation",
+      attestation,
+      nativeConfigurationAttestationSchema,
+    ],
   ] as const
 
   it.each(cases)(
@@ -260,6 +295,24 @@ describe("P0-04A pinned consequential authority contracts", () => {
         "cache-control": "no-store",
       })
     }
+  })
+
+  it("attests only through the PROVISIONED assessor, never the general Trade workload", () => {
+    const profiles = readYaml("contracts/identity/v1/workload-registry.yaml").workloads
+    const scopeRegistry = readYaml("contracts/authorization/v1/scope-registry.yaml").scopes
+    const assessor = profiles["baobab-trade-legal-actor-assessor-staging"]
+    expect(assessor.status).toBe("PROVISIONED")
+    expect(assessor.allowed_scopes).toEqual(
+      expect.arrayContaining(["context:resolve", "trade-seller-binding:attest"]),
+    )
+    expect(profiles["baobab-trade-workload"].allowed_scopes).not.toContain(
+      "trade-seller-binding:attest",
+    )
+    const scope = scopeRegistry.find(
+      (x: { name: string }) => x.name === "trade-seller-binding:attest",
+    )
+    expect(scope?.audience).toEqual(["baobab-control-plane"])
+    expect(scope?.grants_authority).toBe(false)
   })
 
   it("preserves ungranted scope gaps and PROVISIONED staging standing", () => {

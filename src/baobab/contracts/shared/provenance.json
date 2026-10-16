@@ -1,12 +1,14 @@
 {
   "repository": "baobab-platform/shared",
-  "commit": "5dcff30de1bc6142ad4b8801bbe3b2b66a0670ae",
+  "commit": "33950a4b716c14e7624090349d835af334dc2bc3",
   "roots": [
     "contracts/commerce/v1/seller-binding.schema.json",
     "contracts/payments/v1/merchant-readiness.schema.json",
     "contracts/organisation/v2/legal-actor-enforcement.schema.json",
     "contracts/admission/v2/documentary-restriction.schema.json",
-    "contracts/control-plane/v1/platform-context.schema.json"
+    "contracts/control-plane/v1/platform-context.schema.json",
+    "contracts/trade/v2/seller-operating-binding.schema.json",
+    "contracts/trade/v2/order-authority.schema.json"
   ],
   "tenancy_version": "2.0",
   "files": {
@@ -20,6 +22,8 @@
     "contracts/organisation/v2/domain.schema.json": "749191c7b1831586cd68c8b0e1722bcb82353cd81a92d39b3de447adcad8ba08",
     "contracts/organisation/v2/legal-actor-enforcement.schema.json": "fc0f9d097b8a4ab2d9d7a4a8a87f47fdec208e5f9070b6eb0dd5337baf858681",
     "contracts/organisation/v2/legal-actor-mandate.schema.json": "38510c700e1b448541c65e04a6a5463f8fa275017cae65f3c163495867e8285c",
-    "contracts/payments/v1/merchant-readiness.schema.json": "c7131cdc3c726dfda60cfa1b0b9b03bbcfe015fb699a0fa78ceb8c402896fa1e"
+    "contracts/payments/v1/merchant-readiness.schema.json": "c7131cdc3c726dfda60cfa1b0b9b03bbcfe015fb699a0fa78ceb8c402896fa1e",
+    "contracts/trade/v2/order-authority.schema.json": "2950432bba92aee1f18dd7900484c900c57cf12782be3d85474b98e8dbb09487",
+    "contracts/trade/v2/seller-operating-binding.schema.json": "8bc2e29c0c05f91593e57833c8e56b1329eb56f51b27b11d97106d984b7b7fab"
   }
 }

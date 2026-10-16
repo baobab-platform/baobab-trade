@@ -58,3 +58,14 @@ export const bindingAuthorizationResponseSchema = validator(
   "commerce/v1/seller-binding.schema.json",
   "AuthorizeBindingResponse",
 )
+
+// ADR-SHARED-039 Trade-0: native-configuration attestation to the CP-owned
+// Seller Operating Binding registry. An attestation authorises nothing.
+export const nativeConfigurationAttestationRequestSchema = validator(
+  "trade/v2/seller-operating-binding.schema.json",
+  "NativeConfigurationAttestationRequest",
+)
+export const nativeConfigurationAttestationSchema = validator(
+  "trade/v2/seller-operating-binding.schema.json",
+  "NativeConfigurationAttestation",
+)

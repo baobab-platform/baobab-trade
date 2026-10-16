@@ -128,6 +128,10 @@ jobs:
         env:
           BAOBAB_BINDING_LIFECYCLE_TEST_DB: baobab_trade_test
         run: npm run regression:governed-binding-lifecycle
+      - name: Regression — native seller-configuration attestation (disposable PostgreSQL 17 only)
+        env:
+          BAOBAB_BINDING_LIFECYCLE_TEST_DB: baobab_trade_test
+        run: npm run regression:native-configuration-attestation
       - name: Verify required core modules
         run: npm run verify:core-modules
       - name: Bootstrap Uganda and South Africa Market projections

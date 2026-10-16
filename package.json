@@ -35,6 +35,7 @@
     "bootstrap:thamani-tax": "medusa exec ./src/scripts/bootstrap-thamani-tax.ts",
     "bootstrap:thamani-trade-readiness": "medusa exec ./src/scripts/bootstrap-thamani-trade-readiness.ts",
     "bootstrap:thamani-erp-integration": "medusa exec ./src/scripts/bootstrap-thamani-erp-integration.ts",
+    "attest:native-seller-configuration": "medusa exec ./src/scripts/attest-native-seller-configuration.ts",
     "verify:market-projections": "medusa exec ./src/scripts/verify-market-projections.ts",
     "verify:b2b-module": "medusa exec ./src/scripts/verify-b2b-module.ts",
     "verify:catalogue": "medusa exec ./src/scripts/verify-catalogue.ts",
@@ -86,7 +87,8 @@
     "contracts:sync": "node scripts/sync-authority-contracts.mjs",
     "postbuild": "node scripts/verify-authority-build.mjs",
     "regression:governed-binding-lifecycle": "medusa exec ./src/scripts/regression-governed-binding-lifecycle.ts",
-    "regression:checkout-commit-fence": "medusa exec ./src/scripts/regression-checkout-commit-fence.ts"
+    "regression:checkout-commit-fence": "medusa exec ./src/scripts/regression-checkout-commit-fence.ts",
+    "regression:native-configuration-attestation": "medusa exec ./src/scripts/regression-native-configuration-attestation.ts"
   },
   "dependencies": {
     "@medusajs/auth-oidc": "2.21.2",
