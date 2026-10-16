@@ -69,3 +69,22 @@ export const nativeConfigurationAttestationSchema = validator(
   "trade/v2/seller-operating-binding.schema.json",
   "NativeConfigurationAttestation",
 )
+
+// Trade-A TA-03: binding discovery and per-operation order authority. A
+// resolution identifies a candidate binding; only a decision is authority.
+export const bindingResolveRequestSchema = validator(
+  "trade/v2/seller-operating-binding.schema.json",
+  "BindingResolveRequest",
+)
+export const bindingResolutionSchema = validator(
+  "trade/v2/seller-operating-binding.schema.json",
+  "BindingResolution",
+)
+export const orderAuthorityRequestSchema = validator(
+  "trade/v2/order-authority.schema.json",
+  "OrderAuthorityRequest",
+)
+export const orderAuthorityDecisionSchema = validator(
+  "trade/v2/order-authority.schema.json",
+  "OrderAuthorityDecision",
+)
