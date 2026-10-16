@@ -24,6 +24,7 @@ import {
   type NativeSellerConfigurationScope,
 } from "../baobab/orders/native-seller-configuration"
 import { medusaNativeSellerFacts } from "./attest-native-seller-configuration"
+import { PostgresCommitmentAttributionStore } from "../baobab/orders/commitment-attribution"
 import {
   PostgresAttestedNativeConfigurationReader,
   resolveNativeConfiguration,
@@ -229,6 +230,110 @@ export default async function ({ container }: ExecArgs) {
       ),
     )
     await channels.updateSalesChannels(channel.id, { is_disabled: false })
+
+    // Trade-A TA-04: append-only attribution; the database refuses a seller
+    // change, a version regression, an unattested configuration and rewrites.
+    const attributions = new PostgresCommitmentAttributionStore({
+      connect: async () => {
+        const client = await pool.connect()
+        return {
+          query: (sql, values) => client.query(sql, values ? [...values] : []),
+          release: () => client.release(),
+        }
+      },
+    })
+    const sellerA = randomUUID()
+    const cartId = `cart_regression_${randomUUID().slice(0, 8)}`
+    const base = {
+      subject_type: "cart" as const,
+      subject_id: cartId,
+      attestation_id: recorded.attestation_id,
+      native_configuration_reference: scope.reference,
+      native_configuration_digest: first.digest,
+      currency: "LSL",
+      tenant_id: scope.tenantId,
+      operating_organisation_id: scope.organisationId,
+      market: scope.market,
+      engine_instance_id: scope.engineInstanceId,
+      binding_id: sellerA,
+      binding_version: 2,
+      context_id: randomUUID(),
+      resolved_at: new Date().toISOString(),
+      correlation_id: "regression/attribution",
+    }
+    const attributed = await attributions.record({ ...base, resolution_id: randomUUID() })
+    assert.equal(
+      (await attributions.current({ type: "cart", id: cartId }))?.attribution_id,
+      attributed.attribution_id,
+    )
+    await attributions.record({ ...base, binding_version: 3, resolution_id: randomUUID() })
+    assert.equal((await attributions.current({ type: "cart", id: cartId }))?.binding_version, 3)
+    await refused("a different seller binding for the same cart", () =>
+      attributions.record({
+        ...base,
+        binding_id: randomUUID(),
+        binding_version: 3,
+        resolution_id: randomUUID(),
+      }),
+    )
+    await refused("a regression to an older binding version", () =>
+      attributions.record({ ...base, binding_version: 1, resolution_id: randomUUID() }),
+    )
+    await refused("a digest Trade never attested", () =>
+      attributions.record({
+        ...base,
+        binding_version: 3,
+        native_configuration_digest: "0".repeat(64),
+        resolution_id: randomUUID(),
+      }),
+    )
+    await refused("a currency outside the attested scope", () =>
+      attributions.record({
+        ...base,
+        binding_version: 3,
+        currency: "ZAR",
+        resolution_id: randomUUID(),
+      }),
+    )
+    await refused("another tenant's scope", () =>
+      attributions.record({
+        ...base,
+        binding_version: 3,
+        tenant_id: "tn_othertenant",
+        resolution_id: randomUUID(),
+      }),
+    )
+    await refused(
+      "a replayed resolution",
+      () =>
+        attributions.record({
+          ...base,
+          binding_version: 3,
+          resolution_id: attributed.resolution_id,
+        }),
+      "23505",
+    )
+    await refused("UPDATE of attribution", () =>
+      pool.query(
+        "UPDATE trade_commitment_attribution SET binding_version = 9 WHERE attribution_id = $1",
+        [attributed.attribution_id],
+      ),
+    )
+    await refused("DELETE of attribution", () =>
+      pool.query("DELETE FROM trade_commitment_attribution WHERE attribution_id = $1", [
+        attributed.attribution_id,
+      ]),
+    )
+    await refused("TRUNCATE of attribution", () =>
+      pool.query("TRUNCATE trade_commitment_attribution"),
+    )
+    // A draft or direct order is attributed independently of any cart.
+    await attributions.record({
+      ...base,
+      subject_type: "draft_order",
+      subject_id: `order_${cartId}`,
+      resolution_id: randomUUID(),
+    })
     console.info(
       "Trade-0 native-configuration attestation regression passed (synthetic CP, engine-local)",
     )
