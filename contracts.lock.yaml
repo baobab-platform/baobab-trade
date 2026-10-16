@@ -12,7 +12,7 @@ schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: 5dcff30de1bc6142ad4b8801bbe3b2b66a0670ae
+  commit: 33950a4b716c14e7624090349d835af334dc2bc3
 contracts:
   - contracts/commerce/v1/seller-binding.schema.json
   - contracts/payments/v1/merchant-readiness.schema.json
@@ -52,6 +52,12 @@ contracts:
   - contracts/identity/v1/workload-registry.yaml
   - contracts/legal-entity/registry.yaml
   - contracts/tenancy/tenancy.yaml
+  # ADR-SHARED-039 Trade-0: Trade attests its native seller configuration to
+  # the CP-owned Seller Operating Binding registry; Trade-A resolves order
+  # authority against the closed catalogue.
+  - contracts/trade/v2/seller-operating-binding.schema.json
+  - contracts/trade/v2/order-authority.schema.json
+  - contracts/trade/v2/order-operations.yaml
 policy:
   updates: explicit_pull_request
   compatibility: validate_before_merge

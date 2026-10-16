@@ -22,6 +22,8 @@ const roots = [
   "contracts/organisation/v2/legal-actor-enforcement.schema.json",
   "contracts/admission/v2/documentary-restriction.schema.json",
   "contracts/control-plane/v1/platform-context.schema.json",
+  "contracts/trade/v2/seller-operating-binding.schema.json",
+  "contracts/trade/v2/order-authority.schema.json",
 ]
 const schemas = new Map()
 const discover = (path) => {
