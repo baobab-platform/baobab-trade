@@ -25,6 +25,7 @@ import {
 } from "../baobab/orders/native-seller-configuration"
 import { medusaNativeSellerFacts } from "./attest-native-seller-configuration"
 import { PostgresCommitmentAttributionStore } from "../baobab/orders/commitment-attribution"
+import { PostgresOrderAuthorityReceiptStore } from "../baobab/orders/order-authority-enforcement"
 import {
   PostgresAttestedNativeConfigurationReader,
   resolveNativeConfiguration,
@@ -327,6 +328,97 @@ export default async function ({ container }: ExecArgs) {
     await refused("TRUNCATE of attribution", () =>
       pool.query("TRUNCATE trade_commitment_attribution"),
     )
+    // Trade-A TA-05: an order-authority receipt matches its attribution, holds
+    // at most a 30 s lease, is never replayed and is consumed at most once.
+    const receipts = new PostgresOrderAuthorityReceiptStore({
+      connect: async () => {
+        const client = await pool.connect()
+        return {
+          query: (sql, values) => client.query(sql, values ? [...values] : []),
+          release: () => client.release(),
+        }
+      },
+    })
+    const latest = await attributions.current({ type: "cart", id: cartId })
+    assert.ok(latest)
+    const received = Date.now()
+    const receiptBase = {
+      attribution_id: latest.attribution_id,
+      operation_class: "trade.order.commit" as const,
+      operation_reference: `trade/trade.order.commit/${cartId}/r1/a1`,
+      binding_id: latest.binding_id,
+      binding_version: latest.binding_version,
+      native_configuration_digest: latest.native_configuration_digest,
+      currency: latest.currency,
+      context_id: latest.context_id,
+      tenant_id: latest.tenant_id,
+      operating_organisation_id: latest.operating_organisation_id,
+      market: latest.market,
+      mandate_id: randomUUID(),
+      responsible_legal_entity_id: "SYNTHETIC-LE-REGRESSION",
+      policy_reference: "ADR-SHARED-039/trade-order-authority:v1",
+      evaluated_at: new Date(received).toISOString(),
+      received_at: new Date(received).toISOString(),
+      lease_expires_at: new Date(received + 20_000).toISOString(),
+    }
+    const receipt = await receipts.record({ ...receiptBase, decision_id: randomUUID() })
+    await refused(
+      "a second live receipt for the same operation",
+      () => receipts.record({ ...receiptBase, decision_id: randomUUID() }),
+      "23505",
+    )
+    for (const [what, over] of [
+      ["another binding version", { binding_version: 9 }],
+      ["another digest", { native_configuration_digest: "1".repeat(64) }],
+      ["another context", { context_id: randomUUID() }],
+      ["another tenant", { tenant_id: "tn_othertenant" }],
+      ["a lease over 30 s", { lease_expires_at: new Date(received + 31_000).toISOString() }],
+      [
+        "an expired lease",
+        {
+          evaluated_at: new Date(received - 40_000).toISOString(),
+          received_at: new Date(received - 40_000).toISOString(),
+          lease_expires_at: new Date(received - 20_000).toISOString(),
+        },
+      ],
+      ["a reserved class", { operation_class: "trade.payment-refund.request" }],
+    ] as const) {
+      await refused(`receipt for ${what}`, () =>
+        receipts.record({
+          ...receiptBase,
+          ...(over as Record<string, unknown>),
+          operation_reference: `trade/trade.order.commit/${cartId}/r1/${randomUUID().slice(0, 6)}`,
+          decision_id: randomUUID(),
+        } as never),
+      )
+    }
+    await refused("rewriting a receipt", () =>
+      pool.query("UPDATE trade_order_authority_receipt SET mandate_id = $2 WHERE receipt_id = $1", [
+        receipt.receipt_id,
+        randomUUID(),
+      ]),
+    )
+    await pool.query(
+      "UPDATE trade_order_authority_receipt SET consumed_at = clock_timestamp() WHERE receipt_id = $1",
+      [receipt.receipt_id],
+    )
+    await refused("consuming a receipt twice", () =>
+      pool.query(
+        "UPDATE trade_order_authority_receipt SET consumed_at = clock_timestamp() WHERE receipt_id = $1",
+        [receipt.receipt_id],
+      ),
+    )
+    await refused("DELETE of a receipt", () =>
+      pool.query("DELETE FROM trade_order_authority_receipt WHERE receipt_id = $1", [
+        receipt.receipt_id,
+      ]),
+    )
+    await refused("TRUNCATE of receipts", () =>
+      pool.query("TRUNCATE trade_order_authority_receipt"),
+    )
+    // A consumed receipt is history: a fresh decision may now be recorded for a new attempt.
+    await receipts.record({ ...receiptBase, decision_id: randomUUID() })
+
     // A draft or direct order is attributed independently of any cart.
     await attributions.record({
       ...base,
