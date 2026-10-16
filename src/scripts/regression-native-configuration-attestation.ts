@@ -167,6 +167,12 @@ export default async function ({ container }: ExecArgs) {
         store.record({ ...recorded, attestation_id: randomUUID(), tenant_id: "tn_othertenant" }),
       "23514",
     )
+    await refused(
+      "currency scope the canonical document does not cover",
+      () =>
+        store.record({ ...recorded, attestation_id: randomUUID(), currency_scope: ["LSL", "ZAR"] }),
+      "23514",
+    )
     await refused("duplicate attestation", () => store.record(recorded), "23505")
     await refused("UPDATE", () =>
       pool.query(

@@ -35,6 +35,8 @@ export class Migration20261016090000 extends Migration {
       CHECK (canonical_configuration::jsonb->>'operating_organisation_id' = operating_organisation_id::text),
       CHECK (canonical_configuration::jsonb->>'market' = market),
       CHECK (canonical_configuration::jsonb->>'engine_instance_id' = engine_instance_id),
+      -- The canonical scope is sorted; the stored array must be exactly it.
+      CHECK (to_jsonb(currency_scope) = canonical_configuration::jsonb->'currency_scope'),
       CHECK (attested_at <= cp_recorded_at + interval '5 seconds'));
     CREATE INDEX trade_native_configuration_attestation_reference
       ON trade_native_configuration_attestation (native_configuration_reference, recorded_at DESC);`)

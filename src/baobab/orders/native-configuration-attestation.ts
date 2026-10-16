@@ -127,7 +127,8 @@ export class PostgresNativeConfigurationAttestationStore implements NativeConfig
           a.operating_organisation_id,
           a.market,
           a.engine_instance_id,
-          a.currency_scope,
+          // Canonical (sorted) order: the database binds it to the digested document.
+          [...a.currency_scope].sort(),
           a.context_id,
           a.attested_at,
           a.recorded_at,
