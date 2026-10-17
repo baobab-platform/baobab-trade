@@ -66,7 +66,18 @@ export class Migration20261016140000 extends Migration {
             AND a.native_configuration_digest = NEW.native_configuration_digest
             AND a.currency = NEW.currency AND a.context_id = NEW.context_id
             AND a.tenant_id = NEW.tenant_id AND a.operating_organisation_id = NEW.operating_organisation_id
-            AND a.market = NEW.market;
+            AND a.market = NEW.market
+            -- The application is not the only writer of receipt evidence.
+            -- Bind each catalogued class to its native attribution kind here
+            -- too: matching scope/binding alone cannot turn a cart, order or
+            -- draft into a different commitment. Unknown classes match NULL
+            -- (and are independently rejected by the table CHECK).
+            AND a.subject_type = CASE NEW.operation_class
+              WHEN 'trade.order.commit' THEN 'cart'
+              WHEN 'trade.order.create' THEN 'order'
+              WHEN 'trade.draft-order.finalize' THEN 'draft_order'
+              ELSE NULL
+            END;
         IF NOT FOUND THEN
           RAISE EXCEPTION 'Trade-A denied: the decision does not match its attribution';
         END IF;

@@ -269,6 +269,36 @@ describe("TA-05 order-authority enforcement point", () => {
     ).rejects.toMatchObject({ outcome: "INVALID_OPERATION_REFERENCE" })
   })
 
+  it.each([
+    ["connection unavailable", { code: "ECONNREFUSED", message: "private connection URL" }],
+    ["conflicting receipt", { code: "23505", detail: "private operation reference" }],
+    ["guard refusal", { code: "P0001", message: "private attribution details" }],
+  ])("denies a %s without leaking or retrying persistence errors", async (_name, failure) => {
+    const record = vi.fn(async () => {
+      throw failure
+    })
+    const { d, requests } = deps({}, { receipts: { record } })
+    const error = await enforceOrderAuthority(
+      "trade.order.commit",
+      { type: "cart", id: "cart_01" },
+      native,
+      operation,
+      d,
+    ).catch((cause) => cause)
+    expect(error).toBeInstanceOf(OrderAuthorityDenied)
+    expect(error).toMatchObject({
+      outcome: "UNAVAILABLE",
+      problem: {
+        status: 503,
+        code: "TRADE_AUTHORITY_UNAVAILABLE",
+      },
+    })
+    expect(record).toHaveBeenCalledTimes(1)
+    expect(requests).toHaveLength(1)
+    expect(String(error) + JSON.stringify(error)).not.toContain("private")
+    expect(error).not.toHaveProperty("cause")
+  })
+
   it("maps outcomes to the ADR-SHARED-039 §6 statuses", () => {
     expect(tradeAuthorityProblem("UNAVAILABLE").status).toBe(503)
     expect(tradeAuthorityProblem("OPERATION_NOT_ACTIVATED")).toMatchObject({

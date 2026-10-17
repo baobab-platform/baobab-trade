@@ -271,3 +271,14 @@ Foundation gate validates the environment contract and reproducible inputs and
 scans source, dependencies, secrets, configuration, and the Trade image.
 
 P0-04B-03 adds a [native checkout consumption fence](docs/plans/P0-04B-03-checkout-commit-fence.md) for ever-activated seller bindings. Legal, documentary and independent merchant leases are rechecked immediately before cart-completion COMMIT; compensation voids earlier receipts. Native acceptance exercises the installed guard with synthetic external authority ports. Cross-engine execution and real provider/workload qualification remain open; production checkout stays denied.
+
+## Trade-A order-authority receipt boundary
+
+TA-05 provides the dormant central enforcement point and immutable receipt
+store for cart commitment, direct order creation and draft finalisation.
+The [implementation and review record](docs/plans/trade-a-ta05-order-authority-receipts.md)
+explains current authority/lease checks, safe persistence-error denial and the
+database's exact operation-class/native-record binding. Unit and engine-local
+PostgreSQL regression evidence are separate from L4, provider certification and
+protected activation. TA-06 entry-point wiring and TA-07 commit consumption
+remain required. This source increment does not depend on Infrastructure #35.

@@ -96,7 +96,7 @@ export function tradeAuthorityProblem(outcome: string): TradeAuthorityProblem {
     return {
       status: 503,
       code: "TRADE_AUTHORITY_UNAVAILABLE",
-      detail: "CP authority is temporarily unavailable",
+      detail: "order authority or its durable receipt is temporarily unavailable",
     }
   if (NOT_AUTHORISED.has(outcome))
     return {
@@ -188,26 +188,34 @@ export async function enforceOrderAuthority(
   // isCurrentOrderAuthority already required these; the guard keeps the types honest.
   if (!mandateId || !legalEntityId || !expiresAt) return deny("ACTOR_NOT_VERIFIED")
   const lease = Math.min(Date.parse(expiresAt), receivedAt + 30_000)
-  return deps.receipts.record({
-    attribution_id: attribution.attribution_id,
-    operation_class: operationClass,
-    operation_reference: operationReference,
-    decision_id: decision.decision_id,
-    binding_id: attribution.binding_id,
-    binding_version: attribution.binding_version,
-    native_configuration_digest: attribution.native_configuration_digest,
-    currency: attribution.currency,
-    context_id: attribution.context_id,
-    tenant_id: attribution.tenant_id,
-    operating_organisation_id: attribution.operating_organisation_id,
-    market: attribution.market,
-    mandate_id: mandateId,
-    responsible_legal_entity_id: legalEntityId,
-    policy_reference: decision.policy_reference,
-    evaluated_at: decision.evaluated_at,
-    received_at: new Date(receivedAt).toISOString(),
-    lease_expires_at: new Date(lease).toISOString(),
-  })
+  try {
+    // Authority is unusable until its durable receipt exists. Await inside
+    // this boundary: returning the promise would let an asynchronous insert
+    // rejection escape the RFC 9457 denial mapping. Do not expose SQL errors,
+    // credentials or constraint details, and do not retry an old CP decision.
+    return await deps.receipts.record({
+      attribution_id: attribution.attribution_id,
+      operation_class: operationClass,
+      operation_reference: operationReference,
+      decision_id: decision.decision_id,
+      binding_id: attribution.binding_id,
+      binding_version: attribution.binding_version,
+      native_configuration_digest: attribution.native_configuration_digest,
+      currency: attribution.currency,
+      context_id: attribution.context_id,
+      tenant_id: attribution.tenant_id,
+      operating_organisation_id: attribution.operating_organisation_id,
+      market: attribution.market,
+      mandate_id: mandateId,
+      responsible_legal_entity_id: legalEntityId,
+      policy_reference: decision.policy_reference,
+      evaluated_at: decision.evaluated_at,
+      received_at: new Date(receivedAt).toISOString(),
+      lease_expires_at: new Date(lease).toISOString(),
+    })
+  } catch {
+    return deny("UNAVAILABLE")
+  }
 }
 
 const COLUMNS = `receipt_id::text, attribution_id::text, operation_class, operation_reference, decision_id::text,
