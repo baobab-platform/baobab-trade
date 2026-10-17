@@ -25,6 +25,7 @@ import {
 } from "../baobab/orders/native-seller-configuration"
 import { medusaNativeSellerFacts } from "./attest-native-seller-configuration"
 import { PostgresCommitmentAttributionStore } from "../baobab/orders/commitment-attribution"
+import { PostgresOrderAuthorityReceiptStore } from "../baobab/orders/order-authority-enforcement"
 import {
   PostgresAttestedNativeConfigurationReader,
   resolveNativeConfiguration,
@@ -327,13 +328,198 @@ export default async function ({ container }: ExecArgs) {
     await refused("TRUNCATE of attribution", () =>
       pool.query("TRUNCATE trade_commitment_attribution"),
     )
-    // A draft or direct order is attributed independently of any cart.
-    await attributions.record({
-      ...base,
-      subject_type: "draft_order",
-      subject_id: `order_${cartId}`,
-      resolution_id: randomUUID(),
+    // Trade-A TA-05: an order-authority receipt matches its attribution, holds
+    // at most a 30 s lease, is never replayed and is consumed at most once.
+    const receipts = new PostgresOrderAuthorityReceiptStore({
+      connect: async () => {
+        const client = await pool.connect()
+        return {
+          query: (sql, values) => client.query(sql, values ? [...values] : []),
+          release: () => client.release(),
+        }
+      },
     })
+    const latest = await attributions.current({ type: "cart", id: cartId })
+    assert.ok(latest)
+    const received = Date.now()
+    const receiptBase = {
+      attribution_id: latest.attribution_id,
+      operation_class: "trade.order.commit" as const,
+      operation_reference: `trade/trade.order.commit/${cartId}/r1/a1`,
+      binding_id: latest.binding_id,
+      binding_version: latest.binding_version,
+      native_configuration_digest: latest.native_configuration_digest,
+      currency: latest.currency,
+      context_id: latest.context_id,
+      tenant_id: latest.tenant_id,
+      operating_organisation_id: latest.operating_organisation_id,
+      market: latest.market,
+      mandate_id: randomUUID(),
+      responsible_legal_entity_id: "SYNTHETIC-LE-REGRESSION",
+      policy_reference: "ADR-SHARED-039/trade-order-authority:v1",
+      evaluated_at: new Date(received).toISOString(),
+      received_at: new Date(received).toISOString(),
+      lease_expires_at: new Date(received + 20_000).toISOString(),
+    }
+    const receipt = await receipts.record({ ...receiptBase, decision_id: randomUUID() })
+    await refused(
+      "a second live receipt for the same operation",
+      () => receipts.record({ ...receiptBase, decision_id: randomUUID() }),
+      "23505",
+    )
+    for (const [what, over] of [
+      ["another binding version", { binding_version: 9 }],
+      ["another digest", { native_configuration_digest: "1".repeat(64) }],
+      ["another context", { context_id: randomUUID() }],
+      ["another tenant", { tenant_id: "tn_othertenant" }],
+      ["a lease over 30 s", { lease_expires_at: new Date(received + 31_000).toISOString() }],
+      [
+        "an expired lease",
+        {
+          evaluated_at: new Date(received - 40_000).toISOString(),
+          received_at: new Date(received - 40_000).toISOString(),
+          lease_expires_at: new Date(received - 20_000).toISOString(),
+        },
+      ],
+      ["a reserved class", { operation_class: "trade.payment-refund.request" }],
+    ] as const) {
+      await refused(`receipt for ${what}`, () =>
+        receipts.record({
+          ...receiptBase,
+          ...(over as Record<string, unknown>),
+          operation_reference: `trade/trade.order.commit/${cartId}/r1/${randomUUID().slice(0, 6)}`,
+          decision_id: randomUUID(),
+        } as never),
+      )
+    }
+    await refused("rewriting a receipt", () =>
+      pool.query("UPDATE trade_order_authority_receipt SET mandate_id = $2 WHERE receipt_id = $1", [
+        receipt.receipt_id,
+        randomUUID(),
+      ]),
+    )
+    await pool.query(
+      "UPDATE trade_order_authority_receipt SET consumed_at = clock_timestamp() WHERE receipt_id = $1",
+      [receipt.receipt_id],
+    )
+    await refused("consuming a receipt twice", () =>
+      pool.query(
+        "UPDATE trade_order_authority_receipt SET consumed_at = clock_timestamp() WHERE receipt_id = $1",
+        [receipt.receipt_id],
+      ),
+    )
+    await refused("DELETE of a receipt", () =>
+      pool.query("DELETE FROM trade_order_authority_receipt WHERE receipt_id = $1", [
+        receipt.receipt_id,
+      ]),
+    )
+    await refused("TRUNCATE of receipts", () =>
+      pool.query("TRUNCATE trade_order_authority_receipt"),
+    )
+    // A consumed receipt is history: a fresh decision may now be recorded for a new attempt.
+    await receipts.record({ ...receiptBase, decision_id: randomUUID() })
+
+    // Every class has exactly one native subject kind. Prove all six wrong
+    // pairings through both the exported store and raw SQL, not just the
+    // application PEP. Each attempted insert uses a fresh operation/decision
+    // and lease, so uniqueness or expiry cannot masquerade as type checking.
+    // These are synthetic attribution records, not committed native orders.
+    const subjects = [
+      { type: "cart", operationClass: "trade.order.commit", attribution: latest },
+      {
+        type: "order",
+        operationClass: "trade.order.create",
+        attribution: await attributions.record({
+          ...base,
+          binding_version: latest.binding_version,
+          subject_type: "order",
+          subject_id: `order_${cartId}`,
+          resolution_id: randomUUID(),
+        }),
+      },
+      {
+        type: "draft_order",
+        operationClass: "trade.draft-order.finalize",
+        attribution: await attributions.record({
+          ...base,
+          binding_version: latest.binding_version,
+          subject_type: "draft_order",
+          subject_id: `draft_${cartId}`,
+          resolution_id: randomUUID(),
+        }),
+      },
+    ] as const
+    const freshLease = () => {
+      const at = Date.now()
+      return {
+        evaluated_at: new Date(at).toISOString(),
+        received_at: new Date(at).toISOString(),
+        lease_expires_at: new Date(at + 20_000).toISOString(),
+      }
+    }
+    for (const subject of subjects) {
+      // The corresponding class remains usable, ruling out an always-denying
+      // guard or an unrelated scope mismatch as the reason negatives pass.
+      await receipts.record({
+        ...receiptBase,
+        ...freshLease(),
+        attribution_id: subject.attribution.attribution_id,
+        operation_class: subject.operationClass,
+        operation_reference: `regression/matched/${randomUUID()}`,
+        decision_id: randomUUID(),
+      })
+      for (const candidate of subjects) {
+        if (candidate.operationClass === subject.operationClass) continue
+        await refused(
+          `store ${candidate.operationClass} against ${subject.type}`,
+          () =>
+            receipts.record({
+              ...receiptBase,
+              ...freshLease(),
+              attribution_id: subject.attribution.attribution_id,
+              operation_class: candidate.operationClass,
+              operation_reference: `regression/wrong-store/${randomUUID()}`,
+              decision_id: randomUUID(),
+            }),
+          "P0001",
+        )
+        const decisionId = randomUUID()
+        await refused(
+          `SQL ${candidate.operationClass} against ${subject.type}`,
+          () =>
+            pool.query(
+              `
+          INSERT INTO trade_order_authority_receipt
+            (attribution_id, operation_class, operation_reference, decision_id, binding_id, binding_version,
+             native_configuration_digest, currency, context_id, tenant_id, operating_organisation_id, market,
+             mandate_id, responsible_legal_entity_id, policy_reference, evaluated_at, received_at, lease_expires_at)
+          SELECT $1::uuid, $2, $3, $4::uuid, binding_id, binding_version, native_configuration_digest,
+             currency, context_id, tenant_id, operating_organisation_id, market, mandate_id,
+             responsible_legal_entity_id, policy_reference, clock_timestamp(), clock_timestamp(),
+             clock_timestamp() + interval '20 seconds'
+          FROM trade_order_authority_receipt WHERE receipt_id = $5::uuid`,
+              [
+                subject.attribution.attribution_id,
+                candidate.operationClass,
+                `regression/wrong-sql/${randomUUID()}`,
+                decisionId,
+                receipt.receipt_id,
+              ],
+            ),
+          "P0001",
+        )
+        assert.equal(
+          (
+            await pool.query(
+              "SELECT count(*)::int AS total FROM trade_order_authority_receipt WHERE decision_id=$1::uuid",
+              [decisionId],
+            )
+          ).rows[0].total,
+          0,
+          "a rejected raw-SQL receipt must leave no evidence",
+        )
+      }
+    }
     console.info(
       "Trade-0 native-configuration attestation regression passed (synthetic CP, engine-local)",
     )
