@@ -324,6 +324,20 @@ describe("TA-08 certified classes in a protected runtime", () => {
     }
   })
 
+  it.each(certified)(
+    "refuses %s in un-enabled staging before any dependency (403, never 503)",
+    async (cls, subject) => {
+      const resolve = vi.fn(syntheticDependencies)
+      await expect(
+        governOrderEntry(cls, subject, native, "ref/1", resolve, STAGING),
+      ).rejects.toMatchObject({
+        outcome: "PROTECTED_RUNTIME",
+        problem: { status: 403, code: "TRADE_OPERATION_NOT_AUTHORISED" },
+      })
+      expect(resolve).not.toHaveBeenCalled()
+    },
+  )
+
   it("never consults the posture locally, where the database may be a sandbox", async () => {
     const verify = vi.fn(async () => ({ enforced: false, reason: "POSTURE_NOT_ENFORCED" }) as const)
     const deps = { ...syntheticDependencies(), posture: { verify } }

@@ -61,7 +61,10 @@ the source-mode regressions could not. Each is fixed here with a unit test.
 | 4   | In staging, the hook still required the LA-05 per-cart seller gate after Trade-A authorised the cart, so certified checkout could never complete.                                                | In a protected runtime the Trade-A receipt is the governed seller gate LA-05 requires. The per-cart binding path is historical evidence and never authority (ADR-SHARED-039 §§1, 3). An explicitly enabled LA-05 guard still runs in addition. |
 
 The harness also showed that the TA-05 PEP needs explicit enablement in every
-non-production runtime, staging included. That is intended and unchanged.
+non-production runtime, staging included. That is intended. The gate now checks
+it first, so an un-enabled protected runtime answers 403 `PROTECTED_RUNTIME`
+before any database or CP dependency, rather than a 503 for missing
+configuration.
 
 ## Acceptance (`acceptance/trade-a`)
 

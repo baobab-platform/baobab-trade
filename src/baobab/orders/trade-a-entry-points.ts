@@ -100,6 +100,9 @@ export async function governOrderEntry(
   if (runtime === "PRODUCTION") deny("PROTECTED_RUNTIME")
   if (runtime === "PROTECTED" && !PERSISTENCE_FENCED_CLASSES.has(operationClass))
     deny("PERSISTENCE_BOUNDARY_NOT_CERTIFIED")
+  // TA-05 requires explicit enablement outside the local sandbox. Refuse an
+  // un-enabled protected runtime here, before any database or CP dependency.
+  if (runtime === "PROTECTED" && env?.enabled !== "true") deny("PROTECTED_RUNTIME")
   if (runtime === "LOCAL_SANDBOX") return null
   let deps: OrderAuthorityEnforcementDependencies
   try {

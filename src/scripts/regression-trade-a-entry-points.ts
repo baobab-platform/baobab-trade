@@ -186,13 +186,15 @@ export default async function regressionTradeAEntryPoints({ container }: ExecArg
     const cartId = await payableCart()
     const baseline = await ordersByEmail()
 
-    // 1. Protected staging: the validate hook refuses trade.order.commit before
-    //    LA-05 or CP, because no persistence fence is certified (TA-07).
+    // 1. Protected staging. TA-08 certifies trade.order.commit, so the
+    //    validate hook needs explicit enablement before any dependency, and
+    //    then trusted CP/IAM configuration this regression does not provide:
+    //    certification is never activation. (TA-08's real-CP acceptance,
+    //    acceptance/trade-a, proves the authorised path.)
     await withProfile({ BAOBAB_ENVIRONMENT: "staging" }, async () => {
-      await denied(complete(cartId), "PERSISTENCE_BOUNDARY_NOT_CERTIFIED")
-      // Explicit enablement is never activation.
+      await denied(complete(cartId), "PROTECTED_RUNTIME")
       process.env[TRADE_A_ENFORCEMENT_ENV] = "true"
-      await denied(complete(cartId), "PERSISTENCE_BOUNDARY_NOT_CERTIFIED")
+      await denied(complete(cartId), "UNAVAILABLE")
     })
     // 2. Production stays denied, enabled or not.
     await withProfile(
