@@ -4,12 +4,19 @@
 # heuristic, not credential material. Never add an entry without first
 # confirming the flagged value is not a secret.
 
+#
+# Fingerprints are <commit>:<path>:<rule>:<line>, and the scan walks main's
+# history. Use the commit that is on main: a squash merge rewrites PR-branch
+# commits, so a fingerprint taken from a PR run never matches after merge.
+
 # Test-only Idempotency-Key header values ("buyer-invite-key-0001",
-# "application-key-0001", ...) in route tests.
-01916cbdb2d90139195b60c89cbf60513a0c756d:tests/buyer-invitation-route.test.ts:generic-api-key:77
-01916cbdb2d90139195b60c89cbf60513a0c756d:tests/buyer-invitation-route.test.ts:generic-api-key:134
-c77ab458d835f988a31bbe9f9aa707f8679965d6:tests/buyer-application-route.test.ts:generic-api-key:37
-c77ab458d835f988a31bbe9f9aa707f8679965d6:tests/buyer-application-route.test.ts:generic-api-key:93
+# "application-key-0001", ...) introduced by ZB-04 (#98, squash 170c54e).
+# HEAD builds them from syntheticInvitationReplayId/syntheticApplicationReplayId
+# instead; these entries cover the immutable history only.
+170c54e375277a052b3b4387963727a8618e3c9b:tests/buyer-invitation-route.test.ts:generic-api-key:120
+170c54e375277a052b3b4387963727a8618e3c9b:tests/buyer-invitation-route.test.ts:generic-api-key:180
+170c54e375277a052b3b4387963727a8618e3c9b:tests/buyer-application-route.test.ts:generic-api-key:37
+170c54e375277a052b3b4387963727a8618e3c9b:tests/buyer-application-route.test.ts:generic-api-key:93
 
 # Medusa resource keys (stock location "thamani_ug_kla_01", price list
 # "zuribeans_b2b_volume_v1") - identifiers, not credentials.
