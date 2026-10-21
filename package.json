@@ -88,7 +88,8 @@
     "postbuild": "node scripts/verify-authority-build.mjs",
     "regression:governed-binding-lifecycle": "medusa exec ./src/scripts/regression-governed-binding-lifecycle.ts",
     "regression:checkout-commit-fence": "medusa exec ./src/scripts/regression-checkout-commit-fence.ts",
-    "regression:native-configuration-attestation": "medusa exec ./src/scripts/regression-native-configuration-attestation.ts"
+    "regression:native-configuration-attestation": "medusa exec ./src/scripts/regression-native-configuration-attestation.ts",
+    "regression:trade-a-entry-points": "medusa exec ./src/scripts/regression-trade-a-entry-points.ts"
   },
   "dependencies": {
     "@medusajs/auth-oidc": "2.21.2",

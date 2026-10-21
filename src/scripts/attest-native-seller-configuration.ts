@@ -9,12 +9,7 @@
  * digested here. The result is an attestation id a human maker cites when
  * proposing a binding in CP. It authorises nothing, and production is refused.
  */
-import type {
-  ExecArgs,
-  IRegionModuleService,
-  ISalesChannelModuleService,
-} from "@medusajs/framework/types"
-import { Modules } from "@medusajs/framework/utils"
+import type { ExecArgs } from "@medusajs/framework/types"
 import { Pool } from "pg"
 import { getBaobabTradeEnvironment } from "../baobab/config/environment"
 import { HttpControlPlaneClient } from "../baobab/control-plane/client"
@@ -24,10 +19,8 @@ import {
   attestNativeSellerConfiguration,
   PostgresNativeConfigurationAttestationStore,
 } from "../baobab/orders/native-configuration-attestation"
-import type {
-  NativeSellerConfigurationScope,
-  NativeSellerFactsReader,
-} from "../baobab/orders/native-seller-configuration"
+import { medusaNativeSellerFacts } from "../baobab/orders/medusa-native-seller-facts"
+import type { NativeSellerConfigurationScope } from "../baobab/orders/native-seller-configuration"
 
 const required = (name: string): string => {
   const value = process.env[name]?.trim()
@@ -40,26 +33,8 @@ const list = (name: string): string[] =>
     .map((v) => v.trim())
     .filter(Boolean)
 
-export function medusaNativeSellerFacts(container: ExecArgs["container"]): NativeSellerFactsReader {
-  const channels = container.resolve<ISalesChannelModuleService>(Modules.SALES_CHANNEL)
-  const regions = container.resolve<IRegionModuleService>(Modules.REGION)
-  return {
-    async read(salesChannelIds, regionIds) {
-      const [salesChannels, regionRows] = await Promise.all([
-        channels.listSalesChannels({ id: [...salesChannelIds] }),
-        regions.listRegions({ id: [...regionIds] }, { relations: ["countries"] }),
-      ])
-      return {
-        salesChannels: salesChannels.map((c) => ({ id: c.id, is_disabled: c.is_disabled })),
-        regions: regionRows.map((r) => ({
-          id: r.id,
-          currency_code: r.currency_code,
-          countries: (r.countries ?? []).map((c) => c.iso_2),
-        })),
-      }
-    },
-  }
-}
+// Re-exported for the regression; the runtime PEP uses the same reader.
+export { medusaNativeSellerFacts }
 
 export default async function attestNativeSellerConfigurationCommand({
   container,

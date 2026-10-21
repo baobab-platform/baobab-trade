@@ -288,6 +288,11 @@ jobs:
           BAOBAB_BINDING_LIFECYCLE_TEST_DB: baobab_trade_test
         run: npm run regression:checkout-commit-fence
 
+      - name: Regression — Trade-A TA-06 entry-point closure on real completeCartWorkflow and createOrderWorkflow (disposable PostgreSQL 17 only)
+        env:
+          BAOBAB_BINDING_LIFECYCLE_TEST_DB: baobab_trade_test
+        run: npm run regression:trade-a-entry-points
+
       - name: Verify Gate 20 reconciliation sweep
         run: npm run verify:observability
 

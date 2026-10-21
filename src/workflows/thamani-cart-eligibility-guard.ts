@@ -48,6 +48,12 @@ import {
   type NativeCartLegalSellerDependencies,
   type NativeCheckoutCart,
 } from "../baobab/orders/native-cart-legal-seller"
+import {
+  governOrderEntry,
+  tradeAEnvironment,
+  tradeAOperationReference,
+} from "../baobab/orders/trade-a-entry-points"
+import { tradeOrderAuthorityDependencies } from "../baobab/orders/trade-a-runtime"
 import { THAMANI_LAUNCH_MARKETS } from "../baobab/market/thamani-market-config"
 import { ThamaniProductNotEligibleForMarketError } from "../baobab/thamani/pricing/decision-port"
 import { THAMANI_SALES_CHANNEL_KEY } from "../baobab/thamani/promotions/promotion-config"
@@ -131,11 +137,28 @@ addToCartWorkflow.hooks.validate(async ({ input, cart }, { container }) =>
 // Medusa supports only one validate hook per workflow. All native pre-commit
 // policies share this handler, preserving Thamani product enforcement and
 // the separately gated LA-05 seller assessment for opted-in staging.
+// The store route, the payment webhook (processPaymentWorkflow) and any
+// direct run all reach this hook before the order is created.
 completeCartWorkflow.hooks.validate(async ({ cart }, { container }) => {
   await assertItemsEligible(
     cart as GuardedCart,
     (cart as { items?: GuardedItem[] }).items,
     container,
+  )
+  // ADR-SHARED-039 Trade-A TA-06: trade.order.commit, from server-read cart state only.
+  const committed = cart as NativeCheckoutCart & { currency_code?: string | null }
+  const subject = { type: "cart" as const, id: String(committed.id ?? "") }
+  await governOrderEntry(
+    "trade.order.commit",
+    subject,
+    {
+      salesChannelId: String(committed.sales_channel_id ?? ""),
+      regionId: String(committed.region_id ?? ""),
+      currency: String(committed.currency_code ?? ""),
+    },
+    tradeAOperationReference(subject, "complete"),
+    () => tradeOrderAuthorityDependencies(container),
+    tradeAEnvironment(),
   )
   const runtime = resolveNativeCheckoutEnvironment({
     node: process.env.NODE_ENV,
