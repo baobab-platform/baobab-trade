@@ -89,6 +89,10 @@ const NOT_AUTHORISED = new Set([
   "OPERATION_NOT_ACTIVATED",
   "PROTECTED_RUNTIME",
   "UNCATALOGUED_OPERATION",
+  // TA-06: a class whose persistence fence is not certified, or an entry
+  // point with no governed pre-commit point, stays denied in protected runtimes.
+  "PERSISTENCE_BOUNDARY_NOT_CERTIFIED",
+  "NO_GOVERNED_COMMIT_POINT",
 ])
 
 export function tradeAuthorityProblem(outcome: string): TradeAuthorityProblem {

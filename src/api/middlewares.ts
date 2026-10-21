@@ -1,9 +1,18 @@
 // Gate ZB-03.3 / ZB-04: authenticated B2B store and admin routes.
 // Delivery sites and tax verification follow ADR-0017 and zuribeans-tax.
+// ADR-SHARED-039 Trade-A TA-06: native order and money routes are
+// classified, and denied by name in protected runtimes, before any handler.
 import { authenticate, defineMiddlewares } from "@medusajs/framework/http"
+import { PROTECTED_ORDER_PREFIXES } from "../baobab/orders/trade-a-entry-points"
+import { tradeOrderRouteGuard } from "../baobab/orders/trade-order-route-guard"
 
 export default defineMiddlewares({
   routes: [
+    // No `methods`: every verb reaches the guard, which classifies reads and mutations.
+    ...PROTECTED_ORDER_PREFIXES.map((prefix) => ({
+      matcher: `${prefix}*`,
+      middlewares: [tradeOrderRouteGuard],
+    })),
     {
       matcher: "/store/b2b/context",
       methods: ["GET"],

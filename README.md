@@ -282,3 +282,15 @@ database's exact operation-class/native-record binding. Unit and engine-local
 PostgreSQL regression evidence are separate from L4, provider certification and
 protected activation. TA-06 entry-point wiring and TA-07 commit consumption
 remain required. This source increment does not depend on Infrastructure #35.
+
+## Trade-A entry-point closure
+
+TA-06 wires the order-authority enforcement point into every native Medusa
+order-creation path: cart completion (store, payment webhook, direct workflow),
+admin and direct order creation, and draft finalisation. In protected runtimes
+it denies order edits, claims, exchanges, returns, transfers, fulfilment and
+payment routes by name, as RFC 9457 `no-store` problems. Nothing is
+executable in a protected runtime until TA-07 certifies the persistence
+fences. The [entry-point map and evidence](docs/plans/trade-a-ta06-entry-point-closure.md)
+records each path and where it is enforced. The evidence is engine-local and
+synthetic, not EA Gate D or L4.
