@@ -12,3 +12,7 @@ release-manifest.json
 
 # Local Redis runtime state is not source.
 dump.rdb
+
+# Medusa local file provider output (uploads, order/product exports). Private
+# exports carry customer contact and shipping data and are never source.
+/static/
