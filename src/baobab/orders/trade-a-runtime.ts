@@ -80,10 +80,20 @@ function sharedDependencies(): Shared {
   return shared
 }
 
+/**
+ * Container key for explicitly synthetic dependencies (engine-local
+ * regressions only). Registration never relaxes the gate: governOrderEntry
+ * still applies the runtime profile, and production is denied before any
+ * dependency is resolved.
+ */
+export const TRADE_A_DEPENDENCY_KEY = "baobab_trade_a_order_authority_dependencies"
+
 /** The PEP's dependencies for one request's container. */
 export function tradeOrderAuthorityDependencies(
   container: MedusaContainer,
 ): OrderAuthorityEnforcementDependencies {
+  if (container.hasRegistration?.(TRADE_A_DEPENDENCY_KEY))
+    return container.resolve<OrderAuthorityEnforcementDependencies>(TRADE_A_DEPENDENCY_KEY)
   return {
     ...sharedDependencies(),
     facts: medusaNativeSellerFacts(container),

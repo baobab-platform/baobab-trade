@@ -41,10 +41,13 @@ import {
 export const TRADE_A_ENFORCEMENT_ENV = "BAOBAB_TRADE_A_ORDER_AUTHORITY_ENABLED"
 
 /**
- * Classes whose PostgreSQL commit fence consumes a Trade-A receipt (TA-07).
- * Empty in TA-06: without a persistence boundary, an AUTHORIZED decision is
- * not enough to commit an order in a protected runtime. Adding a class here
- * requires its migration and regression evidence in the same change.
+ * Classes certified to commit in a protected runtime. Empty until TA-08.
+ *
+ * TA-07 (Migration20261021090000) installs the PostgreSQL commit fences for
+ * trade.order.commit and trade.draft-order.finalize. Certification is a
+ * separate step: it needs the TA-08 real-runtime acceptance and a check that
+ * the database posture is ENFORCED, both in the same change that adds a
+ * class here. trade.order.create has no governed commit point and stays out.
  */
 export const PERSISTENCE_FENCED_CLASSES: ReadonlySet<TradeAOperationClass> = new Set()
 

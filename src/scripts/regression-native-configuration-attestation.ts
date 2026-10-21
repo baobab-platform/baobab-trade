@@ -398,11 +398,9 @@ export default async function ({ container }: ExecArgs) {
         randomUUID(),
       ]),
     )
-    await pool.query(
-      "UPDATE trade_order_authority_receipt SET consumed_at = clock_timestamp() WHERE receipt_id = $1",
-      [receipt.receipt_id],
-    )
-    await refused("consuming a receipt twice", () =>
+    // TA-07: only the native commit fence consumes a receipt; a direct UPDATE
+    // cannot (single consumption at the fence is proven by regression:trade-a-commit-fences).
+    await refused("consuming a receipt outside the commit fence", () =>
       pool.query(
         "UPDATE trade_order_authority_receipt SET consumed_at = clock_timestamp() WHERE receipt_id = $1",
         [receipt.receipt_id],
@@ -416,8 +414,6 @@ export default async function ({ container }: ExecArgs) {
     await refused("TRUNCATE of receipts", () =>
       pool.query("TRUNCATE trade_order_authority_receipt"),
     )
-    // A consumed receipt is history: a fresh decision may now be recorded for a new attempt.
-    await receipts.record({ ...receiptBase, decision_id: randomUUID() })
 
     // Every class has exactly one native subject kind. Prove all six wrong
     // pairings through both the exported store and raw SQL, not just the

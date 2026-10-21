@@ -490,7 +490,8 @@ describe("TA-06 HTTP boundary (real Express routing, as Medusa mounts it)", () =
 describe("TA-06 service boundary inventory", () => {
   it("has no in-repo caller that creates or finalises an order around the guarded hooks", () => {
     // completeCartWorkflow and createOrderWorkflow runs reach their guarded
-    // hooks; these entry points have none and would bypass TA-06 until TA-07.
+    // hooks; these entry points have none. TA-07 fences them at persistence,
+    // and only disposable-database regression scripts may drive them directly.
     const bypass =
       /\b(?:convertDraftOrderWorkflow|convertDraftOrderStep|createOrdersStep)\b|\.createOrders\(|is_draft_order:\s*false/g
     const root = join(__dirname, "..", "src")
@@ -499,7 +500,7 @@ describe("TA-06 service boundary inventory", () => {
       for (const name of readdirSync(dir)) {
         const full = join(dir, name)
         if (statSync(full).isDirectory()) walk(full)
-        else if (/\.ts$/.test(name)) {
+        else if (/\.ts$/.test(name) && !/^scripts\/regression-/.test(relative(root, full))) {
           const code = readFileSync(full, "utf8")
             .replace(/\/\*[\s\S]*?\*\//g, "")
             .replace(/(^|[^:])\/\/.*$/gm, "$1")
