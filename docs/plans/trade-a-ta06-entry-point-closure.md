@@ -1,7 +1,13 @@
 # Trade-A TA-06: Medusa entry-point closure
 
-Date: 21 October 2026. Programme: EA v2.2 EA-R03.
-Governing decision: Accepted Shared ADR-SHARED-039 §§1, 2 and 6.
+Date: 21 October 2026. Programme: EA v2.3 EA-R03 (§10.1, Track P0-B.3),
+which supersedes v2.2 for sequencing and evidence status only.
+Governing decisions: Accepted Shared ADR-SHARED-039 §§1, 2 and 6, and
+ADR-SHARED-041 (engineering principle).
+Evidence classification (EA v2.3 §3.3): `LOCAL_TESTED`. The CI regression
+runs real Medusa and PostgreSQL with synthetic data and no CP, so it is not
+`REAL_COMPONENT_SYNTHETIC_DATA` in the EA-INT sense. It is not L4, not EA
+Gate D and not protected staging.
 
 ## Scope and dependency
 
@@ -19,6 +25,31 @@ Production stays denied whatever is certified. The local sandbox
 (`development`, `test`, `integration`) is unchanged unless
 `BAOBAB_TRADE_A_ORDER_AUTHORITY_ENABLED=true`. When it is set, the full PEP
 runs and fails closed (503) without a trusted CP/IAM configuration.
+
+## Engineering choices (ADR-SHARED-041)
+
+- **Adopt** Medusa's own extension points: the `completeCartWorkflow`
+  `validate` hook, the `createOrderWorkflow` `setPricingContext` hook and
+  project middlewares. They run inside the native saga and router, so
+  nothing reimplements or forks core flows.
+- **Adapt** the existing LA-05 runtime-profile rule
+  (`resolveNativeCheckoutEnvironment`) and the Shared problem-details shape,
+  rather than adding a second profile or error model.
+- **Re-engineer** where Medusa is insufficient. Its admin RBAC is not seller
+  authority (ADR-SHARED-039 §6), and two order paths have no governed
+  pre-commit hook. Those paths are denied at HTTP, and TA-07 closes them at
+  persistence.
+- **Rejected alternatives:**
+  - _Monkeypatching the Order module service._ It is fragile across Medusa
+    upgrades, and the database fence (TA-07) closes direct service calls
+    regardless.
+  - _Overriding core route files._ It is undocumented precedence and would
+    duplicate native handlers.
+  - _A flag-gated allow path._ Activation is never a flag.
+
+EA v2.3 notes that an HTTP 403 alone is not sufficient evidence. TA-06
+therefore also proves denial at the workflow layer by running the real
+workflows directly. Commit-level negatives belong to TA-07.
 
 ## Entry-point map (Medusa 2.21.2)
 
