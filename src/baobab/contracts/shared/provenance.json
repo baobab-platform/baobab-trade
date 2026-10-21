@@ -1,6 +1,6 @@
 {
   "repository": "baobab-platform/shared",
-  "commit": "2f5a330fd09f1e62608ae7728897e35c053bf738",
+  "commit": "c69eecf193cf245c6e5910c504edfc0affe0a814",
   "roots": [
     "contracts/commerce/v1/seller-binding.schema.json",
     "contracts/payments/v1/merchant-readiness.schema.json",
