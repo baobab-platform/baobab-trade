@@ -5,7 +5,12 @@
  * denial answers RFC 9457 with no-store and never falls through to Medusa.
  * Administrator privileges cannot bypass it.
  */
-import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type {
+  MedusaErrorHandlerFunction,
+  MedusaNextFunction,
+  MedusaRequest,
+  MedusaResponse,
+} from "@medusajs/framework/http"
 import type { IOrderModuleService, MedusaContainer } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
 import { OrderAuthorityDenied, tradeAuthorityProblem } from "./order-authority-enforcement"
@@ -14,6 +19,7 @@ import {
   governOrderEntry,
   PERSISTENCE_FENCED_CLASSES,
   tradeAEnvironment,
+  tradeADenialOf,
   tradeAOperationReference,
   tradeARuntime,
   tradeProblemDocument,
@@ -113,3 +119,24 @@ export function createTradeOrderRouteGuard(
 }
 
 export const tradeOrderRouteGuard = createTradeOrderRouteGuard()
+
+/**
+ * TA-08: certified classes are enforced inside native handlers (the
+ * completeCartWorkflow hook and the persistence fences), whose failures reach
+ * Medusa's error handler rather than this guard. Without this, a Trade-A
+ * denial at checkout would answer Medusa's generic 500. A recognised denial
+ * answers the same RFC 9457 document as the guard; every other error is left
+ * to Medusa's own handler unchanged.
+ */
+export function createTradeAErrorHandler(fallback: MedusaErrorHandlerFunction) {
+  return function tradeAErrorHandler(
+    error: unknown,
+    req: MedusaRequest,
+    res: MedusaResponse,
+    next: MedusaNextFunction,
+  ) {
+    const denial = tradeADenialOf(error)
+    if (!denial || res.headersSent) return fallback(error, req, res, next)
+    respond(req, res, denial)
+  }
+}

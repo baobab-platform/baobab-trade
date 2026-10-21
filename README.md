@@ -304,4 +304,20 @@ lines must equal that cart's. A draft becomes an order only by consuming its
 own finalisation receipt, and a cart completes only with a committed order.
 Protected databases record an `ENFORCED` posture, in which an unattributed
 cart cannot complete. The [fence design, residual risk and evidence](docs/plans/trade-a-ta07-commit-fences.md)
-are recorded with the migration. No class is certified until TA-08.
+are recorded with the migration.
+
+## Trade-A real-runtime acceptance
+
+TA-08 certifies `trade.order.commit` and `trade.draft-order.finalize` for
+protected, non-production runtimes. Before either is honoured, Trade checks
+that its database records the `ENFORCED` posture, that every TA-07 fence
+trigger is enabled and that its runtime role is not a superuser. Each
+operation still needs a current CP decision under an ACTIVE CP binding and
+mandate. Direct order creation stays denied, and so does production.
+
+`acceptance/trade-a/run-trade-a.sh` runs the shipped image under its staging
+profile against the real CP binary, signed workload and human tokens and
+PostgreSQL 17, over TLS. CI runs it as `trade-a-real-cp`. The
+[scenarios, defects found, residual risk and staging contract](docs/plans/trade-a-ta08-real-runtime-acceptance.md)
+are recorded with it. This is real-component evidence on synthetic data, not
+EA Gate D, L4 or protected staging.

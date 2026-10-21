@@ -359,3 +359,78 @@ jobs:
         run: npm run migrate:search
       - name: Verify production infrastructure modules
         run: npm run verify:infrastructure
+
+  trade-a-real-cp:
+    name: Trade-A TA-08 real-runtime acceptance — shipped image, real CP, signed tokens (not EA Gate D, not L4)
+    # EA v2.3 EA-R03 / ADR-SHARED-039 §§4, 6: the shipped Trade image in its
+    # protected staging profile against the REAL CP release binary at a pinned
+    # merged commit, RS256 workload and human tokens from a test issuer,
+    # PostgreSQL 17 for both, TLS on every hop Trade makes. Asserts persisted
+    # state in both databases and writes the evidence receipt.
+    # REAL_COMPONENT_SYNTHETIC_DATA (EA v2.3 §3.3): never EA Gate D, never L4,
+    # never protected staging. Never skipped: fails unless "Trade-A failures: 0".
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    env:
+      # baobab-cp main with the Trade-0 resolver, discovery and binding registry.
+      CP_COMMIT: 3810b8222fa6df09b829e7c725d534af10b1155c
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out CP at the pinned merged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: baobab-platform/baobab-cp
+          ref: ${{ env.CP_COMMIT }}
+          path: .trade-a/cp
+          persist-credentials: false
+      - name: Set up Go from CP's go.mod
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .trade-a/cp/go.mod
+          cache: false
+      - name: Set up Node (harness driver)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: TA-08 scenarios
+        env:
+          BAOBAB_ENVIRONMENT: integration
+          CP_SRC: ${{ github.workspace }}/.trade-a/cp
+          EVIDENCE_LOCATION: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} (artifact trade-a-real-cp-evidence)
+        run: acceptance/trade-a/run-trade-a.sh "$RUNNER_TEMP/trade-a"
+      - name: TA-08 report
+        if: always()
+        run: |
+          cat "$RUNNER_TEMP/trade-a/trade-a-report.txt" || true
+          grep -qx 'Trade-A failures: 0' "$RUNNER_TEMP/trade-a/trade-a-report.txt"
+      - name: TA-08 evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trade-a-real-cp-evidence
+          path: ${{ runner.temp }}/trade-a
+          retention-days: 30
+
+  result:
+    name: CI / Result
+    # The single required CI check for this repository (with foundation /
+    # Foundation / Result): every CI job above must succeed. A skipped or
+    # cancelled job is a failure here, never a pass.
+    if: always()
+    needs:
+      [
+        verify,
+        shared-conformance,
+        core-module-integration,
+        production-infrastructure-integration,
+        trade-a-real-cp,
+      ]
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Require every CI job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -e 'to_entries | all(.value.result == "success")' >/dev/null \
+            || { echo "$RESULTS" | jq -r 'to_entries[] | "\(.key)=\(.value.result)"'; exit 1; }

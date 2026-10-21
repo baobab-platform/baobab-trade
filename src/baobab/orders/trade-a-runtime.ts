@@ -21,6 +21,7 @@ import {
   PostgresOrderAuthorityReceiptStore,
   type OrderAuthorityEnforcementDependencies,
 } from "./order-authority-enforcement"
+import { PostgresPersistencePostureReader } from "./persistence-posture"
 import type { PgPool } from "./postgres-governed-binding-persistence"
 
 const required = (name: string): string => {
@@ -76,6 +77,7 @@ function sharedDependencies(): Shared {
     authority: new HttpTradeOrderAuthorityClient(baseUrl),
     store: new PostgresCommitmentAttributionStore(pg),
     receipts: new PostgresOrderAuthorityReceiptStore(pg),
+    posture: new PostgresPersistencePostureReader(pg),
   }
   return shared
 }

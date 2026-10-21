@@ -15,10 +15,19 @@ import {
   governOrderEntry,
   PERSISTENCE_FENCED_CLASSES,
   PROTECTED_ORDER_PREFIXES,
+  tradeADenialOf,
   tradeARuntime,
   tradeProblemDocument,
 } from "../src/baobab/orders/trade-a-entry-points"
-import { createTradeOrderRouteGuard } from "../src/baobab/orders/trade-order-route-guard"
+import {
+  judgePosture,
+  TRADE_A_FENCE_TRIGGERS,
+  type PersistencePostureReader,
+} from "../src/baobab/orders/persistence-posture"
+import {
+  createTradeAErrorHandler,
+  createTradeOrderRouteGuard,
+} from "../src/baobab/orders/trade-order-route-guard"
 
 const org = "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6c"
 const scope = {
@@ -122,6 +131,8 @@ const syntheticDependencies = (): OrderAuthorityEnforcementDependencies & {
 
 // Any declared "production" is production (LA-05C8); staging declares staging only.
 const STAGING = { baobab: "staging", deployment: "staging" }
+// TA-05: the PEP also needs explicit enablement outside the local sandbox.
+const STAGING_ENABLED = { ...STAGING, enabled: "true" }
 const PRODUCTION = { node: "production" }
 const SANDBOX = { node: "test" }
 const ENFORCED = { node: "test", enabled: "true" }
@@ -139,25 +150,35 @@ describe("TA-06 runtime classification", () => {
     expect(tradeARuntime(env)).toBe(runtime)
   })
 
-  it("certifies no persistence boundary in TA-06", () => {
-    expect(PERSISTENCE_FENCED_CLASSES.size).toBe(0)
+  it("TA-08 certifies exactly the two fenced classes, never direct order creation", () => {
+    expect([...PERSISTENCE_FENCED_CLASSES].sort()).toEqual([
+      "trade.draft-order.finalize",
+      "trade.order.commit",
+    ])
   })
 })
 
 describe("TA-06 governOrderEntry", () => {
+  const ALL = [
+    ["trade.order.commit", "cart"],
+    ["trade.order.create", "order"],
+    ["trade.draft-order.finalize", "draft_order"],
+  ] as const
   it.each([
-    ["production", PRODUCTION, "PROTECTED_RUNTIME"],
-    ["enabled production", { ...PRODUCTION, enabled: "true" }, "PROTECTED_RUNTIME"],
-    ["staging", STAGING, "PERSISTENCE_BOUNDARY_NOT_CERTIFIED"],
-    ["enabled staging", { ...STAGING, enabled: "true" }, "PERSISTENCE_BOUNDARY_NOT_CERTIFIED"],
+    ["production", PRODUCTION, "PROTECTED_RUNTIME", ALL],
+    ["enabled production", { ...PRODUCTION, enabled: "true" }, "PROTECTED_RUNTIME", ALL],
+    // TA-08 certifies commit and draft finalisation; direct creation stays uncertified.
+    ["staging", STAGING, "PERSISTENCE_BOUNDARY_NOT_CERTIFIED", [ALL[1]]],
+    [
+      "enabled staging",
+      { ...STAGING, enabled: "true" },
+      "PERSISTENCE_BOUNDARY_NOT_CERTIFIED",
+      [ALL[1]],
+    ],
   ] as const)(
-    "denies every Trade-A class in %s before any dependency",
-    async (_n, env, outcome) => {
-      for (const [cls, type] of [
-        ["trade.order.commit", "cart"],
-        ["trade.order.create", "order"],
-        ["trade.draft-order.finalize", "draft_order"],
-      ] as const) {
+    "denies the uncertified Trade-A classes in %s before any dependency",
+    async (_n, env, outcome, classes) => {
+      for (const [cls, type] of classes) {
         const resolve = vi.fn(syntheticDependencies)
         const error = await governOrderEntry(
           cls,
@@ -230,6 +251,146 @@ describe("TA-06 governOrderEntry", () => {
       ),
     ).rejects.toMatchObject({ outcome: "UNCATALOGUED_OPERATION" })
     expect(deps.recorded).toHaveLength(0)
+  })
+})
+
+describe("TA-08 certified classes in a protected runtime", () => {
+  const enforced = { verify: async () => ({ enforced: true }) as const }
+  const certified = [
+    ["trade.order.commit", { type: "cart" as const, id: "cart_01" }],
+    ["trade.draft-order.finalize", { type: "draft_order" as const, id: "draft_01" }],
+  ] as const
+
+  it.each(certified)(
+    "runs the full PEP for %s once the database is fenced",
+    async (cls, subject) => {
+      const deps = { ...syntheticDependencies(), posture: enforced }
+      const receipt = await governOrderEntry(
+        cls,
+        subject,
+        native,
+        "ref/1",
+        () => deps,
+        STAGING_ENABLED,
+      )
+      expect(receipt).toMatchObject({ operation_class: cls, operation_reference: "ref/1" })
+      expect(deps.recorded).toHaveLength(1)
+    },
+  )
+
+  it.each(["POSTURE_NOT_ENFORCED", "FENCE_NOT_ACTIVE", "SUPERUSER_RUNTIME_ROLE"] as const)(
+    "refuses before any CP call when the database reports %s",
+    async (reason) => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {})
+      for (const [cls, subject] of certified) {
+        const deps = syntheticDependencies()
+        const resolveOrderAuthority = vi.spyOn(deps.authority, "resolveOrderAuthority")
+        const posture = { verify: async () => ({ enforced: false, reason }) as const }
+        await expect(
+          governOrderEntry(
+            cls,
+            subject,
+            native,
+            "ref/1",
+            () => ({ ...deps, posture }),
+            STAGING_ENABLED,
+          ),
+        ).rejects.toMatchObject({
+          outcome: "PERSISTENCE_POSTURE_NOT_ENFORCED",
+          problem: { status: 403, code: "TRADE_OPERATION_NOT_AUTHORISED" },
+        })
+        expect(resolveOrderAuthority).not.toHaveBeenCalled()
+        expect(deps.recorded).toHaveLength(0)
+      }
+      expect(error).toHaveBeenCalledWith(`Trade-A persistence posture refused: ${reason}`)
+      error.mockRestore()
+    },
+  )
+
+  it("answers 503 when the posture cannot be read or no reader is wired", async () => {
+    for (const posture of [
+      undefined,
+      {
+        verify: async () => {
+          throw new Error("connection refused")
+        },
+      },
+    ]) {
+      const deps = { ...syntheticDependencies(), posture }
+      await expect(
+        governOrderEntry("trade.order.commit", cart, native, "ref/1", () => deps, STAGING_ENABLED),
+      ).rejects.toMatchObject({ outcome: "UNAVAILABLE", problem: { status: 503 } })
+      expect(deps.recorded).toHaveLength(0)
+    }
+  })
+
+  it.each(certified)(
+    "refuses %s in un-enabled staging before any dependency (403, never 503)",
+    async (cls, subject) => {
+      const resolve = vi.fn(syntheticDependencies)
+      await expect(
+        governOrderEntry(cls, subject, native, "ref/1", resolve, STAGING),
+      ).rejects.toMatchObject({
+        outcome: "PROTECTED_RUNTIME",
+        problem: { status: 403, code: "TRADE_OPERATION_NOT_AUTHORISED" },
+      })
+      expect(resolve).not.toHaveBeenCalled()
+    },
+  )
+
+  it("never consults the posture locally, where the database may be a sandbox", async () => {
+    const verify = vi.fn(async () => ({ enforced: false, reason: "POSTURE_NOT_ENFORCED" }) as const)
+    const deps = { ...syntheticDependencies(), posture: { verify } }
+    await expect(
+      governOrderEntry("trade.order.commit", cart, native, "ref/1", () => deps, ENFORCED),
+    ).resolves.toMatchObject({ operation_class: "trade.order.commit" })
+    expect(verify).not.toHaveBeenCalled()
+  })
+})
+
+describe("TA-08 posture verdict", () => {
+  const fences = String(TRADE_A_FENCE_TRIGGERS.length)
+  it.each([
+    [undefined, { enforced: false, reason: "POSTURE_NOT_ENFORCED" }],
+    [
+      { posture: null, superuser: false, active_fences: fences },
+      { enforced: false, reason: "POSTURE_NOT_ENFORCED" },
+    ],
+    [
+      { posture: "SANDBOX", superuser: false, active_fences: fences },
+      { enforced: false, reason: "POSTURE_NOT_ENFORCED" },
+    ],
+    [
+      { posture: "ENFORCED", superuser: true, active_fences: fences },
+      { enforced: false, reason: "SUPERUSER_RUNTIME_ROLE" },
+    ],
+    [
+      { posture: "ENFORCED", superuser: null, active_fences: fences },
+      { enforced: false, reason: "SUPERUSER_RUNTIME_ROLE" },
+    ],
+    [
+      {
+        posture: "ENFORCED",
+        superuser: false,
+        active_fences: String(TRADE_A_FENCE_TRIGGERS.length - 1),
+      },
+      { enforced: false, reason: "FENCE_NOT_ACTIVE" },
+    ],
+    [{ posture: "ENFORCED", superuser: false, active_fences: fences }, { enforced: true }],
+  ] as const)("%j is %j", (row, verdict) => {
+    expect(judgePosture(row)).toEqual(verdict)
+  })
+
+  it("names every TA-05/TA-07 fence trigger once", () => {
+    const names = TRADE_A_FENCE_TRIGGERS.map(([, trigger]) => trigger)
+    expect(new Set(names).size).toBe(names.length)
+    const migrations = ["Migration20261016140000.ts", "Migration20261021090000.ts"]
+      .map((f) =>
+        readFileSync(join(__dirname, "../src/modules/legal-seller-checkout/migrations", f), "utf8"),
+      )
+      .join("\n")
+    for (const name of names)
+      expect(migrations).toMatch(new RegExp(`CREATE (CONSTRAINT )?TRIGGER ${name}\\b`))
   })
 })
 
@@ -396,9 +557,9 @@ describe("TA-06 HTTP boundary (real Express routing, as Medusa mounts it)", () =
   let server: Server | undefined
   afterEach(() => server?.close())
 
-  const start = async (env: Record<string, string>) => {
+  const start = async (env: Record<string, string>, posture?: PersistencePostureReader) => {
     const handled: string[] = []
-    const dependencies = vi.fn(() => syntheticDependencies())
+    const dependencies = vi.fn(() => ({ ...syntheticDependencies(), posture }))
     const app = express()
     app.use((req, _res, next) => {
       ;(req as unknown as { scope: unknown }).scope = {
@@ -429,16 +590,19 @@ describe("TA-06 HTTP boundary (real Express routing, as Medusa mounts it)", () =
     return { call, handled, dependencies }
   }
 
+  const certifiedRoutes = [
+    ["POST", "/store/carts/cart_01/complete"],
+    ["POST", "/admin/draft-orders/draft_01/convert-to-order"],
+  ] as const
   it.each([
-    ["staging", STAGING],
-    ["production", PRODUCTION],
+    ["staging", STAGING, []],
+    ["production", PRODUCTION, certifiedRoutes],
   ] as const)(
     "denies order creation and money routes in %s and never reaches Medusa",
-    async (_n, env) => {
+    async (_n, env, alsoDenied) => {
       const { call, handled, dependencies } = await start(env)
       for (const [method, path] of [
-        ["POST", "/store/carts/cart_01/complete"],
-        ["POST", "/admin/draft-orders/draft_01/convert-to-order"],
+        ...alsoDenied,
         ["POST", "/admin/draft-orders"],
         ["POST", "/admin/orders/ord_1/cancel"],
         ["POST", "/admin/payments/pay_1/refund"],
@@ -459,6 +623,31 @@ describe("TA-06 HTTP boundary (real Express routing, as Medusa mounts it)", () =
       expect(dependencies).not.toHaveBeenCalled()
     },
   )
+
+  it("passes the TA-08 certified routes in staging to their PEPs", async () => {
+    const { call, handled, dependencies } = await start(STAGING_ENABLED, {
+      verify: async () => ({ enforced: true }),
+    })
+    // Cart completion: the completeCartWorkflow hook is the PEP, so the route passes through.
+    expect((await call("POST", "/store/carts/cart_01/complete")).status).toBe(200)
+    expect(dependencies).not.toHaveBeenCalled()
+    // Draft finalisation: this route is the PEP and runs it before Medusa.
+    expect((await call("POST", "/admin/draft-orders/draft_01/convert-to-order")).status).toBe(200)
+    expect(dependencies).toHaveBeenCalledTimes(1)
+    expect(handled).toEqual(certifiedRoutes.map((r) => r.join(" ")))
+  })
+
+  it("refuses draft finalisation in staging when the database is not fenced", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    const { call, handled } = await start(STAGING_ENABLED, {
+      verify: async () => ({ enforced: false, reason: "FENCE_NOT_ACTIVE" }),
+    })
+    const response = await call("POST", "/admin/draft-orders/draft_01/convert-to-order")
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ code: "TRADE_OPERATION_NOT_AUTHORISED" })
+    expect(handled).toEqual([])
+    error.mockRestore()
+  })
 
   it("keeps historical reads and cart building available in protected runtimes", async () => {
     const { call, handled } = await start(STAGING)
@@ -491,7 +680,10 @@ describe("TA-06 service boundary inventory", () => {
   it("has no in-repo caller that creates or finalises an order around the guarded hooks", () => {
     // completeCartWorkflow and createOrderWorkflow runs reach their guarded
     // hooks; these entry points have none. TA-07 fences them at persistence,
-    // and only disposable-database regression scripts may drive them directly.
+    // and only disposable-database harness scripts may drive them directly:
+    // the regressions and the TA-08 acceptance helper, which refuses any
+    // database but the marked harness one.
+    const harness = /^scripts\/(?:regression-|acceptance-trade-a\.ts$)/
     const bypass =
       /\b(?:convertDraftOrderWorkflow|convertDraftOrderStep|createOrdersStep)\b|\.createOrders\(|is_draft_order:\s*false/g
     const root = join(__dirname, "..", "src")
@@ -500,7 +692,7 @@ describe("TA-06 service boundary inventory", () => {
       for (const name of readdirSync(dir)) {
         const full = join(dir, name)
         if (statSync(full).isDirectory()) walk(full)
-        else if (/\.ts$/.test(name) && !/^scripts\/regression-/.test(relative(root, full))) {
+        else if (/\.ts$/.test(name) && !harness.test(relative(root, full))) {
           const code = readFileSync(full, "utf8")
             .replace(/\/\*[\s\S]*?\*\//g, "")
             .replace(/(^|[^:])\/\/.*$/gm, "$1")
@@ -511,5 +703,109 @@ describe("TA-06 service boundary inventory", () => {
     }
     walk(root)
     expect(offenders).toEqual([])
+  })
+})
+
+describe("TA-08 denials raised inside native handlers", () => {
+  it("recognises a thrown, workflow-serialised or fence-raised Trade-A denial", () => {
+    const thrown = new OrderAuthorityDenied("CP_UNAVAILABLE", {
+      status: 503,
+      code: "TRADE_AUTHORITY_UNAVAILABLE",
+      detail: "x",
+    })
+    expect(tradeADenialOf(thrown)).toBe(thrown)
+    // Medusa's workflow engine rethrows a plain { message, name } object.
+    expect(tradeADenialOf({ message: thrown.message, name: "Error" })).toMatchObject({
+      outcome: "CP_UNAVAILABLE",
+      problem: { status: 503 },
+    })
+    expect(
+      tradeADenialOf({
+        message:
+          'insert into "order" ... - Trade-A denied: an order requires exactly one live trade.order.commit authority',
+      }),
+    ).toMatchObject({
+      outcome: "PERSISTENCE_FENCE_REFUSED",
+      problem: { status: 403, code: "TRADE_OPERATION_NOT_AUTHORISED" },
+    })
+    for (const other of [
+      new Error("Cart is already completed"),
+      { message: "mentions Trade-A order authority denied (X) mid-sentence" },
+      null,
+      "Trade-A denied: a bare string is not an error",
+    ])
+      expect(tradeADenialOf(other)).toBeNull()
+  })
+
+  it("answers RFC 9457 for a Trade-A denial and leaves other errors to Medusa", async () => {
+    const fallback = vi.fn(
+      (_e: unknown, _q: unknown, res: { status: (n: number) => { json: (b: unknown) => void } }) =>
+        res.status(500).json({ type: "unknown_error" }),
+    )
+    const app = express()
+    app.post("/store/carts/:id/complete", () => {
+      throw {
+        message: "Trade-A order authority denied (BINDING_NOT_ACTIVE): binding is not active",
+      }
+    })
+    app.post("/other", () => {
+      throw new Error("unrelated")
+    })
+    app.use(createTradeAErrorHandler(fallback as never) as never)
+    const listening = createServer(app)
+    await new Promise<void>((resolve) => listening.listen(0, resolve))
+    const base = `http://127.0.0.1:${(listening.address() as AddressInfo).port}`
+    try {
+      const denied = await fetch(`${base}/store/carts/cart_01/complete`, { method: "POST" })
+      expect(denied.status).toBe(403)
+      expect(denied.headers.get("content-type")).toBe("application/problem+json")
+      expect(denied.headers.get("cache-control")).toBe("no-store")
+      const body = await denied.json()
+      expect(body).toMatchObject({
+        status: 403,
+        code: "TRADE_BINDING_NOT_ACTIVE",
+        instance: "/store/carts/cart_01/complete",
+      })
+      expect(JSON.stringify(body)).not.toContain("binding is not active")
+      expect(fallback).not.toHaveBeenCalled()
+      expect((await fetch(`${base}/other`, { method: "POST" })).status).toBe(500)
+      expect(fallback).toHaveBeenCalledTimes(1)
+    } finally {
+      listening.close()
+    }
+  })
+})
+
+describe("TA-08 CP correlation identifiers", () => {
+  it("sends a bare UUID X-Correlation-ID on every CP call, as control-plane/v1 requires", async () => {
+    const deps = syntheticDependencies()
+    const seen: string[] = []
+    const context = deps.controlPlane.resolvePlatformContext
+    deps.controlPlane.resolvePlatformContext = (async (...args: unknown[]) => {
+      seen.push(String(args[3]))
+      return (context as (...a: unknown[]) => unknown)(...args)
+    }) as typeof context
+    const { resolveBinding, resolveOrderAuthority } = deps.authority
+    deps.authority.resolveBinding = async (req, token, correlationId) => {
+      seen.push(correlationId)
+      return resolveBinding(req, token, correlationId)
+    }
+    deps.authority.resolveOrderAuthority = async (req, token, correlationId) => {
+      seen.push(correlationId)
+      return resolveOrderAuthority(req, token, correlationId)
+    }
+    await governOrderEntry(
+      "trade.order.commit",
+      cart,
+      native,
+      "cart/cart_01/complete/1",
+      () => deps,
+      ENFORCED,
+    )
+    expect(seen).toHaveLength(3)
+    for (const id of seen)
+      expect(id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      )
   })
 })

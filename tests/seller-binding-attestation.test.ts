@@ -191,8 +191,10 @@ describe("ADR-SHARED-039 attestation composition", () => {
       "tn_zuribeans",
       org,
       "workload-token",
-      expect.stringMatching(/^trade-attestation\//),
-      undefined,
+      expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      ),
+      "ORGANISATION",
       "UG",
     )
     expect(recorded).toHaveLength(1)
@@ -217,6 +219,7 @@ describe("ADR-SHARED-039 attestation composition", () => {
   it.each([
     ["another Organisation", { organisation_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6d" }],
     ["another market", { country_code: "KE" }],
+    ["another organisation kind", { organisation_type: "BUYER_ORGANISATION" }],
     ["another tenant", { tenant_id: "tn_other" }],
     ["an expired context", { expires_at: new Date(Date.now() - 1000).toISOString() }],
     ["no expiry", { expires_at: undefined }],
