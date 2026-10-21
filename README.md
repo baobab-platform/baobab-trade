@@ -294,3 +294,14 @@ executable in a protected runtime until TA-07 certifies the persistence
 fences. The [entry-point map and evidence](docs/plans/trade-a-ta06-entry-point-closure.md)
 records each path and where it is enforced. The evidence is engine-local and
 synthetic, not EA Gate D or L4.
+
+## Trade-A commit fences
+
+TA-07 adds PostgreSQL commit fences for native orders, so the database
+decides whatever path writes the row. An order insert consumes exactly one
+current cart-commitment receipt for a matching cart. At COMMIT, the order's
+lines must equal that cart's. A draft becomes an order only by consuming its
+own finalisation receipt, and a cart completes only with a committed order.
+Protected databases record an `ENFORCED` posture, in which an unattributed
+cart cannot complete. The [fence design, residual risk and evidence](docs/plans/trade-a-ta07-commit-fences.md)
+are recorded with the migration. No class is certified until TA-08.

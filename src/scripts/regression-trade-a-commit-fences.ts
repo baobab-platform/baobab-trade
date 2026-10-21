@@ -1,0 +1,636 @@
+/**
+ * ADR-SHARED-039 Trade-A TA-07 disposable PostgreSQL / real Medusa acceptance
+ * for the native order commit fences (Migration20261021090000).
+ *
+ * Real Thamani carts, the real completeCartWorkflow, createOrderWorkflow and
+ * convertDraftOrderWorkflow, and the real attestation, attribution, receipt
+ * and commitment stores. The TA-05 PEP runs in explicit local enforcement;
+ * only its CP and IAM ports are EXPLICITLY SYNTHETIC. Direct SQL proves the
+ * fences hold without Medusa: a session opts into the ENFORCED posture, which
+ * it may strengthen but never weaken.
+ *
+ * LOCAL_TESTED, engine-local evidence (EA v2.3 §3.3): not L4, not EA Gate D,
+ * not protected staging. Refuses a non-test or unmarked database.
+ */
+import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
+import { Pool, type PoolClient } from "pg"
+import { asValue } from "@medusajs/framework/awilix"
+import {
+  addShippingMethodToCartWorkflow,
+  completeCartWorkflow,
+  convertDraftOrderWorkflow,
+  createCartWorkflow,
+  createInventoryLevelsWorkflow,
+  createOrderWorkflow,
+  createPaymentCollectionForCartWorkflow,
+} from "@medusajs/core-flows"
+import type {
+  ExecArgs,
+  ICartModuleService,
+  IFulfillmentModuleService,
+  IInventoryService,
+  IPaymentModuleService,
+  IProductModuleService,
+  IRegionModuleService,
+  ISalesChannelModuleService,
+  IStockLocationService,
+} from "@medusajs/framework/types"
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
+import type { TradeAOperationClass } from "../baobab/control-plane/trade-order-authority"
+import { findByCountryCode, findByMarketKey, findByMetadataKey } from "../baobab/market/mapping"
+import { PostgresCommitmentAttributionStore } from "../baobab/orders/commitment-attribution"
+import { medusaNativeSellerFacts } from "../baobab/orders/medusa-native-seller-facts"
+import {
+  attestNativeSellerConfiguration,
+  PostgresNativeConfigurationAttestationStore,
+} from "../baobab/orders/native-configuration-attestation"
+import { PostgresAttestedNativeConfigurationReader } from "../baobab/orders/native-configuration-resolver"
+import {
+  PostgresOrderAuthorityReceiptStore,
+  type OrderAuthorityEnforcementDependencies,
+} from "../baobab/orders/order-authority-enforcement"
+import type { PgPool } from "../baobab/orders/postgres-governed-binding-persistence"
+import {
+  governOrderEntry,
+  TRADE_A_ENFORCEMENT_ENV,
+  tradeAEnvironment,
+  tradeAOperationReference,
+} from "../baobab/orders/trade-a-entry-points"
+import { TRADE_A_DEPENDENCY_KEY } from "../baobab/orders/trade-a-runtime"
+import type ThamaniModuleService from "../modules/thamani/service"
+
+const POLICY_REFERENCE = "regression:trade-a-ta07-commit-fences"
+const ENGINE = "ei_ta07regression"
+const TENANT = "tn_ta07regression"
+const ACTIVITY: Record<TradeAOperationClass, string> = {
+  "trade.order.commit": "CHECKOUT_ORDER_COMMITMENT",
+  "trade.order.create": "DIRECT_ORDER_COMMITMENT",
+  "trade.draft-order.finalize": "DRAFT_ORDER_FINALISATION",
+}
+
+/** Workflow failures are rethrown serialised ({ message, ... }), not as Error. */
+const messageOf = (error: unknown) =>
+  error instanceof Error
+    ? error.message
+    : String((error as { message?: unknown } | undefined)?.message ?? "")
+
+const refused = async (what: string, run: () => Promise<unknown>, pattern: RegExp) => {
+  const error = await run().then(
+    () => undefined,
+    (e: unknown) => e,
+  )
+  assert.ok(error, `${what} was not refused`)
+  assert.match(messageOf(error), pattern, `${what}: wrong refusal`)
+}
+
+export default async function regressionTradeACommitFences({ container }: ExecArgs) {
+  const url = process.env.DATABASE_URL
+  const expected = process.env.BAOBAB_BINDING_LIFECYCLE_TEST_DB
+  if (
+    process.env.NODE_ENV !== "test" ||
+    process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD === "true" ||
+    process.env.BAOBAB_ENVIRONMENT !== undefined ||
+    process.env.BAOBAB_DEPLOYMENT_ENV !== undefined ||
+    process.env[TRADE_A_ENFORCEMENT_ENV] !== undefined ||
+    !expected ||
+    !url ||
+    new URL(url).pathname !== `/${expected}`
+  ) {
+    throw new Error(
+      "Trade-A commit-fence regression requires the explicitly marked disposable test database",
+    )
+  }
+  const pool = new Pool({ connectionString: url, max: 6 })
+  const pg: PgPool = {
+    connect: async () => {
+      const client = await pool.connect()
+      return {
+        query: (sql, values) => client.query(sql, values ? [...values] : []),
+        release: () => client.release(),
+      }
+    },
+  }
+  const carts = container.resolve<ICartModuleService>(Modules.CART)
+  const products = container.resolve<IProductModuleService>(Modules.PRODUCT)
+  const regions = container.resolve<IRegionModuleService>(Modules.REGION)
+  const channels = container.resolve<ISalesChannelModuleService>(Modules.SALES_CHANNEL)
+  const locations = container.resolve<IStockLocationService>(Modules.STOCK_LOCATION)
+  const inventory = container.resolve<IInventoryService>(Modules.INVENTORY)
+  const fulfillment = container.resolve<IFulfillmentModuleService>(Modules.FULFILLMENT)
+  const payments = container.resolve<IPaymentModuleService>(Modules.PAYMENT)
+  const thamani = container.resolve<ThamaniModuleService>("thamani")
+  const query = container.resolve(ContainerRegistrationKeys.QUERY)
+
+  const uganda = findByCountryCode(
+    await regions.listRegions({}, { relations: ["countries"] }),
+    "UG",
+  )
+  const channel = findByMetadataKey(
+    await channels.listSalesChannels({}),
+    "baobab_sales_channel_key",
+    "thamani_b2c",
+  )
+  const location = findByMarketKey(await locations.listStockLocations({}), "thamani_ug")
+  const [shipping] = await fulfillment.listShippingOptions({
+    name: "Thamani Uganda Standard Shipping (development placeholder rate)",
+  })
+  if (!uganda || !channel || !location || !shipping)
+    throw new Error("Run the Thamani market, catalogue and fulfilment bootstraps first")
+  const [product] = await products.listProducts(
+    { handle: "thamani-instant-coffee-200g" },
+    { relations: ["variants"] },
+  )
+  const variant = product?.variants?.[0]
+  if (!product || !variant?.sku) throw new Error("Thamani regression product missing")
+  const [item] = await inventory.listInventoryItems({ sku: variant.sku })
+  const [level] = item
+    ? await inventory.listInventoryLevels({ inventory_item_id: item.id, location_id: location.id })
+    : []
+  if (item && !level)
+    await createInventoryLevelsWorkflow(container).run({
+      input: {
+        inventory_levels: [
+          { inventory_item_id: item.id, location_id: location.id, stocked_quantity: 100 },
+        ],
+      },
+    })
+  const [eligible] = await thamani.listMarketProductEligibilities({
+    product_id: product.id,
+    market_key: "thamani_ug",
+  })
+  if (!eligible)
+    await thamani.createMarketProductEligibilities({
+      product_id: product.id,
+      market_key: "thamani_ug",
+      status: "ACTIVE",
+      policy_reference: POLICY_REFERENCE,
+    })
+
+  const organisationId = randomUUID()
+  const bindingId = randomUUID()
+  const context = (tenantId: string, orgId: string, country?: string) => ({
+    context_id: randomUUID(),
+    tenant_id: tenantId,
+    organisation_id: orgId,
+    organisation_type: "ORGANISATION",
+    country_code: country ?? "UG",
+    resolved_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 120_000).toISOString(),
+  })
+
+  // Trade attests the live Thamani Uganda configuration (synthetic CP ports).
+  await attestNativeSellerConfiguration(
+    {
+      reference: `trade/native-seller-configuration/ta07-${randomUUID()}`,
+      tenantId: TENANT,
+      organisationId,
+      market: "UG",
+      engineInstanceId: ENGINE,
+      currencyScope: ["UGX"],
+      salesChannelIds: [channel.id],
+      regionIds: [uganda.id],
+    },
+    {
+      facts: medusaNativeSellerFacts(container),
+      store: new PostgresNativeConfigurationAttestationStore(pg),
+      tokens: { getAccessToken: async () => "synthetic-workload-token" },
+      controlPlane: {
+        resolvePlatformContext: async (tenantId, orgId, _t, _c, _type, country) =>
+          context(tenantId, orgId, country),
+      },
+      attestations: {
+        attest: async (request, scope) => ({
+          attestation_id: randomUUID(),
+          tenant_id: scope.tenantId,
+          operating_organisation_id: scope.organisationId,
+          market: scope.market,
+          engine_instance_id: request.engine_instance_id,
+          native_configuration_reference: request.native_configuration_reference,
+          native_configuration_digest: request.native_configuration_digest,
+          currency_scope: request.currency_scope,
+          attested_at: request.attested_at,
+          recorded_at: new Date().toISOString(),
+        }),
+      },
+      environment: { node: "test", enabled: "true" },
+    },
+  )
+
+  /** Real stores and readers; only CP and IAM answers are synthetic. */
+  let leaseMs = 20_000
+  const dependencies: OrderAuthorityEnforcementDependencies = {
+    engineInstanceId: ENGINE,
+    environment: {},
+    attested: new PostgresAttestedNativeConfigurationReader(pg),
+    facts: medusaNativeSellerFacts(container),
+    tokens: { getAccessToken: async () => "synthetic-workload-token" },
+    controlPlane: {
+      resolvePlatformContext: async (tenantId, orgId, _t, _c, _type, country) =>
+        context(tenantId, orgId, country),
+    },
+    authority: {
+      resolveBinding: async (req) => ({
+        resolution_id: randomUUID(),
+        ...req,
+        outcome: "RESOLVED" as const,
+        binding_reference: { binding_id: bindingId, binding_version: 1 },
+        status: "ACTIVE" as const,
+        effective_from: new Date(Date.now() - 60_000).toISOString(),
+        resolved_at: new Date().toISOString(),
+        provider_permissions_granted: false as const,
+      }),
+      resolveOrderAuthority: async (req) => {
+        const now = Date.now()
+        return {
+          receivedAt: now,
+          decision: {
+            decision_id: randomUUID(),
+            ...req,
+            outcome: "AUTHORIZED" as const,
+            tenant_id: TENANT,
+            operating_organisation_id: organisationId,
+            market: "UG",
+            legal_actor_role: "SELLER_OF_RECORD" as const,
+            activity: ACTIVITY[req.operation_class],
+            mandate_id: randomUUID(),
+            responsible_legal_entity_id: "SYNTHETIC-LE-TA07",
+            evidence_references: ["synthetic:mandate-evidence/ta07"],
+            mandate_effective_from: new Date(now - 60_000).toISOString(),
+            evaluated_at: new Date(now).toISOString(),
+            expires_at: new Date(now + leaseMs).toISOString(),
+            policy_reference: "ADR-SHARED-039/trade-order-authority:v1",
+            provider_permissions_granted: false as const,
+          },
+        } as never
+      },
+    },
+    store: new PostgresCommitmentAttributionStore(pg),
+    receipts: new PostgresOrderAuthorityReceiptStore(pg),
+  }
+  container.register(TRADE_A_DEPENDENCY_KEY, asValue(dependencies))
+
+  /** A real, completable Thamani Uganda cart with a pending payment session. */
+  const payableCart = async (email = `ta07-${randomUUID()}@example.invalid`) => {
+    const { result: cart } = await createCartWorkflow(container).run({
+      input: {
+        region_id: uganda.id,
+        sales_channel_id: channel.id,
+        items: [{ variant_id: variant.id, quantity: 1 }],
+        email,
+      },
+    })
+    await addShippingMethodToCartWorkflow(container).run({
+      input: { cart_id: cart.id, options: [{ id: shipping.id }] },
+    })
+    const collection = await createPaymentCollectionForCartWorkflow(container).run({
+      input: { cart_id: cart.id },
+    })
+    await payments.createPaymentSession(collection.result.id, {
+      provider_id: "pp_system_default",
+      currency_code: cart.currency_code,
+      amount: collection.result.amount ?? cart.total ?? 0,
+      data: {},
+    })
+    return cart.id
+  }
+  const enforced = async <T>(run: () => Promise<T>): Promise<T> => {
+    process.env[TRADE_A_ENFORCEMENT_ENV] = "true"
+    try {
+      return await run()
+    } finally {
+      Reflect.deleteProperty(process.env, TRADE_A_ENFORCEMENT_ENV)
+    }
+  }
+  /** What the hook does: attribute the cart and record a receipt, no commitment. */
+  const authorise = async (cls: TradeAOperationClass, type: "cart" | "draft_order", id: string) =>
+    enforced(async () => {
+      const native =
+        type === "cart"
+          ? await carts.retrieveCart(id)
+          : (
+              await query.graph({
+                entity: "order",
+                fields: ["sales_channel_id", "region_id", "currency_code"],
+                filters: { id },
+              })
+            ).data[0]
+      return governOrderEntry(
+        cls,
+        { type, id },
+        {
+          salesChannelId: String(native.sales_channel_id),
+          regionId: String(native.region_id),
+          currency: String(native.currency_code),
+        },
+        tradeAOperationReference({ type, id }, "regression"),
+        () => dependencies,
+        tradeAEnvironment(),
+      )
+    })
+  const complete = (id: string) => completeCartWorkflow(container).run({ input: { id } })
+  const one = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) =>
+    (await pool.query(sql, values)).rows[0] as T
+  const linkedOrder = async (cartId: string) => {
+    const { data } = await query.graph({
+      entity: "order_cart",
+      fields: ["order_id"],
+      filters: { cart_id: cartId },
+    })
+    return data.map((link: { order_id: string }) => link.order_id)
+  }
+  /** A session that opts into ENFORCED, as every protected database is. */
+  const enforcedSql = async (run: (db: PoolClient) => Promise<unknown>) => {
+    const db = await pool.connect()
+    try {
+      await db.query("SET baobab.trade_a_posture = 'ENFORCED'")
+      return await run(db)
+    } finally {
+      await db.query("RESET baobab.trade_a_posture").catch(() => undefined)
+      db.release()
+    }
+  }
+  const rawOrder = (db: PoolClient, cart: Record<string, unknown>, draft = false) =>
+    db.query(
+      `INSERT INTO "order" (id, region_id, sales_channel_id, customer_id, email, currency_code, is_draft_order, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        `order_ta07raw${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+        cart.region_id,
+        cart.sales_channel_id,
+        cart.customer_id ?? null,
+        cart.email ?? null,
+        cart.currency_code,
+        draft,
+        draft ? "draft" : "pending",
+      ],
+    )
+
+  try {
+    // Setup is SANDBOX posture (the migration ran under the test profile).
+    assert.equal(
+      (await one<{ posture: string }>("SELECT posture FROM trade_a_persistence_posture")).posture,
+      "SANDBOX",
+    )
+
+    // 1. Authorised cart commitment through the real workflow: the order
+    //    INSERT consumes the hook's receipt and records one commitment for
+    //    exactly this cart; completion then passes the cart fence.
+    const first = await payableCart()
+    const { result: order } = await enforced(() => complete(first))
+    assert.deepEqual(await linkedOrder(first), [order.id])
+    const commitment = await one<{ receipt_id: string; subject_id: string }>(
+      "SELECT receipt_id, subject_id FROM trade_order_commitment WHERE order_id = $1",
+      [order.id],
+    )
+    assert.equal(commitment?.subject_id, first)
+    assert.ok(
+      (
+        await one<{ consumed_at: Date | null }>(
+          "SELECT consumed_at FROM trade_order_authority_receipt WHERE receipt_id = $1",
+          [commitment.receipt_id],
+        )
+      ).consumed_at,
+    )
+    // A replay resolves to the same order without a second commitment.
+    const { result: replay } = await enforced(() => complete(first))
+    assert.equal(replay.id, order.id)
+    assert.equal(
+      (
+        await one<{ n: number }>(
+          "SELECT count(*)::int AS n FROM trade_order_commitment WHERE subject_id = $1",
+          [first],
+        )
+      ).n,
+      1,
+    )
+
+    // 2. Two concurrent authorised completions bind each order to its own cart.
+    const [a, b] = [await payableCart(), await payableCart()]
+    const [ra, rb] = await enforced(() => Promise.all([complete(a), complete(b)]))
+    for (const [cartId, created] of [
+      [a, ra.result],
+      [b, rb.result],
+    ] as const) {
+      assert.deepEqual(await linkedOrder(cartId), [created.id])
+      assert.equal(
+        (
+          await one<{ subject_id: string }>(
+            "SELECT subject_id FROM trade_order_commitment WHERE order_id = $1",
+            [created.id],
+          )
+        ).subject_id,
+        cartId,
+      )
+    }
+
+    // 3. ENFORCED: no authority, no order, whatever the writer. An
+    //    unattributed cart (the never-activated binding case) cannot complete.
+    const bare = await payableCart()
+    const bareCart = await one("SELECT * FROM cart WHERE id = $1", [bare])
+    await refused(
+      "direct order INSERT without authority",
+      () => enforcedSql((db) => rawOrder(db, bareCart)),
+      /no current trade\.order\.commit authority/,
+    )
+    await refused(
+      "completion of an unattributed cart",
+      () =>
+        enforcedSql((db) =>
+          db.query("UPDATE cart SET completed_at = clock_timestamp() WHERE id = $1", [bare]),
+        ),
+      /cart completion requires a committed, authorised order/,
+    )
+    // A consumed receipt is never reused for a second order.
+    const firstCart = await one("SELECT * FROM cart WHERE id = $1", [first])
+    await refused(
+      "reuse of a consumed receipt",
+      () => enforcedSql((db) => rawOrder(db, { ...firstCart, completed_at: null })),
+      /no current trade\.order\.commit authority/,
+    )
+
+    // 4. An attributed cart cannot complete without a commitment, even in SANDBOX.
+    const held = await payableCart()
+    const heldReceipt = await authorise("trade.order.commit", "cart", held)
+    assert.ok(heldReceipt)
+    await refused(
+      "attributed cart completion without a committed order",
+      () => pool.query("UPDATE cart SET completed_at = clock_timestamp() WHERE id = $1", [held]),
+      /cart completion requires a committed, authorised order/,
+    )
+
+    // 5. A live receipt cannot authorise different contents: an order with
+    //    the cart's scope but not its lines is refused at COMMIT, and the
+    //    receipt stays unconsumed.
+    const heldCart = await one("SELECT * FROM cart WHERE id = $1", [held])
+    await refused(
+      "order whose lines differ from the authorised cart",
+      () =>
+        enforcedSql(async (db) => {
+          await db.query("BEGIN")
+          try {
+            await rawOrder(db, heldCart)
+            await db.query("COMMIT")
+          } catch (error) {
+            await db.query("ROLLBACK")
+            throw error
+          }
+        }),
+      /committed order lines differ from the authorised cart/,
+    )
+    assert.equal(
+      (
+        await one<{ consumed_at: Date | null }>(
+          "SELECT consumed_at FROM trade_order_authority_receipt WHERE receipt_id = $1",
+          [heldReceipt.receipt_id],
+        )
+      ).consumed_at,
+      null,
+    )
+
+    // 6. Two open carts with the same scope and live receipts are ambiguous:
+    //    the database refuses rather than guess, and nothing commits.
+    const shared = `ta07-shared-${randomUUID()}@example.invalid`
+    const [x, y] = [await payableCart(shared), await payableCart(shared)]
+    await authorise("trade.order.commit", "cart", y)
+    await refused(
+      "ambiguous authority",
+      () => enforced(() => complete(x)),
+      /ambiguous between carts/,
+    )
+    assert.deepEqual(await linkedOrder(x), [])
+    assert.equal((await carts.retrieveCart(x)).completed_at, null)
+
+    // 7. An expired lease authorises nothing.
+    leaseMs = 1_200
+    const late = await payableCart()
+    await authorise("trade.order.commit", "cart", late)
+    leaseMs = 20_000
+    await new Promise((resolve) => setTimeout(resolve, 1_600))
+    const lateCart = await one("SELECT * FROM cart WHERE id = $1", [late])
+    await refused(
+      "order after the lease expired",
+      () => enforcedSql((db) => rawOrder(db, lateCart)),
+      /no current trade\.order\.commit authority/,
+    )
+
+    // 8. Draft finalisation consumes a receipt for exactly that draft.
+    const draftInput = (email: string) => ({
+      input: {
+        region_id: uganda.id,
+        sales_channel_id: channel.id,
+        email,
+        currency_code: "ugx",
+        items: [{ variant_id: variant.id, quantity: 1, title: product.title, unit_price: 10000 }],
+        is_draft_order: true,
+        status: "draft" as const,
+      },
+    })
+    const { result: draft } = await createOrderWorkflow(container).run(
+      draftInput(`ta07-draft-${randomUUID()}@example.invalid`),
+    )
+    await authorise("trade.draft-order.finalize", "draft_order", draft.id)
+    await convertDraftOrderWorkflow(container).run({ input: { id: draft.id } })
+    assert.equal(
+      (
+        await one<{ is_draft_order: boolean }>('SELECT is_draft_order FROM "order" WHERE id = $1', [
+          draft.id,
+        ])
+      ).is_draft_order,
+      false,
+    )
+    assert.ok(
+      await one(
+        "SELECT 1 FROM trade_order_commitment WHERE operation_class = 'trade.draft-order.finalize' AND order_id = $1",
+        [draft.id],
+      ),
+    )
+    // An attributed draft without a live receipt cannot be finalised, even in SANDBOX.
+    const { result: unauthorised } = await createOrderWorkflow(container).run(
+      draftInput(`ta07-draft-${randomUUID()}@example.invalid`),
+    )
+    leaseMs = 1_200
+    await authorise("trade.draft-order.finalize", "draft_order", unauthorised.id)
+    leaseMs = 20_000
+    await new Promise((resolve) => setTimeout(resolve, 1_600))
+    await refused(
+      "attributed draft finalisation without current authority",
+      () => convertDraftOrderWorkflow(container).run({ input: { id: unauthorised.id } }),
+      /no current trade\.draft-order\.finalize authority/,
+    )
+    // ENFORCED: an unattributed draft cannot become an order by direct SQL.
+    const { result: plain } = await createOrderWorkflow(container).run(
+      draftInput(`ta07-draft-${randomUUID()}@example.invalid`),
+    )
+    await refused(
+      "direct draft finalisation without authority",
+      () =>
+        enforcedSql((db) =>
+          db.query(`UPDATE "order" SET is_draft_order = false, status = 'pending' WHERE id = $1`, [
+            plain.id,
+          ]),
+        ),
+      /no current trade\.draft-order\.finalize authority/,
+    )
+
+    // 9. Evidence is written only by the fences and never rewritten.
+    await refused(
+      "a receipt consumed outside the fence",
+      () =>
+        pool.query(
+          "UPDATE trade_order_authority_receipt SET consumed_at = clock_timestamp() WHERE receipt_id = $1",
+          [heldReceipt.receipt_id],
+        ),
+      /consumed only at the commit fence/,
+    )
+    await refused(
+      "a forged commitment",
+      () =>
+        pool.query(
+          `INSERT INTO trade_order_commitment (receipt_id, operation_class, subject_type, subject_id, order_id)
+           VALUES ($1, 'trade.order.commit', 'cart', $2, 'order_forged')`,
+          [heldReceipt.receipt_id, held],
+        ),
+      /written only by the commit fence/,
+    )
+    for (const [what, sql] of [
+      ["commitment UPDATE", "UPDATE trade_order_commitment SET order_id = 'order_other'"],
+      ["commitment DELETE", "DELETE FROM trade_order_commitment"],
+      ["commitment TRUNCATE", "TRUNCATE trade_order_commitment"],
+    ] as const)
+      await refused(what, () => pool.query(sql), /written only by the commit fence/)
+
+    // 10. The posture only strengthens: no downgrade, deletion or truncation.
+    const db = await pool.connect()
+    try {
+      await db.query("BEGIN")
+      await db.query("UPDATE trade_a_persistence_posture SET posture = 'ENFORCED'")
+      await refused(
+        "posture downgrade",
+        () => db.query("UPDATE trade_a_persistence_posture SET posture = 'SANDBOX'"),
+        /only moves from SANDBOX to ENFORCED/,
+      )
+    } finally {
+      await db.query("ROLLBACK")
+      db.release()
+    }
+    for (const sql of [
+      "DELETE FROM trade_a_persistence_posture",
+      "TRUNCATE trade_a_persistence_posture",
+    ])
+      await refused(sql, () => pool.query(sql), /only moves from SANDBOX to ENFORCED/)
+
+    console.log(
+      "Trade-A TA-07: native commit fences on real completeCartWorkflow/convertDraftOrderWorkflow (single consumption, cart binding, replay, concurrency, content binding at COMMIT, ambiguity, lease expiry, unattributed cart, draft finalisation, forged and rewritten evidence, posture) passed with synthetic CP/IAM; LOCAL_TESTED, not EA Gate D, not L4",
+    )
+  } finally {
+    if (!eligible)
+      await thamani
+        .listMarketProductEligibilities({
+          product_id: product.id,
+          policy_reference: POLICY_REFERENCE,
+        })
+        .then((rows) => thamani.deleteMarketProductEligibilities(rows.map((row) => row.id)))
+    await pool.end()
+  }
+}
