@@ -16,6 +16,8 @@ export type ClientCredentialsWorkloadTokenProviderOptions = {
   tokenUrl: string
   clientId: string
   clientSecret: string
+  /** Space-separated scopes to request; omitted, IAM issues the client's defaults. */
+  scope?: string
   timeoutMs?: number
   now?: () => number
 }
@@ -45,6 +47,7 @@ export class ClientCredentialsWorkloadTokenProvider implements WorkloadTokenProv
   private readonly tokenUrl: string
   private readonly clientId: string
   private readonly clientSecret: string
+  private readonly scope?: string
   private readonly timeoutMs: number
   private readonly now: () => number
   private cached: CachedToken | null = null
@@ -53,6 +56,7 @@ export class ClientCredentialsWorkloadTokenProvider implements WorkloadTokenProv
     this.tokenUrl = options.tokenUrl
     this.clientId = options.clientId
     this.clientSecret = options.clientSecret
+    this.scope = options.scope
     this.timeoutMs = options.timeoutMs ?? 3000
     this.now = options.now ?? Date.now
   }
@@ -69,6 +73,7 @@ export class ClientCredentialsWorkloadTokenProvider implements WorkloadTokenProv
         grant_type: "client_credentials",
         client_id: this.clientId,
         client_secret: this.clientSecret,
+        ...(this.scope ? { scope: this.scope } : {}),
       }),
       signal: AbortSignal.timeout(this.timeoutMs),
     })

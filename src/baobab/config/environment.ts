@@ -18,6 +18,13 @@ export type BaobabTradeEnvironment = {
   iamWorkloadTokenUrl?: string
   iamWorkloadClientId: string
   iamWorkloadClientSecret?: string
+  // ZB-G03 step 3 (CP ADR-BCP-028): the buyer identity path. Default off.
+  // Enabled, Trade verifies buyer IAM tokens from exactly this issuer,
+  // obtained by these confidential BFF clients, and resolves the canonical
+  // Principal through the Control Plane with the workload identity above.
+  buyerIdentityEnabled: boolean
+  buyerIamIssuer?: string
+  buyerAuthorisedParties: string[]
   logLevel: string
 }
 
@@ -51,5 +58,11 @@ export const getBaobabTradeEnvironment = (): BaobabTradeEnvironment => ({
   iamWorkloadTokenUrl: process.env.BAOBAB_IAM_WORKLOAD_TOKEN_URL,
   iamWorkloadClientId: process.env.BAOBAB_IAM_WORKLOAD_CLIENT_ID || "baobab-trade-workload",
   iamWorkloadClientSecret: process.env.BAOBAB_IAM_WORKLOAD_CLIENT_SECRET,
+  buyerIdentityEnabled: process.env.BAOBAB_BUYER_IDENTITY_ENABLED === "true",
+  buyerIamIssuer: process.env.BAOBAB_IAM_BUYER_ISSUER,
+  buyerAuthorisedParties: (process.env.BAOBAB_IAM_BUYER_AUTHORISED_PARTIES ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
   logLevel: process.env.LOG_LEVEL || "info",
 })
