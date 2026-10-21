@@ -148,7 +148,7 @@ completeCartWorkflow.hooks.validate(async ({ cart }, { container }) => {
   // ADR-SHARED-039 Trade-A TA-06: trade.order.commit, from server-read cart state only.
   const committed = cart as NativeCheckoutCart & { currency_code?: string | null }
   const subject = { type: "cart" as const, id: String(committed.id ?? "") }
-  await governOrderEntry(
+  const receipt = await governOrderEntry(
     "trade.order.commit",
     subject,
     {
@@ -165,11 +165,17 @@ completeCartWorkflow.hooks.validate(async ({ cart }, { container }) => {
     baobab: process.env.BAOBAB_ENVIRONMENT,
     deployment: process.env.BAOBAB_DEPLOYMENT_ENV,
   })
+  // TA-08: in a protected runtime governOrderEntry either throws or returns a
+  // receipt bound to a current CP decision under the ACTIVE CP binding and
+  // mandate, which the order INSERT must consume. That receipt is the
+  // governed seller gate LA-05 requires in staging; the per-cart LA-05
+  // binding path is historical evidence and never authority (ADR-SHARED-039
+  // §§1, 3). An explicitly enabled LA-05 guard still runs in addition.
   await enforceNativeCheckoutGate(
     cart as NativeCheckoutCart,
     process.env.BAOBAB_LA05_NATIVE_CHECKOUT_GUARD === "true",
     runtime.production,
     () => container.resolve<NativeCartLegalSellerDependencies>(NATIVE_SELLER_DEPENDENCY_KEY),
-    runtime.staging,
+    runtime.staging && receipt === null,
   )
 })

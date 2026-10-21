@@ -134,19 +134,22 @@ export async function attributeCommitment(
   }
 
   const token = await deps.tokens.getAccessToken()
-  const correlationId = `trade-attribution/${randomUUID()}`
+  // Shared control-plane/v1: X-Correlation-ID is a bare UUID; CP refuses anything else.
+  const correlationId = randomUUID()
   const context = await deps.controlPlane.resolvePlatformContext(
     configuration.tenantId,
     configuration.organisationId,
     token,
     correlationId,
-    undefined,
+    // ADR-BCP-024 exact-kind attestation: the seller's operating Organisation.
+    "ORGANISATION",
     configuration.market,
   )
   const expiresAt = context.expires_at ? Date.parse(context.expires_at) : Number.NaN
   if (
     context.tenant_id !== configuration.tenantId ||
     context.organisation_id !== configuration.organisationId ||
+    context.organisation_type !== "ORGANISATION" ||
     context.country_code !== configuration.market ||
     !(expiresAt > now())
   ) {

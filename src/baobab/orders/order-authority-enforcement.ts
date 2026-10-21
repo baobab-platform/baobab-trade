@@ -16,6 +16,7 @@
  * denied, and a non-production run needs explicit enablement. Activation is
  * never this flag; it is TA-07/TA-08 evidence.
  */
+import { randomUUID } from "node:crypto"
 import type {
   OrderAuthorityDecision,
   TradeAOperationClass,
@@ -31,6 +32,7 @@ import {
 } from "./commitment-attribution"
 import type { NativeCommitmentScope } from "./native-configuration-resolver"
 import { resolveNativeCheckoutEnvironment } from "./native-cart-legal-seller"
+import type { PersistencePostureReader } from "./persistence-posture"
 import type { PgPool } from "./postgres-governed-binding-persistence"
 
 /** Which native record each Trade-A class may commit. */
@@ -70,6 +72,11 @@ export type OrderAuthorityEnforcementDependencies = CommitmentAttributionDepende
   authority: Pick<TradeOrderAuthorityPort, "resolveBinding" | "resolveOrderAuthority">
   receipts: OrderAuthorityReceiptStore
   environment: { node?: string; baobab?: string; deployment?: string; enabled?: string }
+  /**
+   * TA-08: proves the TA-07 fences guard this runtime's database. Required
+   * in a protected runtime (its absence denies); unused locally.
+   */
+  posture?: PersistencePostureReader
 }
 
 /** RFC 9457 mapping per ADR-SHARED-039 §6. */
@@ -93,6 +100,10 @@ const NOT_AUTHORISED = new Set([
   // point with no governed pre-commit point, stays denied in protected runtimes.
   "PERSISTENCE_BOUNDARY_NOT_CERTIFIED",
   "NO_GOVERNED_COMMIT_POINT",
+  // TA-08: a certified class whose database is not demonstrably fenced, or
+  // a write a TA-05/TA-07 PostgreSQL fence refused.
+  "PERSISTENCE_POSTURE_NOT_ENFORCED",
+  "PERSISTENCE_FENCE_REFUSED",
 ])
 
 export function tradeAuthorityProblem(outcome: string): TradeAuthorityProblem {
@@ -169,7 +180,8 @@ export async function enforceOrderAuthority(
         operation_reference: operationReference,
       },
       await deps.tokens.getAccessToken(),
-      `trade-order-authority/${attribution.attribution_id}`,
+      // Shared control-plane/v1: X-Correlation-ID is a bare UUID.
+      randomUUID(),
     ))
   } catch {
     return deny("UNAVAILABLE")

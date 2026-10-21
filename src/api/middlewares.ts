@@ -2,11 +2,17 @@
 // Delivery sites and tax verification follow ADR-0017 and zuribeans-tax.
 // ADR-SHARED-039 Trade-A TA-06: native order and money routes are
 // classified, and denied by name in protected runtimes, before any handler.
-import { authenticate, defineMiddlewares } from "@medusajs/framework/http"
+// TA-08: denials raised inside native handlers answer the same RFC 9457
+// documents; every other error keeps Medusa's own handler.
+import { authenticate, defineMiddlewares, errorHandler } from "@medusajs/framework/http"
 import { PROTECTED_ORDER_PREFIXES } from "../baobab/orders/trade-a-entry-points"
-import { tradeOrderRouteGuard } from "../baobab/orders/trade-order-route-guard"
+import {
+  createTradeAErrorHandler,
+  tradeOrderRouteGuard,
+} from "../baobab/orders/trade-order-route-guard"
 
 export default defineMiddlewares({
+  errorHandler: createTradeAErrorHandler(errorHandler()),
   routes: [
     // No `methods`: every verb reaches the guard, which classifies reads and mutations.
     ...PROTECTED_ORDER_PREFIXES.map((prefix) => ({

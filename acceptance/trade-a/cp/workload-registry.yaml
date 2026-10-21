@@ -1,0 +1,17 @@
+# Trade-A TA-08 harness CI-only workload registry snapshot. SYNTHETIC: it
+# marks Trade's legal-actor assessor ACTIVE for this throwaway integration run
+# only. The canonical Shared entry (identity/v1/workload-registry.yaml) stays
+# PROVISIONED; activating it there is a separate, approved change. Never deployed.
+workloads:
+  baobab-trade-legal-actor-assessor-staging:
+    status: ACTIVE
+    environment: integration
+    allowed_scopes:
+      [
+        "context:resolve",
+        "legal-actor:assess",
+        "trade-seller-binding:attest",
+        "trade-seller-binding:resolve",
+        "trade-order-authority:resolve",
+      ]
+    context_purposes: ["RUNTIME"]

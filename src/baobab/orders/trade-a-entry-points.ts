@@ -36,20 +36,26 @@ import {
   type OrderAuthorityEnforcementDependencies,
   type OrderAuthorityReceipt,
 } from "./order-authority-enforcement"
+import type { PersistencePostureVerdict } from "./persistence-posture"
 
 /** Explicit, non-production enablement of the Trade-A PEP. Never activation. */
 export const TRADE_A_ENFORCEMENT_ENV = "BAOBAB_TRADE_A_ORDER_AUTHORITY_ENABLED"
 
 /**
- * Classes certified to commit in a protected runtime. Empty until TA-08.
+ * Classes certified to commit in a protected (non-production) runtime.
  *
  * TA-07 (Migration20261021090000) installs the PostgreSQL commit fences for
- * trade.order.commit and trade.draft-order.finalize. Certification is a
- * separate step: it needs the TA-08 real-runtime acceptance and a check that
- * the database posture is ENFORCED, both in the same change that adds a
- * class here. trade.order.create has no governed commit point and stays out.
+ * trade.order.commit and trade.draft-order.finalize. TA-08 certifies them
+ * with the real-runtime acceptance (acceptance/trade-a) and the per-operation
+ * posture check (assertPersistenceEnforced), added in the same change.
+ * Certification is not activation: every operation still needs a current CP
+ * decision under an ACTIVE binding and mandate, and production stays denied.
+ * trade.order.create has no governed commit point and stays out.
  */
-export const PERSISTENCE_FENCED_CLASSES: ReadonlySet<TradeAOperationClass> = new Set()
+export const PERSISTENCE_FENCED_CLASSES: ReadonlySet<TradeAOperationClass> = new Set([
+  "trade.order.commit",
+  "trade.draft-order.finalize",
+])
 
 export type TradeAEnvironment = {
   node?: string
@@ -101,10 +107,35 @@ export async function governOrderEntry(
   } catch {
     return deny("UNAVAILABLE")
   }
+  if (runtime === "PROTECTED") await assertPersistenceEnforced(deps)
   return enforceOrderAuthority(operationClass, subject, native, operationReference, {
     ...deps,
     environment: env,
   })
+}
+
+/**
+ * TA-08: a certified class is honoured in a protected runtime only while its
+ * database shows the ENFORCED posture and every active TA-07 fence. The
+ * check precedes any CP call, so a misconfigured database never obtains or
+ * records authority.
+ */
+async function assertPersistenceEnforced(
+  deps: OrderAuthorityEnforcementDependencies,
+): Promise<void> {
+  const posture = deps.posture
+  if (!posture) return deny("UNAVAILABLE")
+  let verdict: PersistencePostureVerdict
+  try {
+    verdict = await posture.verify()
+  } catch {
+    return deny("UNAVAILABLE")
+  }
+  if (!verdict.enforced) {
+    // The reason is an operator signal only; callers see the generic 403.
+    console.error(`Trade-A persistence posture refused: ${verdict.reason}`)
+    deny("PERSISTENCE_POSTURE_NOT_ENFORCED")
+  }
 }
 
 /**
@@ -213,6 +244,25 @@ export function classifyTradeRoute(method: string, path: string): TradeRouteDeci
   }
   if (CART_BUILDING.test(p)) return { kind: "pass" }
   return { kind: "denied", outcome: "UNCATALOGUED_OPERATION" }
+}
+
+const DENIAL = /^Trade-A order authority denied \(([A-Z][A-Z0-9_]{0,63})\)/
+// The TA-05/TA-07 PostgreSQL fences raise "Trade-A denied: ..." inside a write.
+const FENCE = /\bTrade-A denied:/
+
+/**
+ * A Trade-A denial however it reaches an error handler: thrown directly (the
+ * route PEP), serialised by Medusa's workflow engine (the completeCartWorkflow
+ * hook rethrows a plain { message } object), or raised by a TA-07 fence in
+ * PostgreSQL. Anything else is not Trade-A's to answer and returns null.
+ */
+export function tradeADenialOf(error: unknown): OrderAuthorityDenied | null {
+  if (error instanceof OrderAuthorityDenied) return error
+  const message = (error as { message?: unknown } | null | undefined)?.message
+  if (typeof message !== "string") return null
+  const outcome =
+    DENIAL.exec(message)?.[1] ?? (FENCE.test(message) ? "PERSISTENCE_FENCE_REFUSED" : null)
+  return outcome ? new OrderAuthorityDenied(outcome, tradeAuthorityProblem(outcome)) : null
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i

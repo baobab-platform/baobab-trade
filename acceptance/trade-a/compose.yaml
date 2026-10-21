@@ -1,0 +1,140 @@
+# Trade-A TA-08 real-runtime acceptance (EA v2.3 EA-R03; ADR-SHARED-039):
+# the SHIPPED Trade image under its protected staging profile, the REAL CP
+# binary built at a pinned merged commit, real RS256-signed workload and human
+# tokens from a test issuer, and PostgreSQL 17 for both Trade and CP. Every hop
+# Trade makes (CP, IAM) is TLS through the `edge`, with a certificate from the
+# run's throwaway CA.
+#
+# REAL_COMPONENT_SYNTHETIC_DATA (EA v2.3 §3.3): NOT EA Gate D, NOT L4, NOT
+# protected staging. run-trade-a.sh refuses any environment but integration.
+# Nothing here is deployable.
+name: baobab-trade-a-ta08
+
+x-pg: &pg
+  image: mirror.gcr.io/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB:-postgres}"]
+    interval: 2s
+    retries: 60
+
+# Trade's protected (staging) runtime. Migration and bootstrap one-offs
+# override the profile to the local test profile (run-trade-a.sh).
+x-trade-env: &trade-env
+  NODE_ENV: staging
+  BAOBAB_ENVIRONMENT: staging
+  BAOBAB_DEPLOYMENT_ENV: staging
+  # TA-05: explicit non-production enablement of the PEP. Never activation.
+  BAOBAB_TRADE_A_ORDER_AUTHORITY_ENABLED: "true"
+  # The harness database has no TLS. Medusa's migration lock connection asks
+  # for SSL whenever the host is not localhost, so the URL says so explicitly
+  # (a protected deployment terminates TLS at its database instead).
+  DATABASE_URL: postgres://trade_runtime:${TRADE_DB_PASSWORD}@tradedb:5432/baobab_trade_ta08?sslmode=disable
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${TRADE_JWT_SECRET}
+  COOKIE_SECRET: ${TRADE_COOKIE_SECRET}
+  BAOBAB_CONTROL_PLANE_BASE_URL: https://cp.gated.test
+  BAOBAB_TRADE_ENGINE_INSTANCE_ID: ${TRADE_ENGINE_INSTANCE_ID}
+  BAOBAB_IAM_WORKLOAD_TOKEN_URL: https://iam.gated.test/realms/baobab/token
+  BAOBAB_IAM_WORKLOAD_CLIENT_ID: baobab-trade-legal-actor-assessor-staging
+  BAOBAB_IAM_WORKLOAD_CLIENT_SECRET: ${TRADE_WORKLOAD_SECRET}
+  NODE_EXTRA_CA_CERTS: /run/ta08/ca.pem
+  # Marks the harness database for src/scripts/acceptance-trade-a.ts only.
+  BAOBAB_TRADE_A_ACCEPTANCE: "true"
+  BAOBAB_TRADE_A_ACCEPTANCE_DB: baobab_trade_ta08
+
+networks:
+  ta08: {}
+
+services:
+  # --- Trade: its PostgreSQL (non-superuser runtime role), Redis and the shipped image.
+  tradedb:
+    <<: *pg
+    # Medusa opens a pool per module (~100 connections during db:migrate). A
+    # non-superuser runtime role cannot use the reserved superuser slots, so
+    # the default 100 is exhausted; protected staging needs the same headroom.
+    command: ["postgres", "-c", "max_connections=300"]
+    environment:
+      POSTGRES_PASSWORD: ${TRADEDB_ADMIN_PASSWORD}
+      TRADE_DB_PASSWORD: ${TRADE_DB_PASSWORD}
+    volumes: ["./tradedb/init.sh:/docker-entrypoint-initdb.d/10-trade-runtime.sh:ro"]
+    networks: [ta08]
+    ports: ["127.0.0.1:55472:5432"]
+
+  redis:
+    image: mirror.gcr.io/library/redis:7-alpine
+    networks: [ta08]
+
+  trade:
+    image: ${TRADE_IMAGE}
+    depends_on:
+      tradedb: { condition: service_healthy }
+      redis: { condition: service_started }
+      edge: { condition: service_started }
+    environment: *trade-env
+    volumes: ["${RUN_DIR}/trade:/run/ta08:ro"]
+    networks: [ta08]
+    ports: ["127.0.0.1:19000:9000"]
+    restart: "no"
+
+  # --- CP: its own database and the release binary at the pinned merged commit.
+  cpdb:
+    <<: *pg
+    environment:
+      POSTGRES_DB: controlplane
+      POSTGRES_USER: controlplane
+      POSTGRES_PASSWORD: ${CPDB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U controlplane -d controlplane"]
+      interval: 2s
+      retries: 60
+    networks: [ta08]
+    ports: ["127.0.0.1:55473:5432"]
+
+  cp:
+    image: ${CP_IMAGE}
+    depends_on: [cpdb, edge]
+    environment:
+      DATABASE_URL: postgres://controlplane:${CPDB_PASSWORD}@cpdb:5432/controlplane?sslmode=disable
+      BAOBAB_ENVIRONMENT: integration
+      HTTP_ADDRESS: ":8080"
+      PLATFORM_CONTEXT_TTL: 5m
+      WORKLOAD_OIDC_ISSUER: https://iam.gated.test/realms/baobab
+      WORKLOAD_OIDC_AUDIENCE: baobab-control-plane
+      ADMIN_OIDC_ISSUER: https://iam.gated.test/realms/baobab
+      ADMIN_OIDC_AUDIENCE: baobab-control-plane-admin
+      ADMIN_OIDC_CLIENT_ID: baobab-control-plane-admin
+      WORKLOAD_REGISTRY_FILE: /run/ta08/workload-registry.yaml
+      TENANT_BOOTSTRAP_REGISTRATION: enabled
+      LEGAL_ACTOR_MANDATE_COMMANDS_ENABLED: "true"
+      LEGAL_ACTOR_MANDATE_LIFECYCLE_ENABLED: "true"
+      # P0-04B Trade-0: the Seller Operating Binding registry and order authority.
+      TRADE_ORDER_AUTHORITY_ENABLED: "true"
+      TRADE_ORDER_AUTHORITY_CLIENT_IDS: baobab-trade-legal-actor-assessor-staging
+      SSL_CERT_FILE: /run/ta08/ca.pem
+    volumes: ["${RUN_DIR}/cp:/run/ta08:ro"]
+    networks: [ta08]
+    ports: ["127.0.0.1:18093:8080"]
+
+  # --- Test IAM and the TLS edge.
+  issuer:
+    image: ${NODE_IMAGE}
+    command: ["node", "/app/issuer.mjs"]
+    environment:
+      BAOBAB_ENVIRONMENT: integration
+      ISSUER: https://iam.gated.test/realms/baobab
+      CLIENTS_FILE: /run/ta08/clients.json
+    volumes:
+      - ./issuer/issuer.mjs:/app/issuer.mjs:ro
+      - ${RUN_DIR}/issuer:/run/ta08:ro
+    networks: [ta08]
+    ports: ["127.0.0.1:18011:8000"]
+
+  edge:
+    image: mirror.gcr.io/library/nginx:1.27-alpine
+    depends_on: [issuer]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${RUN_DIR}/edge:/etc/nginx/tls:ro
+    networks:
+      ta08:
+        aliases: [cp.gated.test, iam.gated.test]

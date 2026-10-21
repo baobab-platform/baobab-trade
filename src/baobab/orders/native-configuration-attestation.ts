@@ -59,7 +59,8 @@ export async function attestNativeSellerConfiguration(
   // submission; a stale or remembered digest is never attested.
   const configuration = await currentNativeSellerConfiguration(scope, deps.facts)
   const token = await deps.tokens.getAccessToken()
-  const correlationId = `trade-attestation/${randomUUID()}`
+  // Shared control-plane/v1: X-Correlation-ID is a bare UUID; CP refuses anything else.
+  const correlationId = randomUUID()
 
   // CP derives tenant, Organisation and market from this RUNTIME context.
   const context = await deps.controlPlane.resolvePlatformContext(
@@ -67,13 +68,15 @@ export async function attestNativeSellerConfiguration(
     scope.organisationId,
     token,
     correlationId,
-    undefined,
+    // ADR-BCP-024 exact-kind attestation: the seller's operating Organisation.
+    "ORGANISATION",
     scope.market,
   )
   const expires = context.expires_at ? Date.parse(context.expires_at) : Number.NaN
   if (
     context.tenant_id !== scope.tenantId ||
     context.organisation_id !== scope.organisationId ||
+    context.organisation_type !== "ORGANISATION" ||
     context.country_code !== scope.market ||
     !(expires > now())
   ) {

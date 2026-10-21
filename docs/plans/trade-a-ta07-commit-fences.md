@@ -130,6 +130,7 @@ against a `SANDBOX` database.
 ## Remaining Trade-A work
 
 TA-08 supplies the real-runtime acceptance, the posture check and the
-certification of `trade.order.commit` and `trade.draft-order.finalize`.
+certification of `trade.order.commit` and `trade.draft-order.finalize`
+([TA-08 record](trade-a-ta08-real-runtime-acceptance.md)).
 Real mandates, bindings and IAM, protected staging and Gate E remain
 external. Trade-B, Trade-C and Trade-D stay out of scope.

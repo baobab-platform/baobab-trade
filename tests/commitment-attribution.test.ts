@@ -99,8 +99,10 @@ describe("TA-04 commitment attribution", () => {
       "tn_synthetic01",
       org,
       "workload-token",
-      expect.stringMatching(/^trade-attribution\//),
-      undefined,
+      expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      ),
+      "ORGANISATION",
       "UG",
     )
     expect(recorded[0]).toMatchObject({
@@ -176,6 +178,8 @@ describe("TA-04 commitment attribution", () => {
     ).rejects.toMatchObject({ outcome: "NATIVE_CONFIGURATION_UNRESOLVED" })
     for (const over of [
       { organisation_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6d" },
+      // CP attested a different organisation kind than the seller's.
+      { organisation_type: "BUYER_ORGANISATION" },
       { country_code: "KE" },
       { expires_at: undefined },
     ]) {
