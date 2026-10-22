@@ -121,6 +121,19 @@ Two parts of Trade still key buyers on Medusa: `GET /store/b2b/context` (on the 
 - **`b2b_spend_budget_balance` and `b2b_spend_reservation_hold`:** written only by the ledger trigger; direct writes are refused.
 - **No backfill:** no budget is created from `order_limit_minor`, so every commitment is `SPEND_POLICY_NOT_CONFIGURED` until a budget is configured through a governed path.
 
+**CAA-06 spend reservation commands** (`src/baobab/b2b/spend-reservation-commands.ts`, `Migration20261022180000`). Each command is one PostgreSQL transaction. It selects the budgets that apply now and moves the reservation's status. A refusal rolls everything back, so no ceiling is ever applied partially.
+
+- **One global lock order.** Every command writes its ledger entries over the union of the budgets it releases and reserves, sorted by `budget_policy_id` in code-point order, releasing before reserving within one budget. Two commands therefore never lock the same budgets in opposite orders. A PostgreSQL regression runs a rollover that releases a stale high-ID budget and reserves a new low-ID one against concurrent submissions taking both; with the earlier order it deadlocked.
+
+- **Submit** reserves the full amount against every applicable budget. Each reservation carries a stable `purchase_reference` (the cart, draft order, RFQ or quotation across versions); a purchase holds at most one ACTIVE reservation, and a hold may last at most 30 days.
+- **Resubmit** replaces the ACTIVE reservation of a purchase with a later version of the same purchase. Only the Principal who submitted it may do so, and only for the same purchase reference, membership, Market, currency and agreement; the new reservation records the one it supersedes. Within each budget the old hold is released before the new one is taken, so an increase needs capacity for the difference only and a reduction returns only the unused portion.
+- **Commit** needs an ACTIVE, unexpired reservation bound to exactly this digest, version, amount and hold revision. Every applicable budget must hold the full amount in its current period at its current revision, and no budget it holds may be stale, retired or no longer applicable; otherwise the result is `CONTEXT_NOT_USABLE` with `ROLLOVER_REQUIRED`. Commit never moves a hold. It converts reserved to committed once and closes the reservation.
+- **Release** (rejection, cancellation) and **expire** (only once `expires_at` has passed) return every unused hold.
+- **Rollover** is the only command that moves a hold. It releases holds in a past period (`PERIOD_ROLLOVER`), on a superseded revision or on a budget that no longer applies (`POLICY_REVISED`), reacquires the full amount atomically and advances the reservation's `hold_revision`. Approvals and buyer receipts bound to the former hold revision therefore cannot commit until revalidated. A shortfall refuses the whole rollover.
+- **Idempotency:** `b2b_spend_command` (append-only) records each applied command's request digest and result. A retry returns the original result (`REPLAYED`); the same key with another request is `CONFLICT`. Refusals are not recorded, so a retry re-evaluates.
+- **Isolation:** a reservation is read only within its Organisation; a foreign one is `BUYER_NOT_AUTHORISED`. Ledger refusals map to closed reasons, and any other failure is `SOURCE_UNAVAILABLE`, never success.
+- **Evidence:** `npm run regression:spend-reservation-commands` runs these on CI's disposable PostgreSQL 17, including concurrent submissions that together exceed capacity.
+
 `Migration20261022120000` adds the grant tables and approval binding:
 
 - **Grant revisions:** owned by the database.
@@ -136,7 +149,7 @@ The legacy `policy.ts` fails closed in the same way: a null spend or approver li
 - **Data backfill.** Existing relationships have no `engine_instance_id` or `link_provenance`, so they are refused until a governed reconciliation records both. No relationship is auto-promoted (ADR-SHARED-042 §11).
 - **Not yet built:**
   - **CAA-05 remainder:**
-    - **Reservation commands (CAA-06):** the idempotent reserve, increase, commit, release, expiry and rollover commands, their multi-policy lock order (entries inserted in `budget_policy_id` order), revalidation of approvals on rollover, and the native Medusa fence that verifies the reservation at commit. Until then nothing writes the ledger, and an evaluator ALLOW is never sufficient on its own;
+    - **CAA-06 remainder:** calling the reservation commands from the RFQ, approval and order flows; the scheduled expiry and month-rollover jobs; approval revalidation after a rollover; the buyer-authority receipt (still a Shared CAA-01 contract); buyer/seller composition; and the native Medusa fence that verifies the reservation at commit. Until then no route reserves or commits, and an evaluator ALLOW is never sufficient on its own;
     - **Budget administration:** the governed path for creating and revising budget policies;
     - **Limit scope:** limits are scoped to the membership, not to the role;
     - **Market mapping:** the governed `market_key` ↔ canonical CP Market mapping, and the CP Market authority source, are missing;
