@@ -1,0 +1,543 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/buyer-organisation/v1/domain.schema.json",
+  "title": "Baobab BuyerOrganisation onboarding and trading-account domain",
+  "description": "Backward-compatible Gate ZB-04 extension of the v1 buyer-counterparty contract. Trade owns the tenant-scoped commercial relationship. Control Plane may register and verify a BUYER_ORGANISATION canonical entity under ADR-BCP-016, but that bounded mechanism does not settle platform-wide Organisation lifecycle ownership.",
+  "$defs": {
+    "buyerOrganisationId": {
+      "type": "string",
+      "pattern": "^(buyerorg|b2borg)_[a-z0-9]+$",
+      "minLength": 10,
+      "maxLength": 63,
+      "description": "Opaque tenant-scoped BuyerOrganisation identifier minted by the Trade authority. It is distinct from canonical_organisation_id."
+    },
+    "buyerApplicationId": {
+      "type": "string",
+      "pattern": "^buyerapp_[a-z0-9]+$",
+      "minLength": 10,
+      "maxLength": 63
+    },
+    "buyerMembershipId": {
+      "type": "string",
+      "pattern": "^(buyermem|b2bmem)_[a-z0-9]+$",
+      "minLength": 10,
+      "maxLength": 63
+    },
+    "buyerSiteId": {
+      "type": "string",
+      "pattern": "^(buyersite|b2bsite)_[a-z0-9]+$",
+      "minLength": 10,
+      "maxLength": 63
+    },
+    "buyerOrganisationStatus": {
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "ACTIVE",
+        "SUSPENDED",
+        "CLOSED",
+        "ARCHIVED"
+      ],
+      "description": "Tenant-scoped Trade lifecycle. CLOSED is the current engine terminal state; ARCHIVED is retained for v1 contract compatibility."
+    },
+    "buyerApplicationStatus": {
+      "type": "string",
+      "enum": [
+        "DRAFT",
+        "SUBMITTED",
+        "INFORMATION_REQUIRED",
+        "UNDER_REVIEW",
+        "APPROVED",
+        "REJECTED",
+        "WITHDRAWN"
+      ]
+    },
+    "buyerMembershipStatus": {
+      "type": "string",
+      "enum": [
+        "INVITED",
+        "ACTIVE",
+        "SUSPENDED",
+        "REVOKED"
+      ]
+    },
+    "buyerRole": {
+      "type": "string",
+      "enum": [
+        "BUYER",
+        "SENIOR_BUYER",
+        "APPROVER",
+        "PROCUREMENT_MANAGER",
+        "ACCOUNT_ADMIN",
+        "VIEWER"
+      ]
+    },
+    "siteType": {
+      "type": "string",
+      "enum": [
+        "DELIVERY",
+        "BILLING"
+      ]
+    },
+    "address": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "line_1",
+        "city",
+        "country_code"
+      ],
+      "properties": {
+        "line_1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "line_2": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "city": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "administrative_area": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 120
+        },
+        "postal_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 32
+        },
+        "country_code": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        }
+      }
+    },
+    "buyerApplication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "buyer_application_id",
+        "tenant_id",
+        "applicant_principal_id",
+        "legal_name",
+        "status",
+        "revision"
+      ],
+      "properties": {
+        "buyer_application_id": {
+          "$ref": "#/$defs/buyerApplicationId"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "applicant_principal_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "legal_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "trading_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "registration_number": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "country_of_registration": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z]{2}$"
+        },
+        "website": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "requested_market_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "status": {
+          "$ref": "#/$defs/buyerApplicationStatus"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "submitted_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "decided_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "decision_reason_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "buyerOrganisation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "buyer_organisation_id",
+        "tenant_id",
+        "name",
+        "status"
+      ],
+      "properties": {
+        "buyer_organisation_id": {
+          "$ref": "#/$defs/buyerOrganisationId"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "legal_entity_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/legalEntityId"
+        },
+        "canonical_organisation_id": {
+          "anyOf": [
+            {
+              "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional reference to the ADR-BCP-018 canonical Organisation (Control Plane CanonicalEntity id). Runtime authority is the Control Plane. Null until the buyer record is linked; existing buyer IDs are preserved."
+        },
+        "source_application_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/buyerApplicationId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "legal_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200,
+          "description": "Optional legal name. The existing v1 `name` field remains required for compatibility."
+        },
+        "trading_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "registration_number": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "status": {
+          "$ref": "#/$defs/buyerOrganisationStatus"
+        },
+        "market_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "default_market_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "currency_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z]{3}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "buyerMembership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "buyer_membership_id",
+        "buyer_organisation_id",
+        "principal_id",
+        "customer_id",
+        "status",
+        "roles"
+      ],
+      "properties": {
+        "buyer_membership_id": {
+          "$ref": "#/$defs/buyerMembershipId"
+        },
+        "buyer_organisation_id": {
+          "$ref": "#/$defs/buyerOrganisationId"
+        },
+        "principal_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Nullable only while status is INVITED; populated from the canonical Principal mapping on acceptance."
+        },
+        "customer_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Nullable only while status is INVITED; populated from the authenticated Trade customer on acceptance."
+        },
+        "status": {
+          "$ref": "#/$defs/buyerMembershipStatus"
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/buyerRole"
+          }
+        },
+        "invited_email": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "email",
+          "maxLength": 320
+        },
+        "invitation_expires_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "INVITED"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "else": {
+            "properties": {
+              "principal_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "customer_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        }
+      ]
+    },
+    "buyerSite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "buyer_site_id",
+        "buyer_organisation_id",
+        "site_type",
+        "name",
+        "address"
+      ],
+      "properties": {
+        "buyer_site_id": {
+          "$ref": "#/$defs/buyerSiteId"
+        },
+        "buyer_organisation_id": {
+          "$ref": "#/$defs/buyerOrganisationId"
+        },
+        "site_type": {
+          "$ref": "#/$defs/siteType"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "tax_registration_reference": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
+      }
+    },
+    "commercialProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "buyer_organisation_id"
+      ],
+      "properties": {
+        "buyer_organisation_id": {
+          "$ref": "#/$defs/buyerOrganisationId"
+        },
+        "erp_business_partner_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "credit_status": {
+          "type": "string",
+          "enum": [
+            "NOT_ASSESSED",
+            "PENDING",
+            "APPROVED",
+            "ON_HOLD",
+            "REJECTED"
+          ]
+        },
+        "credit_limit_minor": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "currency_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z]{3}$"
+        },
+        "payment_term_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "price_agreement_references": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "contract_references": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "source_system": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "ERP",
+            "TRADE",
+            null
+          ]
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

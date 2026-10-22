@@ -12,7 +12,7 @@ schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: 2f5a330fd09f1e62608ae7728897e35c053bf738
+  commit: 57b4eb2ce41a705dec71d685614a7a260f693d5b
 contracts:
   - contracts/commerce/v1/seller-binding.schema.json
   - contracts/payments/v1/merchant-readiness.schema.json
@@ -50,6 +50,19 @@ contracts:
   # Scopes the baobab-trade-workload identity is allowed; the conformance suite
   # checks the Control Plane operations Trade calls against it.
   - contracts/identity/v1/workload-registry.yaml
+  # ZB-G03 step 3 (ADR-0033): the IAM buyer token Trade verifies and CP's
+  # delegated Principal resolution Trade calls.
+  - contracts/identity/v1/buyer-identity-handoff.schema.json
+  - contracts/identity/v1/principal-resolution.schema.json
+  - contracts/identity/v1/principal-resolution.openapi.yaml
+  # ADR-SHARED-042 CAA-03/04/05 (ADR-0033): the BFF caller credential and
+  # buyer assurance policy, CP's estate client binding attestation, and the
+  # TradeBuyerExecutionContext Trade returns.
+  - contracts/identity/v1/assurance-policy.schema.json
+  - contracts/control-plane/v1/estate-client-binding.schema.json
+  - contracts/control-plane/v1/estate-client-binding.openapi.yaml
+  - contracts/trade/v2/buyer-execution-context.schema.json
+  - contracts/buyer-organisation/v1/domain.schema.json
   - contracts/legal-entity/registry.yaml
   - contracts/tenancy/tenancy.yaml
   # ADR-SHARED-039 Trade-0: Trade attests its native seller configuration to

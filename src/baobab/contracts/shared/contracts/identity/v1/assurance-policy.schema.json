@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/identity/v1/assurance-policy.schema.json",
+  "title": "Buyer operation assurance policy",
+  "description": "ADR-SHARED-042 work package CAA-03 (Platform Owner ruling of 22 October 2026): the versioned, provider-neutral policy that says what verified IAM authentication evidence each Trade buyer operation needs. A policy is scoped to exactly one trusted issuer and one consuming audience. IAM owns the evidence and the meaning of its acr and amr values; this contract owns the canonical profiles and how operations map to them. acr values are matched exactly against a profile's accepted list. No ordering between acr strings is assumed, and two values are never equivalent unless the profile lists both. Meeting a profile is necessary, never sufficient: the canonical Principal, buyer Organisation, Trade membership, Market and operation policy are each still required. A missing, unapproved, expired or issuer-mismatched policy prevents protected buyer execution (decision DENY with OPERATION_NOT_ACTIVATED). Evidence that fails a profile is ASSURANCE_INSUFFICIENT (trade/v2 buyer-execution-context decisionReason). A BFF or browser can never raise assurance by supplying claims: only claims of a verified, currently active IAM access token count. It is distinct from administration/v1 assurance-policy.yaml, which ranks the workforce realm's levels for administrative authority; buyer evidence from another issuer is never ranked on that ladder. This contract activates nothing.",
+  "$defs": {
+    "assuranceProfile": {
+      "type": "string",
+      "enum": [
+        "BUYER_SESSION",
+        "BUYER_COMMITMENT",
+        "BUYER_ADMINISTRATION"
+      ],
+      "description": "Canonical assurance profiles. BUYER_SESSION: reading buyer context, private catalogue and contract prices, and editing a cart. BUYER_COMMITMENT: actions that commit the buyer Organisation or bind the person to it (RFQ, quotation acceptance, purchase approval, order commitment, draft finalisation, invitation acceptance). BUYER_ADMINISTRATION: managing the Organisation's members. A policy defines a requirement for every profile; it may make a profile unattainable only by leaving the operation unmapped, which is not permitted, so an unready profile is expressed by a policy that is not APPROVED."
+    },
+    "policyStatus": {
+      "type": "string",
+      "enum": [
+        "DRAFT",
+        "APPROVED",
+        "SUSPENDED",
+        "RETIRED"
+      ],
+      "description": "Only an APPROVED policy inside its effective interval may be enforced. DRAFT exists for synthetic testing only."
+    },
+    "ProfileRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted_acr_values",
+        "step_up_required"
+      ],
+      "description": "Evidence a verified token must carry to satisfy one profile. acr must be one of accepted_acr_values. When required_methods is present, the token's amr must contain every listed method; a token without amr fails it. When max_authentication_age_seconds is present, auth_time is required and must be no older than that and not later than the evaluation time (a future auth_time is not fresh). step_up_required means the qualifying authentication must be a re-authentication for this operation class, proven by an auth_time inside max_authentication_age_seconds (which is then required). phishing_resistant_required states that the issuer guarantees every accepted acr or required method is phishing-resistant; it never relaxes.",
+      "properties": {
+        "accepted_acr_values": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "description": "Exact issuer acr values backed by IAM evidence and approved for this profile. Never a wildcard or a prefix."
+        },
+        "required_methods": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "description": "OIDC amr values (RFC 8176 names where they exist) that must all be present."
+        },
+        "max_authentication_age_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "step_up_required": {
+          "type": "boolean"
+        },
+        "phishing_resistant_required": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "step_up_required": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "max_authentication_age_seconds"
+            ]
+          }
+        }
+      ]
+    },
+    "BuyerAssurancePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_id",
+        "policy_version",
+        "status",
+        "issuer",
+        "audience",
+        "approval_reference",
+        "effective_from",
+        "profiles",
+        "operation_profiles"
+      ],
+      "properties": {
+        "policy_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+          "minLength": 3,
+          "maxLength": 128
+        },
+        "policy_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Monotonic. A decision records the version it evaluated (trade/v2 policy_revision)."
+        },
+        "status": {
+          "$ref": "#/$defs/policyStatus"
+        },
+        "issuer": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^\\s?#]+$",
+          "description": "The single trusted IAM issuer whose acr and amr values this policy interprets. Evidence from any other issuer fails."
+        },
+        "audience": {
+          "const": "baobab-trade"
+        },
+        "approval_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "The security approval for the accepted values and their IAM issuer evidence. Redacted provenance, never a credential."
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "BUYER_SESSION",
+            "BUYER_COMMITMENT",
+            "BUYER_ADMINISTRATION"
+          ],
+          "properties": {
+            "BUYER_SESSION": {
+              "$ref": "#/$defs/ProfileRequirement"
+            },
+            "BUYER_COMMITMENT": {
+              "$ref": "#/$defs/ProfileRequirement"
+            },
+            "BUYER_ADMINISTRATION": {
+              "$ref": "#/$defs/ProfileRequirement"
+            }
+          }
+        },
+        "operation_profiles": {
+          "type": "object",
+          "description": "Every buyer operation, mapped to its canonical profile. The mapping is fixed by this contract version, so a policy can never downgrade an operation to a weaker profile; changing it requires a new contract version.",
+          "required": [
+            "trade.buyer-context.resolve",
+            "trade.private-catalogue.view",
+            "trade.contract-price.view",
+            "trade.cart.modify",
+            "trade.rfq.submit",
+            "trade.quotation.accept",
+            "trade.purchase-approval.decide",
+            "trade.order.commit",
+            "trade.draft-order.finalize",
+            "trade.buyer-invitation.accept",
+            "trade.buyer-member.manage"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "trade.buyer-context.resolve": {
+              "const": "BUYER_SESSION"
+            },
+            "trade.private-catalogue.view": {
+              "const": "BUYER_SESSION"
+            },
+            "trade.contract-price.view": {
+              "const": "BUYER_SESSION"
+            },
+            "trade.cart.modify": {
+              "const": "BUYER_SESSION"
+            },
+            "trade.rfq.submit": {
+              "const": "BUYER_COMMITMENT"
+            },
+            "trade.quotation.accept": {
+              "const": "BUYER_COMMITMENT"
+            },
+            "trade.purchase-approval.decide": {
+              "const": "BUYER_COMMITMENT"
+            },
+            "trade.order.commit": {
+              "const": "BUYER_COMMITMENT"
+            },
+            "trade.draft-order.finalize": {
+              "const": "BUYER_COMMITMENT"
+            },
+            "trade.buyer-invitation.accept": {
+              "const": "BUYER_COMMITMENT"
+            },
+            "trade.buyer-member.manage": {
+              "const": "BUYER_ADMINISTRATION"
+            }
+          }
+        }
+      }
+    },
+    "canonicalOperationProfiles": {
+      "description": "The canonical mapping, also published for consumers.",
+      "const": {
+        "trade.buyer-context.resolve": "BUYER_SESSION",
+        "trade.private-catalogue.view": "BUYER_SESSION",
+        "trade.contract-price.view": "BUYER_SESSION",
+        "trade.cart.modify": "BUYER_SESSION",
+        "trade.rfq.submit": "BUYER_COMMITMENT",
+        "trade.quotation.accept": "BUYER_COMMITMENT",
+        "trade.purchase-approval.decide": "BUYER_COMMITMENT",
+        "trade.order.commit": "BUYER_COMMITMENT",
+        "trade.draft-order.finalize": "BUYER_COMMITMENT",
+        "trade.buyer-invitation.accept": "BUYER_COMMITMENT",
+        "trade.buyer-member.manage": "BUYER_ADMINISTRATION"
+      }
+    }
+  },
+  "$ref": "#/$defs/BuyerAssurancePolicy"
+}

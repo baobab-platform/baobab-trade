@@ -13,6 +13,12 @@ const B2BOrganisation = model
       canonical_organisation_id: model.text().index().nullable(),
       erp_business_partner_id: model.text().index().nullable(),
       default_market_key: model.text().nullable(),
+      // ADR-SHARED-042 section 5 (Migration20261022090000): the Trade engine
+      // instance this relationship belongs to, its database-owned revision and
+      // the provenance of the canonical Organisation link.
+      engine_instance_id: model.text().nullable(),
+      relationship_revision: model.number().default(1),
+      link_provenance: model.text().nullable(),
     },
   )
   .indexes([

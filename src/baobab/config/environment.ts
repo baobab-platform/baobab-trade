@@ -18,6 +18,22 @@ export type BaobabTradeEnvironment = {
   iamWorkloadTokenUrl?: string
   iamWorkloadClientId: string
   iamWorkloadClientSecret?: string
+  // ZB-G03 step 3 (CP ADR-BCP-028): the buyer identity path. Default off.
+  // Enabled, Trade verifies buyer IAM tokens from exactly this issuer,
+  // obtained by these confidential BFF clients, and resolves the canonical
+  // Principal through the Control Plane with the workload identity above.
+  buyerIdentityEnabled: boolean
+  buyerIamIssuer?: string
+  buyerAuthorisedParties: string[]
+  // ADR-SHARED-042 CAA-03 interim verifier (ADR-0033): the security-approved
+  // exact acr values for BUYER_SESSION operations and their approval. Unset,
+  // every buyer operation is OPERATION_NOT_ACTIVATED; there is no default.
+  buyerAcceptedAcr: string[]
+  buyerAssuranceApprovalReference?: string
+  // CAA-04: this Trade instance and its deployment boundary, as CP's estate
+  // client binding names them. Neither is ever taken from a request.
+  tradeEngineInstanceId?: string
+  deploymentEnvironment?: string
   logLevel: string
 }
 
@@ -51,5 +67,18 @@ export const getBaobabTradeEnvironment = (): BaobabTradeEnvironment => ({
   iamWorkloadTokenUrl: process.env.BAOBAB_IAM_WORKLOAD_TOKEN_URL,
   iamWorkloadClientId: process.env.BAOBAB_IAM_WORKLOAD_CLIENT_ID || "baobab-trade-workload",
   iamWorkloadClientSecret: process.env.BAOBAB_IAM_WORKLOAD_CLIENT_SECRET,
+  buyerIdentityEnabled: process.env.BAOBAB_BUYER_IDENTITY_ENABLED === "true",
+  buyerIamIssuer: process.env.BAOBAB_IAM_BUYER_ISSUER,
+  buyerAuthorisedParties: (process.env.BAOBAB_IAM_BUYER_AUTHORISED_PARTIES ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+  buyerAcceptedAcr: (process.env.BAOBAB_BUYER_ACCEPTED_ACR ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+  buyerAssuranceApprovalReference: process.env.BAOBAB_BUYER_ASSURANCE_APPROVAL_REFERENCE,
+  tradeEngineInstanceId: process.env.BAOBAB_TRADE_ENGINE_INSTANCE_ID,
+  deploymentEnvironment: process.env.BAOBAB_ENVIRONMENT,
   logLevel: process.env.LOG_LEVEL || "info",
 })

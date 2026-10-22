@@ -20,12 +20,18 @@ import {
  * explicitly enables it. See this slice's ADR for why it isn't
  * requiredInProduction.
  */
+/** The CP RUNTIME context that attested the tenant (ADR-SHARED-042 section 7 cp_context_id). */
+export type AttestedOrganisationContext = {
+  contextId: string
+  expiresAt?: Date
+}
+
 export interface WorkloadTenantVerifier {
   verifyOrganisationTenant(
     tenantId: string,
     canonicalOrganisationId: string,
     correlationId: string,
-  ): Promise<void>
+  ): Promise<AttestedOrganisationContext>
 }
 
 export class TenantAttestationError extends Error {
@@ -45,7 +51,7 @@ export class ControlPlaneWorkloadTenantVerifier implements WorkloadTenantVerifie
     tenantId: string,
     canonicalOrganisationId: string,
     correlationId: string,
-  ): Promise<void> {
+  ): Promise<AttestedOrganisationContext> {
     const accessToken = await this.tokenProvider.getAccessToken()
     const resolved = await this.controlPlaneClient.resolvePlatformContext(
       tenantId,
@@ -62,6 +68,16 @@ export class ControlPlaneWorkloadTenantVerifier implements WorkloadTenantVerifie
         "Control Plane platform context does not attest the asserted tenant for this organisation",
       )
     }
+    if (
+      resolved.organisation_id !== undefined &&
+      resolved.organisation_id !== canonicalOrganisationId
+    ) {
+      throw new TenantAttestationError(
+        "Control Plane platform context is for a different organisation",
+      )
+    }
+    const expiresAt = resolved.expires_at ? new Date(resolved.expires_at) : undefined
+    return { contextId: resolved.context_id, expiresAt }
   }
 }
 
