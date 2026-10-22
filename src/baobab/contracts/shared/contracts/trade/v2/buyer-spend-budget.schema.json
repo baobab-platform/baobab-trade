@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/trade/v2/buyer-spend-budget.schema.json",
+  "title": "Trade buyer spend budget, period and reservation/commitment ledger",
+  "description": "ADR-SHARED-042 section 14, Decision 5 (Platform Owner, 2026-10-22): cumulative buyer spending authority. Trade owns this commercial spending-control ledger; ERP remains the accounting authority and Payments the funds-movement authority. Consumption is authorised purchasing commitment, never cash or invoice settlement. Every applicable ceiling must pass independently: the per-transaction limit (trade SpendLimit, unchanged), the mandatory calendar-month MEMBERSHIP budget, and any configured AGREEMENT or ORGANISATION budget. No role may disregard a cumulative budget, and approving one purchase never raises a budget. Available capacity is limit minus committed minus active reservations. A formally submitted purchase reserves its full amount; the reservation is held through approval, converted atomically to committed consumption at order commit (never counted twice), and released only through a verified lifecycle transition. Refunds, returns and historical adjustments never restore capacity without a separately approved reversal policy. This contract activates nothing.",
+  "$defs": {
+    "budgetPolicyId": { "type": "string", "pattern": "^b2bbud_[0-9A-Za-z]{6,64}$" },
+    "reservationId": { "type": "string", "pattern": "^b2bres_[0-9A-Za-z]{6,64}$" },
+    "ledgerEntryId": { "type": "string", "pattern": "^b2bled_[0-9A-Za-z]{6,64}$" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "minorUnits": { "type": "integer", "minimum": 0 },
+    "positiveMinorUnits": { "type": "integer", "minimum": 1 },
+    "timezone": {
+      "type": "string",
+      "pattern": "^(UTC|[A-Z][A-Za-z_]+(/[A-Za-z0-9_+-]+){1,2})$",
+      "description": "IANA time zone governing period boundaries. UTC is the baseline unless the approved policy states another zone."
+    },
+    "agreementReference": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$",
+      "description": "The procurement agreement or contract the budget is bound to, as Trade's commercial terms record it."
+    },
+    "evidenceReference": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "budgetScope": {
+      "type": "string",
+      "description": "MEMBERSHIP: one member's mandatory calendar-month budget. AGREEMENT: the ceiling of one procurement agreement over its term, binding when configured. ORGANISATION: a calendar-month budget shared by every purchasing member of the buyer Organisation, binding when configured.",
+      "enum": ["MEMBERSHIP", "AGREEMENT", "ORGANISATION"]
+    },
+    "periodKind": {
+      "type": "string",
+      "description": "CALENDAR_MONTH is the standard period, never a rolling interval. AGREEMENT_TERM is the agreement's own bounded term.",
+      "enum": ["CALENDAR_MONTH", "AGREEMENT_TERM"]
+    },
+    "BudgetPeriod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["period_kind", "timezone", "starts_at", "ends_at"],
+      "description": "One concrete period: starts_at inclusive, ends_at exclusive. For CALENDAR_MONTH both are local midnights of the first day of consecutive months in the governing time zone (scripts/tests/test_buyer_spend_budget.py checks this; JSON Schema cannot).",
+      "properties": {
+        "period_kind": { "$ref": "#/$defs/periodKind" },
+        "timezone": { "$ref": "#/$defs/timezone" },
+        "starts_at": { "type": "string", "format": "date-time" },
+        "ends_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "BuyerSpendBudgetPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A versioned budget policy. Its revision is monotonic; any change to limit, scope, period or effective interval is a new revision, and reservations or approvals bound to an earlier revision must be revalidated.",
+      "required": [
+        "budget_policy_id", "revision", "status", "scope", "tenant_id", "buyer_organisation_id", "market_id",
+        "currency", "period_kind", "timezone", "limit_minor", "effective_from", "evidence_reference"
+      ],
+      "properties": {
+        "budget_policy_id": { "$ref": "#/$defs/budgetPolicyId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "status": { "type": "string", "enum": ["ACTIVE", "SUSPENDED", "RETIRED"] },
+        "scope": { "$ref": "#/$defs/budgetScope" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "buyer_organisation_id": { "$ref": "../../buyer-organisation/v1/domain.schema.json#/$defs/buyerOrganisationId" },
+        "buyer_membership_id": { "$ref": "../../buyer-organisation/v1/domain.schema.json#/$defs/buyerMembershipId" },
+        "agreement_reference": { "$ref": "#/$defs/agreementReference" },
+        "market_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/resourceId",
+          "description": "The canonical CP Market. A Trade market_key is usable only through a governed, exact mapping."
+        },
+        "currency": { "$ref": "#/$defs/currency" },
+        "period_kind": { "$ref": "#/$defs/periodKind" },
+        "timezone": { "$ref": "#/$defs/timezone" },
+        "limit_minor": {
+          "$ref": "#/$defs/positiveMinorUnits",
+          "description": "Never null, zero or inferred: an absent budget is SPEND_POLICY_NOT_CONFIGURED, never unlimited."
+        },
+        "effective_from": { "type": "string", "format": "date-time" },
+        "effective_until": { "type": "string", "format": "date-time" },
+        "evidence_reference": { "$ref": "#/$defs/evidenceReference" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "scope": { "const": "MEMBERSHIP" } } },
+          "then": {
+            "required": ["buyer_membership_id"],
+            "properties": { "period_kind": { "const": "CALENDAR_MONTH" } },
+            "not": { "required": ["agreement_reference"] }
+          }
+        },
+        {
+          "if": { "properties": { "scope": { "const": "ORGANISATION" } } },
+          "then": {
+            "properties": { "period_kind": { "const": "CALENDAR_MONTH" } },
+            "allOf": [{ "not": { "required": ["buyer_membership_id"] } }, { "not": { "required": ["agreement_reference"] } }]
+          }
+        },
+        {
+          "if": { "properties": { "scope": { "const": "AGREEMENT" } } },
+          "then": {
+            "required": ["agreement_reference", "effective_until"],
+            "properties": { "period_kind": { "const": "AGREEMENT_TERM" } },
+            "not": { "required": ["buyer_membership_id"] }
+          }
+        }
+      ]
+    },
+    "ledgerEntryKind": {
+      "type": "string",
+      "description": "RESERVE acquires capacity for a reservation (at formal submission, or additional capacity when the amount increases). COMMIT converts reserved capacity into committed consumption at order commit; it never adds consumption. RELEASE returns the verified unused portion of a reservation (rejection, cancellation, expiry, reduction, period rollover).",
+      "enum": ["RESERVE", "COMMIT", "RELEASE"]
+    },
+    "releaseReason": {
+      "type": "string",
+      "enum": ["REJECTED", "CANCELLED", "EXPIRED", "AMOUNT_REDUCED", "PERIOD_ROLLOVER", "POLICY_REVISED"]
+    },
+    "SpendLedgerEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One append-only ledger entry against one budget policy revision and period. Entries are never updated or deleted. A reservation is bound to one immutable purchase and is never transferred between buyers, Markets, currencies, policies or periods. The idempotency key makes a retried command return the original entry instead of a second one.",
+      "required": [
+        "ledger_entry_id", "entry_kind", "reservation_id", "budget_policy_id", "policy_revision", "period",
+        "tenant_id", "buyer_organisation_id", "buyer_membership_id", "market_id", "currency", "amount_minor",
+        "transaction_digest", "resource_version", "idempotency_key", "actor_principal_id", "occurred_at"
+      ],
+      "properties": {
+        "ledger_entry_id": { "$ref": "#/$defs/ledgerEntryId" },
+        "entry_kind": { "$ref": "#/$defs/ledgerEntryKind" },
+        "reservation_id": { "$ref": "#/$defs/reservationId" },
+        "budget_policy_id": { "$ref": "#/$defs/budgetPolicyId" },
+        "policy_revision": { "type": "integer", "minimum": 1 },
+        "period": { "$ref": "#/$defs/BudgetPeriod" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "buyer_organisation_id": { "$ref": "../../buyer-organisation/v1/domain.schema.json#/$defs/buyerOrganisationId" },
+        "buyer_membership_id": { "$ref": "../../buyer-organisation/v1/domain.schema.json#/$defs/buyerMembershipId" },
+        "market_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/resourceId" },
+        "currency": { "$ref": "#/$defs/currency" },
+        "amount_minor": { "$ref": "#/$defs/positiveMinorUnits" },
+        "transaction_digest": { "$ref": "buyer-execution-context.schema.json#/$defs/transactionDigest" },
+        "resource_version": { "type": "integer", "minimum": 1 },
+        "commitment_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "The committed order, required for COMMIT."
+        },
+        "release_reason": { "$ref": "#/$defs/releaseReason" },
+        "idempotency_key": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$" },
+        "actor_principal_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The CP canonical Principal whose governed action produced the entry (buyer, approver or the lifecycle owner)."
+        },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "entry_kind": { "const": "COMMIT" } } },
+          "then": { "required": ["commitment_reference"], "not": { "required": ["release_reason"] } }
+        },
+        {
+          "if": { "properties": { "entry_kind": { "const": "RELEASE" } } },
+          "then": { "required": ["release_reason"], "not": { "required": ["commitment_reference"] } }
+        },
+        {
+          "if": { "properties": { "entry_kind": { "const": "RESERVE" } } },
+          "then": { "allOf": [{ "not": { "required": ["release_reason"] } }, { "not": { "required": ["commitment_reference"] } }] }
+        }
+      ]
+    },
+    "BudgetCapacity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The balance of one policy revision and period: available_minor = limit_minor - committed_minor - reserved_minor, never negative.",
+      "required": ["budget_policy_id", "policy_revision", "period", "currency", "limit_minor", "committed_minor", "reserved_minor", "available_minor"],
+      "properties": {
+        "budget_policy_id": { "$ref": "#/$defs/budgetPolicyId" },
+        "policy_revision": { "type": "integer", "minimum": 1 },
+        "period": { "$ref": "#/$defs/BudgetPeriod" },
+        "currency": { "$ref": "#/$defs/currency" },
+        "limit_minor": { "$ref": "#/$defs/positiveMinorUnits" },
+        "committed_minor": { "$ref": "#/$defs/minorUnits" },
+        "reserved_minor": { "$ref": "#/$defs/minorUnits" },
+        "available_minor": { "$ref": "#/$defs/minorUnits" }
+      }
+    }
+  }
+}
