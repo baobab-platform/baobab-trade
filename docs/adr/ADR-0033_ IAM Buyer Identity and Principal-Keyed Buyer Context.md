@@ -94,14 +94,32 @@ Two parts of Trade still key buyers on Medusa: `GET /store/b2b/context` (on the 
 6. **Commitments.**
    - A required purchase order must be present and match its format.
    - Exactly one in-effect spend limit for the Market and currency, with a positive order limit, is required; otherwise `SPEND_POLICY_NOT_CONFIGURED`.
+   - Cumulative budgets (step 7 below) must pass before any escalation is considered.
    - Over the limit is `SPEND_LIMIT_EXCEEDED`, unless an enabled approval policy for that exact Market and currency permits escalation (`APPROVAL_REQUIRED`).
    - A bound approval releases the commitment only when its digest, version, amount, currency, Market and policy revision are unchanged (`TRANSACTION_CHANGED`), the initiator is this Principal, the approver is someone else, and the approver's current re-evaluation still ALLOWs.
-7. **Approval decisions.**
+7. **Cumulative budgets** (Decision 5, ADR-SHARED-042 §14). Every applicable ceiling passes independently, and approving a purchase never raises a budget, so a shortfall is always `SPEND_LIMIT_EXCEEDED` and never `APPROVAL_REQUIRED`, for every role including `ACCOUNT_ADMIN`.
+   - Exactly one ACTIVE, in-effect calendar-month `MEMBERSHIP` budget for this membership, Market and currency is required: none is `SPEND_POLICY_NOT_CONFIGURED`, more than one is `CONTEXT_NOT_USABLE`.
+   - An `ORGANISATION` budget, and an `AGREEMENT` budget for the purchase's own agreement, bind when configured; more than one of either is `CONTEXT_NOT_USABLE`.
+   - Available capacity is limit − committed − reserved for the current period. A budget with no current-period balance has consumed nothing; earlier periods never carry over.
+   - The purchase's own reservation is credited once, through its hold on that policy revision and period, so the purchase is never counted twice and an increase needs capacity for the difference only. An expired, closed, stale-revision or other-period hold credits nothing.
+   - A reservation whose membership, Market, currency, agreement, digest or resource version differs from the transaction is `TRANSACTION_CHANGED`: reservations are never transferred.
+8. **Approval decisions.**
    - Nobody approves their own transaction (`SEPARATION_OF_DUTIES`).
    - An explicit in-effect approval limit for the Market and currency is required; otherwise `APPROVAL_AUTHORITY_NOT_CONFIGURED`, never `APPROVAL_REQUIRED`.
    - The amount must be within it (`APPROVAL_THRESHOLD_EXCEEDED`).
 
-`buyer-operation-policy-source.ts` loads the facts. Each source fails independently to `UNAVAILABLE`. Malformed money rows are dropped, which fails closed. A purchase-order requirement applies organisation-wide where no Market-specific row exists, because it is a restriction.
+`buyer-operation-policy-source.ts` loads the facts. Each source fails independently to `UNAVAILABLE`. Malformed money rows are dropped, which fails closed. A purchase-order requirement applies organisation-wide where no Market-specific row exists, because it is a restriction. Budgets are the exception to dropping: a dropped `ORGANISATION` or `AGREEMENT` budget would remove a ceiling, so any malformed budget, balance or hold makes that source `UNAVAILABLE`. The reservation is read only by the identifier on the purchase record and only within this Organisation; Shared's integer `resource_version` is compared in its decimal form.
+
+`Migration20261022150000` adds the Decision 5 ledger. The database, not application code, is the capacity authority:
+
+- **`b2b_spend_budget_policy`:** versioned, with a database-owned revision that advances on every change. Scope, Market, currency and period kind are immutable, RETIRED is terminal, policies are never deleted, the time zone must be a known IANA zone (UTC by default), and at most one ACTIVE policy exists per scope binding.
+- **`b2b_spend_reservation`:** one immutable purchase (membership, Market, currency, agreement, digest, resource version). Its binding never changes, the membership must belong to its Organisation, and every non-ACTIVE state is terminal.
+- **`b2b_spend_ledger_entry`:** append-only RESERVE, COMMIT and RELEASE entries with a unique idempotency key. Its trigger stamps the time, derives the calendar month in the policy's zone (or the agreement term), locks the policy and the period balance, and applies the entry in the same transaction:
+  - RESERVE needs an ACTIVE, unexpired reservation and the current policy revision, and is refused when it exceeds limit − committed − reserved;
+  - COMMIT converts reserved to committed and never exceeds what the reservation holds;
+  - RELEASE returns only the unused portion.
+- **`b2b_spend_budget_balance` and `b2b_spend_reservation_hold`:** written only by the ledger trigger; direct writes are refused.
+- **No backfill:** no budget is created from `order_limit_minor`, so every commitment is `SPEND_POLICY_NOT_CONFIGURED` until a budget is configured through a governed path.
 
 `Migration20261022120000` adds the grant tables and approval binding:
 
@@ -118,7 +136,8 @@ The legacy `policy.ts` fails closed in the same way: a null spend or approver li
 - **Data backfill.** Existing relationships have no `engine_instance_id` or `link_provenance`, so they are refused until a governed reconciliation records both. No relationship is auto-promoted (ADR-SHARED-042 §11).
 - **Not yet built:**
   - **CAA-05 remainder:**
-    - **Cumulative spend:** commitments are not yet counted against a budget, and no concurrent reservation exists, because the ruling's "remaining authority" needs a budget period and a reservation model that `SpendLimit` (a per-transaction cap) does not define;
+    - **Reservation commands (CAA-06):** the idempotent reserve, increase, commit, release, expiry and rollover commands, their multi-policy lock order (entries inserted in `budget_policy_id` order), revalidation of approvals on rollover, and the native Medusa fence that verifies the reservation at commit. Until then nothing writes the ledger, and an evaluator ALLOW is never sufficient on its own;
+    - **Budget administration:** the governed path for creating and revising budget policies;
     - **Limit scope:** limits are scoped to the membership, not to the role;
     - **Market mapping:** the governed `market_key` ↔ canonical CP Market mapping, and the CP Market authority source, are missing;
     - **Unbuilt evaluators:** the invitation-recipient evaluator and the governed administrative scope for member management;

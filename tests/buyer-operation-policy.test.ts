@@ -9,7 +9,9 @@ import {
   BUYER_OPERATION_RULES,
   evaluateBuyerOperation,
   type BoundApproval,
+  type BudgetFact,
   type BuyerOperationFacts,
+  type ReservationFact,
   type RoleAssignment,
   type ScopeGrant,
 } from "../src/baobab/b2b/buyer-operation-policy"
@@ -26,6 +28,30 @@ const ALICE = "019a0915-a8c0-7000-8000-00000000a011"
 const BOB = "019a0915-a8c0-7000-8000-00000000b022"
 const DIGEST = `sha256:${"a".repeat(64)}`
 const SITE = "b2bsite_dc00000001"
+const MEMBERSHIP = "b2bmem_alice000001"
+const OCTOBER = {
+  startsAt: new Date("2026-10-01T00:00:00Z"),
+  endsAt: new Date("2026-11-01T00:00:00Z"),
+}
+
+/** Decision 5 worked example: R100,000 monthly, R55,000 committed, R30,000 reserved, R15,000 available. */
+const budget = (change: Partial<BudgetFact> = {}): BudgetFact => ({
+  policyId: "b2bbud_member000001",
+  revision: 1,
+  status: "ACTIVE",
+  scope: "MEMBERSHIP",
+  membershipId: MEMBERSHIP,
+  agreementReference: null,
+  marketKey: "ZA",
+  currencyCode: "ZAR",
+  limitMinor: 10_000_000n,
+  effectiveFrom: new Date("2026-01-01T00:00:00Z"),
+  effectiveUntil: null,
+  period: OCTOBER,
+  committedMinor: 5_500_000n,
+  reservedMinor: 3_000_000n,
+  ...change,
+})
 
 const grant = (key: string, change: Partial<ScopeGrant> = {}): ScopeGrant => ({
   key,
@@ -47,6 +73,7 @@ const facts = (change: Partial<BuyerOperationFacts> = {}): BuyerOperationFacts =
   now: NOW,
   principalId: ALICE,
   organisationId: ORG,
+  membershipId: MEMBERSHIP,
   membership: { status: "ACTIVE", effectiveFrom: null, effectiveUntil: null },
   roles: [assignment("BUYER")],
   marketKey: "ZA",
@@ -82,6 +109,7 @@ const facts = (change: Partial<BuyerOperationFacts> = {}): BuyerOperationFacts =
     { marketKey: "ZA", currencyCode: "ZAR", thresholdMinor: 50_000n, enabled: true },
   ],
   purchaseOrder: { rule: null },
+  budgets: [budget()],
   ...change,
 })
 
@@ -545,6 +573,204 @@ describe("approval binding and separation of duties", () => {
         }),
       ).toEqual(denied("CONTEXT_NOT_USABLE"))
     })
+  })
+})
+
+describe("cumulative budgets (Decision 5)", () => {
+  // The ruling's example: a R50,000 per-order cap and a R100,000 monthly budget with R15,000 left.
+  const perOrder = [
+    {
+      marketKey: "ZA",
+      currencyCode: "ZAR",
+      orderLimitMinor: 5_000_000n,
+      approvalLimitMinor: null,
+      effectiveFrom: null,
+      effectiveUntil: null,
+    },
+  ]
+  const policies = [
+    { marketKey: "ZA", currencyCode: "ZAR", thresholdMinor: 10_000_000n, enabled: true },
+  ]
+  const tx = (
+    amountMinor: bigint,
+    change: Partial<BuyerOperationFacts["transaction"] & object> = {},
+  ) => ({
+    amountMinor,
+    currencyCode: "ZAR",
+    transactionDigest: DIGEST,
+    resourceVersion: "cart:v3",
+    ...change,
+  })
+  const under = (change: Partial<BuyerOperationFacts> = {}) =>
+    decide({ spendAuthorities: perOrder, approvalPolicies: policies, ...change })
+  const reservation = (change: Partial<ReservationFact> = {}): ReservationFact => ({
+    status: "ACTIVE",
+    membershipId: MEMBERSHIP,
+    marketKey: "ZA",
+    currencyCode: "ZAR",
+    agreementReference: null,
+    transactionDigest: DIGEST,
+    resourceVersion: "cart:v3",
+    expiresAt: new Date("2026-10-29T00:00:00Z"),
+    holds: [
+      {
+        policyId: "b2bbud_member000001",
+        policyRevision: 1,
+        periodStartsAt: OCTOBER.startsAt,
+        reservedMinor: 2_000_000n,
+      },
+    ],
+    ...change,
+  })
+
+  it("refuses a purchase within the per-order cap that exceeds the remaining monthly budget", () => {
+    expect(under({ transaction: tx(2_000_000n) })).toEqual(denied("SPEND_LIMIT_EXCEEDED"))
+    expect(under({ transaction: tx(1_500_000n) })).toEqual(ALLOW)
+  })
+
+  it("never escalates a budget shortfall to approval, for any role", () => {
+    for (const role of ["BUYER", "PROCUREMENT_MANAGER", "ACCOUNT_ADMIN"]) {
+      expect(
+        under({
+          roles: [assignment(role)],
+          transaction: tx(2_000_000n),
+          approvalPolicies: [
+            { marketKey: "ZA", currencyCode: "ZAR", thresholdMinor: 1n, enabled: true },
+          ],
+          approval: approval({ amountMinor: 2_000_000n }),
+          approverReevaluation: ALLOW as never,
+        }),
+      ).toEqual(denied("SPEND_LIMIT_EXCEEDED"))
+    }
+  })
+
+  it("requires exactly one active MEMBERSHIP budget for the Market and currency", () => {
+    for (const budgets of [
+      [],
+      [budget({ status: "SUSPENDED" })],
+      [budget({ status: "RETIRED" })],
+      [budget({ membershipId: "b2bmem_other000001" })],
+      [budget({ marketKey: "KE" })],
+      [budget({ currencyCode: "USD" })],
+      [budget({ effectiveFrom: new Date("2026-11-01T00:00:00Z") })],
+      [budget({ effectiveUntil: NOW })],
+      [budget({ scope: "ORGANISATION", membershipId: null })],
+    ]) {
+      expect(under({ budgets, transaction: tx(1_000n) })).toEqual(
+        denied("SPEND_POLICY_NOT_CONFIGURED"),
+      )
+    }
+    expect(
+      under({
+        budgets: [budget(), budget({ policyId: "b2bbud_member000002" })],
+        transaction: tx(1_000n),
+      }),
+    ).toEqual(denied("CONTEXT_NOT_USABLE"))
+    expect(under({ budgets: "UNAVAILABLE", transaction: tx(1_000n) })).toEqual({
+      outcome: "UNAVAILABLE",
+      reasons: ["SOURCE_UNAVAILABLE"],
+    })
+  })
+
+  it("enforces a configured ORGANISATION and AGREEMENT budget independently", () => {
+    const organisation = budget({
+      policyId: "b2bbud_org00000001",
+      scope: "ORGANISATION",
+      membershipId: null,
+      committedMinor: 9_900_000n,
+      reservedMinor: 0n,
+    })
+    expect(under({ budgets: [budget(), organisation], transaction: tx(200_000n) })).toEqual(
+      denied("SPEND_LIMIT_EXCEEDED"),
+    )
+    expect(under({ budgets: [budget(), organisation], transaction: tx(100_000n) })).toEqual(ALLOW)
+    expect(
+      under({
+        budgets: [budget(), organisation, { ...organisation, policyId: "b2bbud_org00000002" }],
+        transaction: tx(1_000n),
+      }),
+    ).toEqual(denied("CONTEXT_NOT_USABLE"))
+
+    const agreement = budget({
+      policyId: "b2bbud_agr00000001",
+      scope: "AGREEMENT",
+      membershipId: null,
+      agreementReference: "AGR-2026-0001",
+      limitMinor: 500_000n,
+      period: {
+        startsAt: new Date("2026-01-01T00:00:00Z"),
+        endsAt: new Date("2027-01-01T00:00:00Z"),
+      },
+      committedMinor: 400_000n,
+      reservedMinor: 0n,
+    })
+    const underAgreement = tx(200_000n, { agreementReference: "AGR-2026-0001" })
+    expect(under({ budgets: [budget(), agreement], transaction: underAgreement })).toEqual(
+      denied("SPEND_LIMIT_EXCEEDED"),
+    )
+    // The agreement ceiling binds only purchases made under that agreement.
+    expect(under({ budgets: [budget(), agreement], transaction: tx(200_000n) })).toEqual(ALLOW)
+    expect(
+      under({
+        budgets: [budget(), agreement],
+        transaction: tx(200_000n, { agreementReference: "AGR-2026-0002" }),
+      }),
+    ).toEqual(ALLOW)
+  })
+
+  it("treats a budget without a current-period balance as unconsumed, never as carrying over", () => {
+    const september = { startsAt: new Date("2026-09-01T00:00:00Z"), endsAt: OCTOBER.startsAt }
+    expect(
+      under({
+        budgets: [budget({ period: september, committedMinor: 10_000_000n })],
+        transaction: tx(5_000_000n),
+      }),
+    ).toEqual(ALLOW)
+    expect(under({ budgets: [budget({ period: null })], transaction: tx(5_000_000n) })).toEqual(
+      ALLOW,
+    )
+  })
+
+  it("credits the purchase's own valid hold once, never counting it twice", () => {
+    // R20,000 already reserved for this purchase is inside the R30,000 reserved total.
+    expect(under({ transaction: tx(2_000_000n), reservation: reservation() })).toEqual(ALLOW)
+    // An increase needs fresh capacity for the difference only.
+    expect(under({ transaction: tx(3_500_000n), reservation: reservation() })).toEqual(ALLOW)
+    expect(under({ transaction: tx(3_500_001n), reservation: reservation() })).toEqual(
+      denied("SPEND_LIMIT_EXCEEDED"),
+    )
+  })
+
+  it("credits nothing for an expired, closed, stale-revision or other-period hold", () => {
+    const [hold] = reservation().holds
+    for (const r of [
+      reservation({ expiresAt: NOW }),
+      reservation({ status: "EXPIRED" }),
+      reservation({ status: "RELEASED" }),
+      reservation({ status: "COMMITTED" }),
+      reservation({ holds: [{ ...hold, policyRevision: 2 }] }),
+      reservation({ holds: [{ ...hold, periodStartsAt: new Date("2026-09-01T00:00:00Z") }] }),
+      reservation({ holds: [{ ...hold, policyId: "b2bbud_other000001" }] }),
+    ]) {
+      expect(under({ transaction: tx(2_000_000n), reservation: r })).toEqual(
+        denied("SPEND_LIMIT_EXCEEDED"),
+      )
+    }
+  })
+
+  it("never transfers a reservation to a different purchase, buyer, Market or currency", () => {
+    for (const change of [
+      { membershipId: "b2bmem_other000001" },
+      { marketKey: "KE" },
+      { currencyCode: "USD" },
+      { agreementReference: "AGR-2026-0001" },
+      { transactionDigest: `sha256:${"b".repeat(64)}` },
+      { resourceVersion: "cart:v4" },
+    ]) {
+      expect(under({ transaction: tx(2_000_000n), reservation: reservation(change) })).toEqual(
+        denied("TRANSACTION_CHANGED"),
+      )
+    }
   })
 })
 

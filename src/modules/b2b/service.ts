@@ -22,6 +22,11 @@ import ProductTradeProfile from "./models/product-trade-profile"
 import MarketProductEligibility from "./models/market-product-eligibility"
 import PurchaseConstraint from "./models/purchase-constraint"
 import SpendLimit from "./models/spend-limit"
+import SpendBudgetPolicy from "./models/spend-budget-policy"
+import SpendReservation from "./models/spend-reservation"
+import SpendBudgetBalance from "./models/spend-budget-balance"
+import SpendReservationHold from "./models/spend-reservation-hold"
+import SpendLedgerEntry from "./models/spend-ledger-entry"
 import TaxRegistration from "./models/tax-registration"
 
 class B2BModuleService extends MedusaService({
@@ -48,6 +53,11 @@ class B2BModuleService extends MedusaService({
   PurchaseOrderReference,
   PurchaseOrderRequirement,
   SpendLimit,
+  SpendBudgetPolicy,
+  SpendReservation,
+  SpendBudgetBalance,
+  SpendReservationHold,
+  SpendLedgerEntry,
   TaxRegistration,
 }) {}
 

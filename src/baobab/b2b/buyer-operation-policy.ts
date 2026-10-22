@@ -124,6 +124,49 @@ export type Transaction = {
   currencyCode: string
   transactionDigest: string
   resourceVersion: string
+  /** The procurement agreement the purchase is made under, if any. */
+  agreementReference?: string
+}
+
+/**
+ * One cumulative budget (Decision 5; b2b_spend_budget_policy) with its
+ * current-period balance. A budget with no balance row this period has
+ * consumed nothing yet.
+ */
+export type BudgetFact = {
+  policyId: string
+  revision: number
+  status: "ACTIVE" | "SUSPENDED" | "RETIRED"
+  scope: "MEMBERSHIP" | "AGREEMENT" | "ORGANISATION"
+  membershipId: string | null
+  agreementReference: string | null
+  marketKey: string
+  currencyCode: string
+  limitMinor: bigint
+  effectiveFrom: Date
+  effectiveUntil: Date | null
+  /** The current period's balance bounds, or null if nothing was reserved this period. */
+  period: { startsAt: Date; endsAt: Date } | null
+  committedMinor: bigint
+  reservedMinor: bigint
+}
+
+/** The purchase's own reservation from formal submission (b2b_spend_reservation) and its holds. */
+export type ReservationFact = {
+  status: "ACTIVE" | "COMMITTED" | "RELEASED" | "EXPIRED"
+  membershipId: string
+  marketKey: string
+  currencyCode: string
+  agreementReference: string | null
+  transactionDigest: string
+  resourceVersion: string
+  expiresAt: Date
+  holds: Array<{
+    policyId: string
+    policyRevision: number
+    periodStartsAt: Date
+    reservedMinor: bigint
+  }>
 }
 
 /** The membership's SpendLimit rows: order limits for commitments, approval limits for approvers. */
@@ -168,6 +211,8 @@ export type BuyerOperationFacts = {
   principalId: string
   /** The selected, CP-attested Trade buyer Organisation. */
   organisationId: string
+  /** The membership evaluated, whose MEMBERSHIP budget applies. */
+  membershipId: string
   membership: { status: string; effectiveFrom: Date | null; effectiveUntil: Date | null }
   roles: Source<RoleAssignment[]>
   /** Trade's market_key of the operation; mapping to a canonical CP Market is governed separately. */
@@ -186,6 +231,14 @@ export type BuyerOperationFacts = {
   spendAuthorities: Source<SpendAuthority[]>
   approvalPolicies: Source<ApprovalPolicyRecord[]>
   purchaseOrder: Source<{ rule: PurchaseOrderRule | null; number?: string }>
+  /**
+   * Cumulative budgets of this Organisation (Decision 5): the mandatory
+   * MEMBERSHIP budget, and AGREEMENT and ORGANISATION budgets where
+   * configured. Required for every commitment.
+   */
+  budgets: Source<BudgetFact[]>
+  /** The purchase's own reservation, once formally submitted. */
+  reservation?: Source<ReservationFact>
   /** For a commitment: the approval it relies on. For an approval decision: the approval decided. */
   approval?: BoundApproval
   /**
@@ -326,6 +379,11 @@ function evaluateCommitment(facts: BuyerOperationFacts): BuyerOperationDecision 
     return deny("SPEND_POLICY_NOT_CONFIGURED")
   }
 
+  // Cumulative budgets pass independently, before any escalation: approving
+  // one purchase never raises a budget, so a shortfall is never APPROVAL_REQUIRED.
+  const cumulative = evaluateBudgets(facts, tx, marketKey)
+  if (cumulative) return cumulative
+
   // Escalation exists only under an explicit, enabled approval policy for
   // this exact Market and currency; organisation-wide rows do not apply.
   if (facts.approvalPolicies === "UNAVAILABLE") return unavailable()
@@ -347,6 +405,81 @@ function evaluateCommitment(facts: BuyerOperationFacts): BuyerOperationDecision 
   const approval = facts.approval
   if (!approval || approval.status !== "APPROVED") return refuse("APPROVAL_REQUIRED", ...reasons)
   return applyApproval(facts, tx, marketKey, approval, reasons)
+}
+
+/**
+ * Decision 5: every applicable budget must cover the part of this purchase
+ * its own valid reservation does not already hold. Available capacity is
+ * limit - committed - reserved, and this purchase's own hold is already in
+ * reserved, so it is credited once and never counted twice. An expired,
+ * closed, stale-revision or other-period hold credits nothing (it never
+ * authorises commitment). The native fence and the ledger re-check all of
+ * this at commit (CAA-06); this is the evaluation, not the reservation.
+ */
+function evaluateBudgets(
+  facts: BuyerOperationFacts,
+  tx: Transaction,
+  marketKey: string,
+): BuyerOperationDecision | null {
+  if (facts.budgets === "UNAVAILABLE" || facts.reservation === "UNAVAILABLE") return unavailable()
+  const { now } = facts
+  const agreement = tx.agreementReference ?? null
+  const reservation = facts.reservation
+  if (
+    reservation &&
+    (reservation.membershipId !== facts.membershipId ||
+      reservation.marketKey !== marketKey ||
+      reservation.currencyCode !== tx.currencyCode ||
+      reservation.agreementReference !== agreement ||
+      reservation.transactionDigest !== tx.transactionDigest ||
+      reservation.resourceVersion !== tx.resourceVersion)
+  ) {
+    return deny("TRANSACTION_CHANGED")
+  }
+  const usableReservation =
+    reservation?.status === "ACTIVE" && now < reservation.expiresAt ? reservation : null
+
+  const applicable = facts.budgets.filter(
+    (b) =>
+      b.status === "ACTIVE" &&
+      inEffect(now, b.effectiveFrom, b.effectiveUntil) &&
+      b.marketKey === marketKey &&
+      b.currencyCode === tx.currencyCode,
+  )
+  const membership = single(
+    applicable.filter((b) => b.scope === "MEMBERSHIP" && b.membershipId === facts.membershipId),
+  )
+  if (membership === "NONE") return deny("SPEND_POLICY_NOT_CONFIGURED")
+  if (membership === "AMBIGUOUS") return deny("CONTEXT_NOT_USABLE")
+  const organisation = single(applicable.filter((b) => b.scope === "ORGANISATION"))
+  const agreementBudget = single(
+    applicable.filter(
+      (b) => b.scope === "AGREEMENT" && agreement !== null && b.agreementReference === agreement,
+    ),
+  )
+  if (organisation === "AMBIGUOUS" || agreementBudget === "AMBIGUOUS")
+    return deny("CONTEXT_NOT_USABLE")
+
+  for (const budget of [membership, organisation, agreementBudget]) {
+    if (budget === "NONE") continue
+    const current =
+      budget.period !== null && budget.period.startsAt <= now && now < budget.period.endsAt
+    const committed = current ? budget.committedMinor : 0n
+    const reserved = current ? budget.reservedMinor : 0n
+    const hold = current
+      ? usableReservation?.holds.find(
+          (h) =>
+            h.policyId === budget.policyId &&
+            h.policyRevision === budget.revision &&
+            budget.period !== null &&
+            h.periodStartsAt.getTime() === budget.period.startsAt.getTime(),
+        )
+      : undefined
+    const needed = tx.amountMinor - (hold?.reservedMinor ?? 0n)
+    const available = budget.limitMinor - committed - reserved
+    if (needed > 0n && needed > available) return deny("SPEND_LIMIT_EXCEEDED")
+  }
+  return null
 }
 
 /** An approval releases a commitment only while it is bound to exactly this transaction and its approver still holds authority. */

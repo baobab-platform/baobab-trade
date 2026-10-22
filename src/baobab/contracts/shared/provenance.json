@@ -1,6 +1,6 @@
 {
   "repository": "baobab-platform/shared",
-  "commit": "6fa9df424bdd09c5d5ded05a0d445be4144223df",
+  "commit": "ce18d6b58f120b3883ccbe21eac8ecd1c154ac1d",
   "roots": [
     "contracts/commerce/v1/seller-binding.schema.json",
     "contracts/payments/v1/merchant-readiness.schema.json",
@@ -12,7 +12,8 @@
     "contracts/identity/v1/buyer-identity-handoff.schema.json",
     "contracts/identity/v1/assurance-policy.schema.json",
     "contracts/control-plane/v1/estate-client-binding.schema.json",
-    "contracts/trade/v2/buyer-execution-context.schema.json"
+    "contracts/trade/v2/buyer-execution-context.schema.json",
+    "contracts/trade/v2/buyer-spend-budget.schema.json"
   ],
   "tenancy_version": "2.0",
   "files": {
@@ -32,6 +33,7 @@
     "contracts/organisation/v2/legal-actor-mandate.schema.json": "38510c700e1b448541c65e04a6a5463f8fa275017cae65f3c163495867e8285c",
     "contracts/payments/v1/merchant-readiness.schema.json": "c7131cdc3c726dfda60cfa1b0b9b03bbcfe015fb699a0fa78ceb8c402896fa1e",
     "contracts/trade/v2/buyer-execution-context.schema.json": "aadde73f197ce25ca043a5d91d563b9e88e526c021d480106643fc8274bb438b",
+    "contracts/trade/v2/buyer-spend-budget.schema.json": "bcfaec9ab6ad929cfbb81f1d849387b8b6a3bec09f53e2ed7c824d5aa6ae6613",
     "contracts/trade/v2/order-authority.schema.json": "2950432bba92aee1f18dd7900484c900c57cf12782be3d85474b98e8dbb09487",
     "contracts/trade/v2/seller-operating-binding.schema.json": "543f77019d17695dfbe6971aa19736d1da1f3235fe396297c06a61391fee8d91"
   }
