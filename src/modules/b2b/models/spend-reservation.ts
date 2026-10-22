@@ -17,6 +17,8 @@ const SpendReservation = model.define(
     agreement_reference: model.text().nullable(),
     transaction_digest: model.text(),
     resource_version: model.number(),
+    // Migration20261022180000: the full applicable amount, immutable.
+    amount_minor: model.bigNumber().nullable(),
     status: model.enum(["ACTIVE", "COMMITTED", "RELEASED", "EXPIRED"]).default("ACTIVE"),
     expires_at: model.dateTime(),
   },

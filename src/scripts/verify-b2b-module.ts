@@ -17,6 +17,7 @@ export default async function verifyB2BModule({ container }: ExecArgs): Promise<
     b2b.listSpendBudgetBalances({}, { take: 1 }),
     b2b.listSpendReservationHolds({}, { take: 1 }),
     b2b.listSpendLedgerEntries({}, { take: 1 }),
+    b2b.listSpendCommands({}, { take: 1 }),
     b2b.listPurchaseOrderRequirements({}, { take: 1 }),
     b2b.listCreditTerms({}, { take: 1 }),
     b2b.listCommercialTerms({}, { take: 1 }),

@@ -27,6 +27,7 @@ import SpendReservation from "./models/spend-reservation"
 import SpendBudgetBalance from "./models/spend-budget-balance"
 import SpendReservationHold from "./models/spend-reservation-hold"
 import SpendLedgerEntry from "./models/spend-ledger-entry"
+import SpendCommand from "./models/spend-command"
 import TaxRegistration from "./models/tax-registration"
 
 class B2BModuleService extends MedusaService({
@@ -58,6 +59,7 @@ class B2BModuleService extends MedusaService({
   SpendBudgetBalance,
   SpendReservationHold,
   SpendLedgerEntry,
+  SpendCommand,
   TaxRegistration,
 }) {}
 
