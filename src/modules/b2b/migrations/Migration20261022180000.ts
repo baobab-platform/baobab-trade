@@ -4,9 +4,13 @@ import { Migration } from "@medusajs/framework/mikro-orm/migrations"
  * ADR-SHARED-042 section 14, Decision 5 / CAA-06: the spend reservation
  * commands (src/baobab/b2b/spend-reservation-commands.ts).
  *
- * - b2b_spend_reservation gains its full applicable amount. It is part of
- *   the immutable purchase binding, so the guard is replaced to cover it,
- *   and every new reservation must carry it. No row exists yet (nothing
+ * - b2b_spend_reservation gains its full applicable amount, a stable
+ *   purchase reference (the cart, draft order, RFQ or quotation across
+ *   versions), the reservation it supersedes and a hold revision. The
+ *   first three join the immutable purchase binding, so the guard is
+ *   replaced to cover them; hold_revision only advances by one, on
+ *   rollover, so approvals and buyer receipts bound to a former hold go
+ *   stale. One ACTIVE reservation per purchase. No row exists yet (nothing
  *   wrote the ledger before these commands), so nothing is backfilled.
  * - b2b_spend_command: one row per applied command, keyed by its
  *   idempotency key, holding the request digest and the original result.
@@ -15,10 +19,16 @@ import { Migration } from "@medusajs/framework/mikro-orm/migrations"
  */
 const raw = (column: string) => `jsonb_build_object('value', (${column})::text, 'precision', 20)`
 
-/** The reservation guard, with or without the amount (down() restores Migration20261022150000's). */
-const reservationGuard = (withAmount: boolean) => {
-  const amount = withAmount ? `, new."amount_minor", new."raw_amount_minor"` : ""
-  const oldAmount = withAmount ? `, old."amount_minor", old."raw_amount_minor"` : ""
+/**
+ * The reservation guard. With the purchase binding it also keeps the amount,
+ * the stable purchase reference and the superseded reservation immutable,
+ * and lets hold_revision only advance by one while ACTIVE (a rollover).
+ * Without it, down() restores Migration20261022150000's guard.
+ */
+const reservationGuard = (bound: boolean) => {
+  const columns = bound
+    ? `, $."amount_minor", $."raw_amount_minor", $."purchase_reference", $."supersedes_reservation_id"`
+    : ""
   return `create or replace function "b2b_spend_reservation_guard"() returns trigger
       language plpgsql as $$
       begin
@@ -30,11 +40,12 @@ const reservationGuard = (withAmount: boolean) => {
             raise exception 'b2b_spend_reservation: a reservation starts ACTIVE';
           end if;
           ${
-            withAmount
-              ? `if new."amount_minor" is null then
-            raise exception 'b2b_spend_reservation: a reservation carries its full applicable amount';
+            bound
+              ? `if new."amount_minor" is null or new."purchase_reference" is null then
+            raise exception 'b2b_spend_reservation: a reservation carries its purchase and full applicable amount';
           end if;
-          new."raw_amount_minor" := ${raw('new."amount_minor"')};`
+          new."raw_amount_minor" := ${raw('new."amount_minor"')};
+          new."hold_revision" := 1;`
               : ""
           }
           if not exists (select 1 from "b2b_buyer_membership" m
@@ -47,12 +58,22 @@ const reservationGuard = (withAmount: boolean) => {
           raise exception 'b2b_spend_reservation: % is terminal', old."status";
         end if;
         if (new."tenant_id", new."organisation_id", new."membership_id", new."submitted_by_principal_id", new."market_key",
-            new."currency_code", new."agreement_reference", new."transaction_digest", new."resource_version", new."expires_at"${amount})
+            new."currency_code", new."agreement_reference", new."transaction_digest", new."resource_version",
+            new."expires_at"${columns.replaceAll("$", "new")})
            is distinct from
            (old."tenant_id", old."organisation_id", old."membership_id", old."submitted_by_principal_id", old."market_key",
-            old."currency_code", old."agreement_reference", old."transaction_digest", old."resource_version", old."expires_at"${oldAmount}) then
+            old."currency_code", old."agreement_reference", old."transaction_digest", old."resource_version",
+            old."expires_at"${columns.replaceAll("$", "old")}) then
           raise exception 'b2b_spend_reservation: a reservation is bound to one immutable purchase';
         end if;
+        ${
+          bound
+            ? `if new."hold_revision" not in (old."hold_revision", old."hold_revision" + 1)
+           or (new."hold_revision" <> old."hold_revision" and new."status" <> 'ACTIVE') then
+          raise exception 'b2b_spend_reservation: hold_revision only advances by one on rollover';
+        end if;`
+            : ""
+        }
         return new;
       end $$;`
 }
@@ -61,7 +82,20 @@ export class Migration20261022180000 extends Migration {
   async up(): Promise<void> {
     this.addSql(`alter table "b2b_spend_reservation"
       add column if not exists "amount_minor" numeric null,
-      add column if not exists "raw_amount_minor" jsonb null;`)
+      add column if not exists "raw_amount_minor" jsonb null,
+      add column if not exists "purchase_reference" text null,
+      add column if not exists "supersedes_reservation_id" text null,
+      add column if not exists "hold_revision" integer not null default 1;`)
+    this
+      .addSql(`alter table "b2b_spend_reservation" add constraint "b2b_spend_reservation_supersedes_fk"
+      foreign key ("supersedes_reservation_id") references "b2b_spend_reservation" ("id");`)
+    this
+      .addSql(`alter table "b2b_spend_reservation" add constraint "b2b_spend_reservation_purchase_check"
+      check ("purchase_reference" is null or length(btrim("purchase_reference")) between 1 and 200);`)
+    // One ACTIVE reservation per purchase: a new version supersedes, never coexists.
+    this.addSql(`create unique index if not exists "IDX_b2b_spend_reservation_active_purchase"
+      on "b2b_spend_reservation" ("organisation_id", "purchase_reference")
+      where "status" = 'ACTIVE' and "deleted_at" is null;`)
     this
       .addSql(`alter table "b2b_spend_reservation" add constraint "b2b_spend_reservation_amount_check"
       check ("amount_minor" is null or ("amount_minor" > 0 and "amount_minor" = trunc("amount_minor")));`)
@@ -102,8 +136,14 @@ export class Migration20261022180000 extends Migration {
     this.addSql(
       `alter table "b2b_spend_reservation" drop constraint if exists "b2b_spend_reservation_amount_check";`,
     )
-    this.addSql(
-      `alter table "b2b_spend_reservation" drop column if exists "raw_amount_minor", drop column if exists "amount_minor";`,
-    )
+    this.addSql(`drop index if exists "IDX_b2b_spend_reservation_active_purchase";`)
+    for (const constraint of ["supersedes_fk", "purchase_check"]) {
+      this.addSql(
+        `alter table "b2b_spend_reservation" drop constraint if exists "b2b_spend_reservation_${constraint}";`,
+      )
+    }
+    this.addSql(`alter table "b2b_spend_reservation" drop column if exists "raw_amount_minor",
+      drop column if exists "amount_minor", drop column if exists "purchase_reference",
+      drop column if exists "supersedes_reservation_id", drop column if exists "hold_revision";`)
   }
 }

@@ -52,6 +52,35 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
     )
     return id
   }
+  const policy = async (row: {
+    id: string
+    org: string
+    scope: "MEMBERSHIP" | "ORGANISATION" | "AGREEMENT"
+    member?: string | null
+    agreement?: string | null
+    limit: bigint
+  }) => {
+    const agreement = row.scope === "AGREEMENT"
+    await sql(
+      `insert into "b2b_spend_budget_policy" ("id", "scope", "tenant_id", "organisation_id", "membership_id",
+         "agreement_reference", "market_key", "currency_code", "period_kind", "timezone", "limit_minor",
+         "raw_limit_minor", "effective_from", "effective_until", "evidence_reference")
+       values ($1, $2, $3, $4, $5, $6, 'ZA', 'ZAR', $7, 'UTC', $8, '{}', now() - interval '1 day',
+               $9, 'synthetic/regression')`,
+      [
+        row.id,
+        row.scope,
+        tenant,
+        row.org,
+        row.member ?? null,
+        row.agreement ?? null,
+        agreement ? "AGREEMENT_TERM" : "CALENDAR_MONTH",
+        row.limit.toString(),
+        agreement ? new Date(Date.now() + 365 * 86_400_000) : null,
+      ],
+    )
+    return row.id
+  }
   const budget = async (
     org: string,
     scope: "MEMBERSHIP" | "ORGANISATION",
@@ -92,6 +121,7 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
     marketKey: "ZA",
     currencyCode: "ZAR",
     agreementReference: null,
+    purchaseReference: `cart_${run}_${seed}`,
     transactionDigest: digest(seed),
     resourceVersion: 1,
     amountMinor: amount,
@@ -116,6 +146,7 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
     resourceVersion: s.resourceVersion,
     amountMinor: s.amountMinor,
     commitmentReference: `order_synthetic_${run}`,
+    holdRevision: 1,
     ...change,
   })
 
@@ -258,7 +289,11 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   )
   assert.equal(rolled.approvalRevalidationRequired, true)
   assert.deepEqual(await balance(bobBudget), [0n, 200_000n])
-  applied(await commands.commit(commitOf(org, heldRes.reservationId, held)))
+  assert.deepEqual(await commands.commit(commitOf(org, heldRes.reservationId, held)), {
+    outcome: "REFUSED",
+    reason: "TRANSACTION_CHANGED",
+  })
+  applied(await commands.commit(commitOf(org, heldRes.reservationId, held, { holdRevision: 2 })))
   assert.deepEqual(await balance(bobBudget), [200_000n, 0n])
   pass("a policy revision requires rollover before commit and rollover reacquires capacity")
 
@@ -278,6 +313,185 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   )
   assert.deepEqual(await balance(raceBudget), [0n, 600_000n])
   pass("concurrent submissions never exceed capacity")
+
+  // Review finding: retiring a budget that held the purchase never lets it commit unseen.
+  const retiring = await organisation("d")
+  const erin = await membership(retiring, "erin")
+  const erinBudget = await budget(retiring, "MEMBERSHIP", erin, 5_000_000n, "erin")
+  const retiringOrg = await budget(retiring, "ORGANISATION", null, 5_000_000n, "dorg")
+  const underBoth = submission(retiring, erin, 300_000n, "10")
+  const underBothRes = applied(await commands.submit(underBoth))
+  assert.deepEqual(await balance(retiringOrg), [0n, 300_000n])
+  await sql(`update "b2b_spend_budget_policy" set "status" = 'RETIRED' where "id" = $1`, [
+    retiringOrg,
+  ])
+  assert.deepEqual(
+    await commands.commit(commitOf(retiring, underBothRes.reservationId, underBoth)),
+    { outcome: "REFUSED", reason: "CONTEXT_NOT_USABLE", detail: "ROLLOVER_REQUIRED" },
+  )
+  assert.deepEqual(await balance(retiringOrg), [0n, 300_000n])
+  const afterRetire = applied(
+    await commands.rollover({
+      idempotencyKey: key("retire-rollover"),
+      organisationId: retiring,
+      reservationId: underBothRes.reservationId,
+      actorPrincipalId: actor,
+    }),
+  )
+  assert.equal(afterRetire.holdRevision, 2)
+  assert.equal(afterRetire.approvalRevalidationRequired, true)
+  assert.deepEqual(await balance(retiringOrg), [0n, 0n])
+  assert.deepEqual(
+    await commands.commit(commitOf(retiring, underBothRes.reservationId, underBoth)),
+    { outcome: "REFUSED", reason: "TRANSACTION_CHANGED" },
+  )
+  applied(
+    await commands.commit(
+      commitOf(retiring, underBothRes.reservationId, underBoth, { holdRevision: 2 }),
+    ),
+  )
+  assert.deepEqual(await balance(erinBudget), [300_000n, 0n])
+  pass("a retired budget forces rollover and a new hold revision before commit")
+
+  // Review finding: only a later version of the same purchase, by its submitter, may supersede it.
+  const purchaseOne = submission(retiring, erin, 100_000n, "11")
+  const purchaseOneRes = applied(await commands.submit(purchaseOne))
+  assert.deepEqual(
+    await commands.resubmit({
+      ...submission(retiring, erin, 50_000n, "12", { resourceVersion: 2 }),
+      supersedes: purchaseOneRes.reservationId,
+    }),
+    { outcome: "REFUSED", reason: "TRANSACTION_CHANGED" },
+  )
+  assert.deepEqual(
+    await commands.resubmit({
+      ...submission(retiring, erin, 50_000n, "11", {
+        resourceVersion: 2,
+        actorPrincipalId: randomUUID(),
+      }),
+      supersedes: purchaseOneRes.reservationId,
+    }),
+    { outcome: "REFUSED", reason: "BUYER_NOT_AUTHORISED" },
+  )
+  assert.deepEqual(
+    await commands.resubmit({
+      ...submission(retiring, erin, 50_000n, "11"),
+      supersedes: purchaseOneRes.reservationId,
+    }),
+    { outcome: "REFUSED", reason: "TRANSACTION_CHANGED" },
+  )
+  assert.deepEqual(await balance(erinBudget), [300_000n, 100_000n])
+  const { rows: stillActive } = await sql(
+    `select "status" from "b2b_spend_reservation" where "id" = $1`,
+    [purchaseOneRes.reservationId],
+  )
+  assert.equal(stillActive[0].status, "ACTIVE")
+  const reduced = applied(
+    await commands.resubmit({
+      ...submission(retiring, erin, 60_000n, "11", { resourceVersion: 2 }),
+      supersedes: purchaseOneRes.reservationId,
+    }),
+  )
+  const { rows: lineage } = await sql(
+    `select "supersedes_reservation_id", "purchase_reference" from "b2b_spend_reservation" where "id" = $1`,
+    [reduced.reservationId],
+  )
+  assert.deepEqual(lineage[0], {
+    supersedes_reservation_id: purchaseOneRes.reservationId,
+    purchase_reference: purchaseOne.purchaseReference,
+  })
+  assert.deepEqual(await balance(erinBudget), [300_000n, 60_000n])
+  pass("another purchase or another Principal can never supersede a reservation")
+
+  // Review finding: one global budget lock order. A rollover that releases a
+  // stale high-ID budget and reserves a new low-ID one runs against
+  // submissions that take both: none may deadlock or fail.
+  const locking = await organisation("e")
+  const agreementRef = `AGR-${run}`
+  const owner = await membership(locking, "owner")
+  await policy({
+    id: `b2bbud_${run}m0owner`,
+    org: locking,
+    scope: "MEMBERSHIP",
+    member: owner,
+    limit: 50_000_000n,
+  })
+  const high = await policy({
+    id: `b2bbud_${run}zorg`,
+    org: locking,
+    scope: "ORGANISATION",
+    limit: 500_000_000n,
+  })
+  const rolling = submission(locking, owner, 100_000n, "13", { agreementReference: agreementRef })
+  const rollingRes = applied(await commands.submit(rolling))
+  const low = await policy({
+    id: `b2bbud_${run}0agr`,
+    org: locking,
+    scope: "AGREEMENT",
+    agreement: agreementRef,
+    limit: 500_000_000n,
+  })
+  const buyers = await Promise.all(
+    ["f", "g", "h", "i"].map(async (suffix) => {
+      const id = await membership(locking, suffix)
+      await policy({
+        id: `b2bbud_${run}m1${suffix}`,
+        org: locking,
+        scope: "MEMBERSHIP",
+        member: id,
+        limit: 50_000_000n,
+      })
+      return id
+    }),
+  )
+  let revision = 1
+  for (let round = 0; round < 3; round += 1) {
+    await sql(
+      `update "b2b_spend_budget_policy" set "limit_minor" = "limit_minor" + 1, "raw_limit_minor" = '{}' where "id" = $1`,
+      [high],
+    )
+    const [rolled, ...submitted] = await Promise.all([
+      commands.rollover({
+        idempotencyKey: key(`order-rollover-${round}`),
+        organisationId: locking,
+        reservationId: rollingRes.reservationId,
+        actorPrincipalId: actor,
+      }),
+      ...buyers.map((buyer, i) =>
+        commands.submit(
+          submission(locking, buyer, 1_000n, `lock${round}${i}`, {
+            agreementReference: agreementRef,
+          }),
+        ),
+      ),
+    ])
+    revision += 1
+    assert.ok(
+      rolled.outcome === "APPLIED" && rolled.holdRevision === revision,
+      JSON.stringify(rolled),
+    )
+    for (const result of submitted) assert.equal(result.outcome, "APPLIED", JSON.stringify(result))
+  }
+  assert.deepEqual(await balance(low), [0n, 100_000n + 12n * 1_000n])
+  assert.deepEqual(await balance(high), [0n, 100_000n + 12n * 1_000n])
+  pass("rollover and concurrent submissions take budget locks in one order")
+
+  // A budget revision racing a commit: the commit either applies or asks for rollover, never fails.
+  const racing = submission(locking, owner, 2_000n, "14", { agreementReference: agreementRef })
+  const racingRes = applied(await commands.submit(racing))
+  const [raced] = await Promise.all([
+    commands.commit(commitOf(locking, racingRes.reservationId, racing)),
+    sql(
+      `update "b2b_spend_budget_policy" set "limit_minor" = "limit_minor" + 1, "raw_limit_minor" = '{}' where "id" = $1`,
+      [high],
+    ),
+  ])
+  assert.ok(
+    raced.outcome === "APPLIED" ||
+      (raced.outcome === "REFUSED" && raced.detail === "ROLLOVER_REQUIRED"),
+    JSON.stringify(raced),
+  )
+  pass("a budget revision racing a commit never fails open or closed by error")
 
   // A reservation of another Organisation is never disclosed or moved.
   const other = await organisation("b")

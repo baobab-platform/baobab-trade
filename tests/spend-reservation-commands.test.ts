@@ -14,6 +14,7 @@ import type { PgPool } from "../src/baobab/orders/postgres-governed-binding-pers
  */
 const submission = (change: Partial<SubmitCommand> = {}): SubmitCommand => ({
   idempotencyKey: "submit.0000000001",
+  purchaseReference: "cart_synthetic01",
   tenantId: "tn_test",
   organisationId: "b2borg_buyer000001",
   membershipId: "b2bmem_alice000001",
@@ -48,6 +49,8 @@ describe("spend reservation commands", () => {
       { expiresAt: new Date(Date.now() - 1) },
       { expiresAt: new Date(Date.now() + MAX_RESERVATION_HOLD_MS + 60_000) },
       { membershipId: "" },
+      { purchaseReference: " " },
+      { purchaseReference: "x".repeat(201) },
     ]) {
       expect(() => commands.submit(submission(change))).toThrow(TypeError)
     }

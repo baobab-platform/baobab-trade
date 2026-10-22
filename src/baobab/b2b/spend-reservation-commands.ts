@@ -38,6 +38,12 @@ export type SpendCommandResult =
       outcome: "APPLIED" | "REPLAYED"
       reservationId: string
       status: ReservationStatus
+      /**
+       * The reservation's hold revision. A rollover that moves a hold
+       * advances it, so an approval or buyer receipt bound to the former
+       * hold must be revalidated before commit.
+       */
+      holdRevision: number
       /** ROLLOVER moved a hold: any approval bound to the former period or policy must be revalidated. */
       approvalRevalidationRequired?: boolean
     }
@@ -47,6 +53,13 @@ export type SpendCommandResult =
 /** A purchase formally submitted for approval or commitment (Decision 5 item 2). */
 export type SubmitCommand = {
   idempotencyKey: string
+  /**
+   * The stable identity of the purchase across its versions (the cart, draft
+   * order, RFQ or quotation), from Trade's own record. One ACTIVE
+   * reservation exists per purchase, and only a later version of the same
+   * purchase may supersede it.
+   */
+  purchaseReference: string
   tenantId: string
   organisationId: string
   membershipId: string
@@ -66,6 +79,8 @@ type ReservationCommand = {
   actorPrincipalId: string
 }
 export type CommitCommand = ReservationCommand & {
+  /** The hold revision the approvals and buyer receipt were bound to. */
+  holdRevision: number
   transactionDigest: string
   resourceVersion: number
   amountMinor: bigint
@@ -101,6 +116,13 @@ const requestDigest = (kind: string, request: object) =>
 /** The reservation a submission creates, derived so a retry finds the same one. */
 const reservationIdFor = (organisationId: string, key: string) =>
   `b2bres_${sha256(`${organisationId}|${key}`).slice(0, 40)}`
+/**
+ * The single global lock order for budgets: every command writes its ledger
+ * entries by budget_policy_id in code-point order, releases before
+ * reservations within one budget, so two commands never lock the same
+ * budgets in opposite orders.
+ */
+const byPolicy = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 /** One ledger idempotency key per command, policy and step. */
 const entryKey = (kind: string, commandKey: string, policyId: string, step: string) =>
   `${kind.toLowerCase()}.${sha256(`${commandKey}|${policyId}|${step}`).slice(0, 48)}`
@@ -119,6 +141,9 @@ type HoldRow = {
 }
 type ReservationRow = {
   id: string
+  purchase_reference: string
+  submitted_by_principal_id: string
+  hold_revision: number
   tenant_id: string
   organisation_id: string
   membership_id: string
@@ -138,23 +163,27 @@ export class PostgresSpendReservationCommands {
   /** Reserve the full amount against every applicable budget (formal submission). */
   submit(command: SubmitCommand): Promise<SpendCommandResult> {
     assertSubmit(command)
-    return this.run("SUBMIT", command, command.organisationId, (db) =>
-      this.reserveNew(db, command, "SUBMIT"),
-    )
+    return this.run("SUBMIT", command, command.organisationId, (db) => this.reserveNew(db, command))
   }
 
   /**
-   * Replace an ACTIVE reservation by a new version of the same purchase in
-   * one transaction: the old hold is released before the new one is taken,
-   * so an increase needs capacity for the difference only and a reduction
-   * returns only the unused portion.
+   * Replace the ACTIVE reservation of a purchase by a later version of the
+   * same purchase, in one transaction. Only the Principal who submitted it
+   * may supersede it, and only for the same purchase reference, membership,
+   * Market, currency and agreement. Within each budget the old hold is
+   * released before the new one is taken, so an increase needs capacity for
+   * the difference only and a reduction returns only the unused portion.
    */
   resubmit(command: SubmitCommand & { supersedes: string }): Promise<SpendCommandResult> {
     assertSubmit(command)
     return this.run("RESUBMIT", command, command.organisationId, async (db) => {
       const old = await this.lockReservation(db, command.organisationId, command.supersedes)
       if (old.status !== "ACTIVE") throw new Refused("CONTEXT_NOT_USABLE")
+      if (old.submitted_by_principal_id !== command.actorPrincipalId) {
+        throw new Refused("BUYER_NOT_AUTHORISED")
+      }
       if (
+        old.purchase_reference !== command.purchaseReference ||
         old.tenant_id !== command.tenantId ||
         old.membership_id !== command.membershipId ||
         old.market_key !== command.marketKey ||
@@ -166,11 +195,25 @@ export class PostgresSpendReservationCommands {
       }
       // The superseded version is cancelled; a smaller new version is a reduction.
       const reason = command.amountMinor < old.amount_minor ? "AMOUNT_REDUCED" : "CANCELLED"
-      await this.releaseAll(db, old.id, command, reason)
+      const oldHolds = await this.holds(db, old.id)
+      // Close the old version first: one ACTIVE reservation per purchase.
       await db.query(`update "b2b_spend_reservation" set "status" = 'RELEASED' where "id" = $1`, [
         old.id,
       ])
-      return this.reserveNew(db, command, "RESUBMIT")
+      const reservation = await this.insertReservation(db, command, old.id)
+      const policies = await this.applicablePolicies(db, reservation)
+      await this.inPolicyOrder(
+        db,
+        command,
+        "resubmit",
+        oldHolds.map((hold) => ({ reservationId: old.id, hold, reason })),
+        policies.map((policy) => ({
+          reservationId: reservation.id,
+          policy,
+          amount: command.amountMinor,
+        })),
+      )
+      return { reservationId: reservation.id, status: "ACTIVE" as const, holdRevision: 1 }
     })
   }
 
@@ -183,7 +226,12 @@ export class PostgresSpendReservationCommands {
    */
   commit(command: CommitCommand): Promise<SpendCommandResult> {
     assertReservationCommand(command)
-    if (!DIGEST.test(command.transactionDigest) || command.commitmentReference.length === 0) {
+    if (
+      !DIGEST.test(command.transactionDigest) ||
+      command.commitmentReference.length === 0 ||
+      !Number.isSafeInteger(command.holdRevision) ||
+      command.holdRevision < 1
+    ) {
       throw new TypeError("invalid commit command")
     }
     return this.run("COMMIT", command, command.organisationId, async (db) => {
@@ -198,23 +246,25 @@ export class PostgresSpendReservationCommands {
       if (
         reservation.transaction_digest !== command.transactionDigest ||
         reservation.resource_version !== command.resourceVersion ||
-        reservation.amount_minor !== command.amountMinor
+        reservation.amount_minor !== command.amountMinor ||
+        reservation.hold_revision !== command.holdRevision
       ) {
         throw new Refused("TRANSACTION_CHANGED")
       }
       const policies = await this.applicablePolicies(db, reservation)
       const holds = await this.holds(db, reservation.id)
+      // Commit never moves a hold. Every applicable budget must hold the
+      // full amount now, and no held budget may be stale, retired or no
+      // longer applicable: only an explicit rollover (which advances the
+      // hold revision and so forces revalidation) may change that.
       for (const policy of policies) {
         const hold = currentHold(holds, policy)
         if (!hold || hold.reserved_minor !== reservation.amount_minor) {
           throw new Refused("CONTEXT_NOT_USABLE", "ROLLOVER_REQUIRED")
         }
       }
-      // Holds on budgets that no longer apply return their capacity.
-      for (const hold of holds) {
-        if (hold.reserved_minor > 0n && !policies.some((p) => currentHold([hold], p))) {
-          await this.releaseHold(db, reservation.id, hold, command, "POLICY_REVISED")
-        }
+      if (holds.some((h) => h.reserved_minor > 0n && !policies.some((p) => currentHold([h], p)))) {
+        throw new Refused("CONTEXT_NOT_USABLE", "ROLLOVER_REQUIRED")
       }
       for (const policy of policies) {
         await db.query(
@@ -237,7 +287,11 @@ export class PostgresSpendReservationCommands {
       await db.query(`update "b2b_spend_reservation" set "status" = 'COMMITTED' where "id" = $1`, [
         reservation.id,
       ])
-      return { reservationId: reservation.id, status: "COMMITTED" as const }
+      return {
+        reservationId: reservation.id,
+        status: "COMMITTED" as const,
+        holdRevision: reservation.hold_revision,
+      }
     })
   }
 
@@ -276,31 +330,35 @@ export class PostgresSpendReservationCommands {
       }
       const policies = await this.applicablePolicies(db, reservation)
       const holds = await this.holds(db, reservation.id)
-      let moved = false
-      for (const hold of holds) {
-        if (hold.reserved_minor === 0n) continue
+      const releases = holds.flatMap((hold) => {
+        if (hold.reserved_minor === 0n) return []
         const policy = policies.find((p) => p.id === hold.budget_policy_id)
-        if (policy && currentHold([hold], policy)) continue
+        if (policy && currentHold([hold], policy)) return []
         const pastPeriod = policy !== undefined && hold.policy_revision === policy.revision
-        await this.releaseHold(
-          db,
-          reservation.id,
-          hold,
-          command,
-          pastPeriod ? "PERIOD_ROLLOVER" : "POLICY_REVISED",
+        return [
+          {
+            reservationId: reservation.id,
+            hold,
+            reason: pastPeriod ? "PERIOD_ROLLOVER" : "POLICY_REVISED",
+          },
+        ]
+      })
+      const reserves = policies.flatMap((policy) => {
+        const amount = reservation.amount_minor - (currentHold(holds, policy)?.reserved_minor ?? 0n)
+        return amount > 0n ? [{ reservationId: reservation.id, policy, amount }] : []
+      })
+      const moved = releases.length > 0 || reserves.length > 0
+      await this.inPolicyOrder(db, command, "rollover", releases, reserves)
+      if (moved) {
+        await db.query(
+          `update "b2b_spend_reservation" set "hold_revision" = "hold_revision" + 1 where "id" = $1`,
+          [reservation.id],
         )
-        moved = true
-      }
-      for (const policy of policies) {
-        const held = currentHold(holds, policy)?.reserved_minor ?? 0n
-        const needed = reservation.amount_minor - held
-        if (needed <= 0n) continue
-        await this.reserveEntry(db, reservation.id, policy, needed, command, "rollover")
-        moved = true
       }
       return {
         reservationId: reservation.id,
         status: "ACTIVE" as const,
+        holdRevision: reservation.hold_revision + (moved ? 1 : 0),
         approvalRevalidationRequired: moved,
       }
     })
@@ -309,8 +367,29 @@ export class PostgresSpendReservationCommands {
   private async reserveNew(
     db: PgClient,
     command: SubmitCommand,
-    kind: "SUBMIT" | "RESUBMIT",
-  ): Promise<{ reservationId: string; status: ReservationStatus }> {
+  ): Promise<{ reservationId: string; status: ReservationStatus; holdRevision: number }> {
+    const reservation = await this.insertReservation(db, command, null)
+    const policies = await this.applicablePolicies(db, reservation)
+    await this.inPolicyOrder(
+      db,
+      command,
+      "submit",
+      [],
+      policies.map((policy) => ({
+        reservationId: reservation.id,
+        policy,
+        amount: command.amountMinor,
+      })),
+    )
+    return { reservationId: reservation.id, status: "ACTIVE", holdRevision: 1 }
+  }
+
+  /** A new ACTIVE reservation for an ACTIVE, in-effect member of this Organisation. */
+  private async insertReservation(
+    db: PgClient,
+    command: SubmitCommand,
+    supersedes: string | null,
+  ): Promise<ReservationRow> {
     const member = await db.query(
       `select 1 from "b2b_buyer_membership" m join "b2b_organisation" o on o."id" = m."organisation_id"
         where m."id" = $1 and m."organisation_id" = $2 and o."tenant_id" = $3
@@ -325,8 +404,9 @@ export class PostgresSpendReservationCommands {
       await db.query(
         `insert into "b2b_spend_reservation" ("id", "tenant_id", "organisation_id", "membership_id",
            "submitted_by_principal_id", "market_key", "currency_code", "agreement_reference",
-           "transaction_digest", "resource_version", "amount_minor", "expires_at")
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+           "transaction_digest", "resource_version", "amount_minor", "expires_at",
+           "purchase_reference", "supersedes_reservation_id")
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [
           reservationId,
           command.tenantId,
@@ -340,6 +420,8 @@ export class PostgresSpendReservationCommands {
           command.resourceVersion,
           command.amountMinor.toString(),
           command.expiresAt,
+          command.purchaseReference,
+          supersedes,
         ],
       )
     } catch (error) {
@@ -347,12 +429,34 @@ export class PostgresSpendReservationCommands {
       if (pgCode(error) === "23505") throw new Conflict()
       throw error
     }
-    const reservation = await this.lockReservation(db, command.organisationId, reservationId)
-    const policies = await this.applicablePolicies(db, reservation)
-    for (const policy of policies) {
-      await this.reserveEntry(db, reservationId, policy, command.amountMinor, command, kind)
+    return this.lockReservation(db, command.organisationId, reservationId)
+  }
+
+  /**
+   * Write releases and reservations in the single global budget order
+   * (byPolicy), releases first within a budget.
+   */
+  private async inPolicyOrder(
+    db: PgClient,
+    command: ReservationCommand | SubmitCommand,
+    step: string,
+    releases: Array<{ reservationId: string; hold: HoldRow; reason: string }>,
+    reserves: Array<{ reservationId: string; policy: PolicyRow; amount: bigint }>,
+  ) {
+    const ids = [
+      ...new Set([
+        ...releases.map((r) => r.hold.budget_policy_id),
+        ...reserves.map((r) => r.policy.id),
+      ]),
+    ].sort(byPolicy)
+    for (const id of ids) {
+      for (const r of releases.filter((x) => x.hold.budget_policy_id === id)) {
+        await this.releaseHold(db, r.reservationId, r.hold, command, r.reason)
+      }
+      for (const r of reserves.filter((x) => x.policy.id === id)) {
+        await this.reserveEntry(db, r.reservationId, r.policy, r.amount, command, step)
+      }
     }
-    return { reservationId, status: "ACTIVE" }
   }
 
   private async reserveEntry(
@@ -411,17 +515,6 @@ export class PostgresSpendReservationCommands {
     )
   }
 
-  private async releaseAll(
-    db: PgClient,
-    reservationId: string,
-    command: ReservationCommand | SubmitCommand,
-    reason: string,
-  ) {
-    for (const hold of await this.holds(db, reservationId)) {
-      await this.releaseHold(db, reservationId, hold, command, reason)
-    }
-  }
-
   private close(
     command: ReservationCommand,
     kind: "RELEASE" | "EXPIRE",
@@ -437,12 +530,19 @@ export class PostgresSpendReservationCommands {
       )
       if (reservation.status !== "ACTIVE") throw new Refused("CONTEXT_NOT_USABLE")
       if (mustBeExpired && !reservation.expired) throw new Refused("CONTEXT_NOT_USABLE")
-      await this.releaseAll(db, reservation.id, command, reason)
+      const holds = await this.holds(db, reservation.id)
+      await this.inPolicyOrder(
+        db,
+        command,
+        "release",
+        holds.map((hold) => ({ reservationId: reservation.id, hold, reason })),
+        [],
+      )
       await db.query(`update "b2b_spend_reservation" set "status" = $2 where "id" = $1`, [
         reservation.id,
         status,
       ])
-      return { reservationId: reservation.id, status }
+      return { reservationId: reservation.id, status, holdRevision: reservation.hold_revision }
     })
   }
 
@@ -453,7 +553,8 @@ export class PostgresSpendReservationCommands {
     reservationId: string,
   ): Promise<ReservationRow> {
     const { rows } = await db.query(
-      `select "id", "tenant_id", "organisation_id", "membership_id", "market_key", "currency_code",
+      `select "id", "purchase_reference", "submitted_by_principal_id", "hold_revision",
+              "tenant_id", "organisation_id", "membership_id", "market_key", "currency_code",
               "agreement_reference", "transaction_digest", "resource_version", "amount_minor", "status",
               (now() >= "expires_at") as "expired"
          from "b2b_spend_reservation"
@@ -462,10 +563,13 @@ export class PostgresSpendReservationCommands {
       [reservationId, organisationId],
     )
     const [row] = rows
-    if (!row || row.amount_minor === null) throw new Refused("BUYER_NOT_AUTHORISED")
+    if (!row || row.amount_minor === null || row.purchase_reference === null) {
+      throw new Refused("BUYER_NOT_AUTHORISED")
+    }
     return {
-      ...(row as Omit<ReservationRow, "amount_minor" | "resource_version">),
+      ...(row as Omit<ReservationRow, "amount_minor" | "resource_version" | "hold_revision">),
       resource_version: Number(row.resource_version),
+      hold_revision: Number(row.hold_revision),
       amount_minor: minor(row.amount_minor),
     }
   }
@@ -489,7 +593,7 @@ export class PostgresSpendReservationCommands {
           and (("scope" = 'MEMBERSHIP' and "membership_id" = $5)
                or "scope" = 'ORGANISATION'
                or ("scope" = 'AGREEMENT' and "agreement_reference" = $6))
-        order by "id"
+        order by "id" collate "C"
         for share`,
       [
         r.tenant_id,
@@ -500,12 +604,14 @@ export class PostgresSpendReservationCommands {
         r.agreement_reference,
       ],
     )
-    const policies = rows.map((row) => ({
-      id: String(row.id),
-      revision: Number(row.revision),
-      scope: row.scope as PolicyRow["scope"],
-      period_starts_at: new Date(row.period_starts_at as string | Date),
-    }))
+    const policies = rows
+      .map((row) => ({
+        id: String(row.id),
+        revision: Number(row.revision),
+        scope: row.scope as PolicyRow["scope"],
+        period_starts_at: new Date(row.period_starts_at as string | Date),
+      }))
+      .sort((a, b) => byPolicy(a.id, b.id))
     const members = policies.filter((p) => p.scope === "MEMBERSHIP").length
     if (members === 0) throw new Refused("SPEND_POLICY_NOT_CONFIGURED")
     if (
@@ -522,7 +628,7 @@ export class PostgresSpendReservationCommands {
     const { rows } = await db.query(
       `select "budget_policy_id", "policy_revision", "period_starts_at", "reserved_minor"
          from "b2b_spend_reservation_hold" where "reservation_id" = $1
-        order by "budget_policy_id", "period_starts_at"`,
+        order by "budget_policy_id" collate "C", "period_starts_at"`,
       [reservationId],
     )
     return rows.map((row) => ({
@@ -544,6 +650,7 @@ export class PostgresSpendReservationCommands {
     execute: (db: PgClient) => Promise<{
       reservationId: string
       status: ReservationStatus
+      holdRevision: number
       approvalRevalidationRequired?: boolean
     }>,
   ): Promise<SpendCommandResult> {
@@ -652,6 +759,7 @@ function assertSubmit(command: SubmitCommand) {
   const hold = command.expiresAt.getTime() - Date.now()
   if (
     !KEY.test(command.idempotencyKey) ||
+    !(command.purchaseReference.trim().length > 0 && command.purchaseReference.length <= 200) ||
     !command.tenantId ||
     !command.organisationId ||
     !command.membershipId ||
