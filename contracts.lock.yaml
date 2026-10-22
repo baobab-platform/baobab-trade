@@ -12,7 +12,7 @@ schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: ce18d6b58f120b3883ccbe21eac8ecd1c154ac1d
+  commit: 742295e2b4f67a3de6d985e7da6bd89ed0be39cb
 contracts:
   - contracts/commerce/v1/seller-binding.schema.json
   - contracts/payments/v1/merchant-readiness.schema.json
@@ -63,6 +63,15 @@ contracts:
   - contracts/control-plane/v1/estate-client-binding.openapi.yaml
   - contracts/trade/v2/buyer-execution-context.schema.json
   - contracts/trade/v2/buyer-spend-budget.schema.json
+  # ADR-SHARED-042 section 14 Decisions 6-8 (ADR-0034): the buyer-authority
+  # receipt and commitment valuation the B2B fence consumes, CP's estate
+  # commerce profile attestation, and the NativeCommitmentClassification
+  # Trade records from it.
+  - contracts/trade/v2/buyer-authority-receipt.schema.json
+  - contracts/trade/v2/buyer-commitment-valuation.schema.json
+  - contracts/control-plane/v1/estate-commerce-profile.schema.json
+  - contracts/control-plane/v1/estate-commerce-profile.openapi.yaml
+  - contracts/trade/v2/native-commitment-classification.schema.json
   - contracts/buyer-organisation/v1/domain.schema.json
   - contracts/legal-entity/registry.yaml
   - contracts/tenancy/tenancy.yaml

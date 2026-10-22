@@ -94,6 +94,20 @@ export const estateBindingAttestationSchema = validator(
   "control-plane/v1/estate-client-binding.schema.json",
   "EstateBindingAttestation",
 )
+// ADR-SHARED-042 section 14 Decision 8: CP's estate commerce profile
+// attestation and the NativeCommitmentClassification Trade records from it.
+export const commerceProfileRequestSchema = validator(
+  "control-plane/v1/estate-commerce-profile.schema.json",
+  "EstateCommerceProfileResolveRequest",
+)
+export const commerceProfileAttestationSchema = validator(
+  "control-plane/v1/estate-commerce-profile.schema.json",
+  "EstateCommerceProfileAttestation",
+)
+export const nativeCommitmentClassificationSchema = validator(
+  "trade/v2/native-commitment-classification.schema.json",
+  "NativeCommitmentClassification",
+)
 export const buyerExecutionContextSchema = validator(
   "trade/v2/buyer-execution-context.schema.json",
   "TradeBuyerExecutionContext",

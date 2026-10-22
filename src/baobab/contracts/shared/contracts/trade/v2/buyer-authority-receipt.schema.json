@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/trade/v2/buyer-authority-receipt.schema.json",
+  "title": "Trade buyer-authority receipt and its single consumption at native commit",
+  "description": "ADR-SHARED-042 sections 9 and 12 (CAA-01 remainder, coupled to CAA-06). The auditable, purpose-bound fact Trade records when the buyer operation decision is ALLOW for one consequential operation, and the separate fact of its one consumption at the native commit point. It is the buyer counterpart of the ADR-SHARED-039 seller order-authority receipt and never replaces it: an order commits only when one current buyer receipt and one current seller receipt name the same operation reference and the same immutable transaction, and the buyer's spend reservation converts to committed consumption in the same native transaction. A receipt is server-built by Trade from a TradeBuyerExecutionContext; no browser, client, Medusa customer token, webhook or background job may submit, mint or extend one. It is not a credential, not a cached grant and not authority for any other operation. This contract registers no route, capability or grant and activates nothing.",
+  "$defs": {
+    "receiptId": { "type": "string", "format": "uuid" },
+    "consumableOperation": {
+      "type": "string",
+      "description": "Every buyer operation that commits a native B2B order (ADR-SHARED-042 section 14, Decision 6): cart checkout, direct order creation and draft conversion, whatever API, workflow, job or callback starts it. Each is also a seller-side class in order-operations.yaml, so each needs both receipts.",
+      "enum": ["trade.order.commit", "trade.order.create", "trade.draft-order.finalize"]
+    },
+    "BuyerAuthorityReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Immutable. Issued only for outcome ALLOW (APPROVAL_REQUIRED, SELECTION_REQUIRED, DENY and UNAVAILABLE never produce a receipt). Semantic rules consumers must also apply: evaluated_at < expires_at <= evaluated_at + 60 seconds, and expires_at never later than the context it was derived from; every bound fact must equal the native record at consumption; it is consumed at most once.",
+      "required": [
+        "receipt_id",
+        "context_id",
+        "decision_id",
+        "correlation_id",
+        "operation",
+        "operation_reference",
+        "actor_principal_id",
+        "tenant_id",
+        "canonical_organisation_id",
+        "buyer_organisation_id",
+        "buyer_membership_id",
+        "membership_revision",
+        "market_id",
+        "resource_id",
+        "resource_version",
+        "transaction_digest",
+        "amount_minor",
+        "currency",
+        "valuation_digest",
+        "policy_revision",
+        "spend_reservation_id",
+        "spend_hold_revision",
+        "seller_legal_entity_id",
+        "seller_binding_reference",
+        "evaluated_at",
+        "expires_at"
+      ],
+      "properties": {
+        "receipt_id": { "$ref": "#/$defs/receiptId" },
+        "context_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The TradeBuyerExecutionContext this receipt was derived from."
+        },
+        "decision_id": { "type": "string", "format": "uuid" },
+        "correlation_id": { "type": "string", "format": "uuid" },
+        "operation": { "$ref": "#/$defs/consumableOperation" },
+        "operation_reference": {
+          "$ref": "order-authority.schema.json#/$defs/operationReference",
+          "description": "The same exact operation reference the seller order-authority decision is bound to. A buyer receipt for one reference never satisfies another."
+        },
+        "actor_principal_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The CP canonical human Principal who initiated the commitment."
+        },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "canonical_organisation_id": { "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId" },
+        "buyer_organisation_id": { "$ref": "../../buyer-organisation/v1/domain.schema.json#/$defs/buyerOrganisationId" },
+        "buyer_membership_id": { "$ref": "../../buyer-organisation/v1/domain.schema.json#/$defs/buyerMembershipId" },
+        "membership_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "A later membership revision (any role, grant or status change) invalidates the receipt before consumption."
+        },
+        "market_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/resourceId" },
+        "resource_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "resource_version": { "type": "integer", "minimum": 1 },
+        "transaction_digest": { "$ref": "buyer-execution-context.schema.json#/$defs/transactionDigest" },
+        "amount_minor": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The buyer_commitment_amount_minor of the final valuation (Decision 7): the whole buyer obligation, equal to the spend reservation's amount and the native order's committed amount."
+        },
+        "valuation_digest": {
+          "$ref": "buyer-commitment-valuation.schema.json#/$defs/valuationDigest",
+          "description": "The final valuation the amount came from. A fence refuses the receipt unless the native record still values to this digest."
+        },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "policy_revision": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "approval_references": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "uuid" },
+          "description": "The bound approvals that released an escalated commitment, each by a Principal distinct from the initiator."
+        },
+        "spend_reservation_id": {
+          "$ref": "buyer-spend-budget.schema.json#/$defs/reservationId",
+          "description": "The ACTIVE reservation (Decision 5) that must convert to committed consumption in the same native transaction as the order. An evaluator ALLOW without it never commits."
+        },
+        "spend_hold_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The reservation's hold revision the decision was made against. A rollover that moves a hold (month boundary, budget revision or retirement) advances it, so this receipt and any approval bound to the former hold go stale and must be re-decided."
+        },
+        "seller_legal_entity_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId" },
+        "seller_binding_reference": { "$ref": "seller-operating-binding.schema.json#/$defs/bindingReference" },
+        "evaluated_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "evidence_references": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "buyer-execution-context.schema.json#/$defs/evidenceReference" }
+        }
+      }
+    },
+    "BuyerAuthorityConsumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The one consumption of a buyer receipt, written in the same native database transaction that commits the order, converts the spend reservation and consumes the seller receipt. Append-only and unique per receipt: a replay returns this original fact or is refused, never a second order.",
+      "required": [
+        "receipt_id",
+        "operation_reference",
+        "seller_receipt_id",
+        "spend_reservation_id",
+        "commitment_reference",
+        "consumed_at"
+      ],
+      "properties": {
+        "receipt_id": { "$ref": "#/$defs/receiptId" },
+        "operation_reference": { "$ref": "order-authority.schema.json#/$defs/operationReference" },
+        "seller_receipt_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The ADR-SHARED-039 seller order-authority receipt consumed in the same transaction."
+        },
+        "spend_reservation_id": { "$ref": "buyer-spend-budget.schema.json#/$defs/reservationId" },
+        "commitment_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "The committed native order, also recorded on the reservation's COMMIT ledger entries."
+        },
+        "consumed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "consumptionRefusal": {
+      "type": "string",
+      "description": "Why a native commit fence refused to consume a buyer receipt. Each maps to a decisionReason: RECEIPT_EXPIRED, RECEIPT_CONSUMED and MEMBERSHIP_REVISED to CONTEXT_NOT_USABLE; TRANSACTION_MISMATCH (including a changed spend hold revision) to TRANSACTION_CHANGED; SELLER_RECEIPT_ABSENT to SELLER_AUTHORITY_ABSENT; RESERVATION_NOT_CURRENT to CONTEXT_NOT_USABLE (or SPEND_LIMIT_EXCEEDED when reacquisition fails); FOREIGN_RECEIPT to BUYER_NOT_AUTHORISED.",
+      "enum": [
+        "RECEIPT_EXPIRED",
+        "RECEIPT_CONSUMED",
+        "MEMBERSHIP_REVISED",
+        "TRANSACTION_MISMATCH",
+        "SELLER_RECEIPT_ABSENT",
+        "RESERVATION_NOT_CURRENT",
+        "FOREIGN_RECEIPT"
+      ]
+    }
+  }
+}

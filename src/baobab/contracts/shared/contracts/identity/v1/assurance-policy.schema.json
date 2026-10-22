@@ -11,7 +11,7 @@
         "BUYER_COMMITMENT",
         "BUYER_ADMINISTRATION"
       ],
-      "description": "Canonical assurance profiles. BUYER_SESSION: reading buyer context, private catalogue and contract prices, and editing a cart. BUYER_COMMITMENT: actions that commit the buyer Organisation or bind the person to it (RFQ, quotation acceptance, purchase approval, order commitment, draft finalisation, invitation acceptance). BUYER_ADMINISTRATION: managing the Organisation's members. A policy defines a requirement for every profile; it may make a profile unattainable only by leaving the operation unmapped, which is not permitted, so an unready profile is expressed by a policy that is not APPROVED."
+      "description": "Canonical assurance profiles. BUYER_SESSION: reading buyer context, private catalogue and contract prices, and editing a cart. BUYER_COMMITMENT: actions that commit the buyer Organisation or bind the person to it (RFQ, quotation acceptance, purchase approval, order commitment, direct order creation, draft finalisation, invitation acceptance). BUYER_ADMINISTRATION: managing the Organisation's members. A policy defines a requirement for every profile; it may make a profile unattainable only by leaving the operation unmapped, which is not permitted, so an unready profile is expressed by a policy that is not APPROVED."
     },
     "policyStatus": {
       "type": "string",
@@ -166,6 +166,7 @@
             "trade.quotation.accept",
             "trade.purchase-approval.decide",
             "trade.order.commit",
+            "trade.order.create",
             "trade.draft-order.finalize",
             "trade.buyer-invitation.accept",
             "trade.buyer-member.manage"
@@ -196,6 +197,9 @@
             "trade.order.commit": {
               "const": "BUYER_COMMITMENT"
             },
+            "trade.order.create": {
+              "const": "BUYER_COMMITMENT"
+            },
             "trade.draft-order.finalize": {
               "const": "BUYER_COMMITMENT"
             },
@@ -220,6 +224,7 @@
         "trade.quotation.accept": "BUYER_COMMITMENT",
         "trade.purchase-approval.decide": "BUYER_COMMITMENT",
         "trade.order.commit": "BUYER_COMMITMENT",
+        "trade.order.create": "BUYER_COMMITMENT",
         "trade.draft-order.finalize": "BUYER_COMMITMENT",
         "trade.buyer-invitation.accept": "BUYER_COMMITMENT",
         "trade.buyer-member.manage": "BUYER_ADMINISTRATION"

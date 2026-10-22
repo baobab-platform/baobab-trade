@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/trade/v2/buyer-commitment-valuation.schema.json",
+  "title": "Trade buyer commitment valuation",
+  "description": "ADR-SHARED-042 section 14, Decision 7 (Platform Owner, 2026-10-22): the amount Decision 5 spend control reserves and commits for a B2B purchase is the complete, finalised buyer purchase obligation in the transaction currency's minor units. It includes every buyer-payable product, service, freight, handling, insurance, tax, duty and other contractual charge, less genuine commercial price reductions. Payment timing and tender never reduce it: gift cards, wallet or store balance, tender credits, deposits already collected and credit terms are not components. Trade computes the valuation server-side from the finalised, authoritative native pricing, tax, discount and fulfilment facts with integer arithmetic; a mutable cart total is never trusted on its own. Its buyer_commitment_amount_minor populates amount_minor of the TradeBuyerExecutionContext, the BuyerAuthorityReceipt and the spend reservation, and its valuation_digest is bound into each. Any material change (quantity, negotiated price, discount, tax, shipping, currency, Site or Incoterm) is a new valuation, digest and authorization evaluation. An undetermined component never authorises a commitment: it needs an authoritative final quotation or a separately governed maximum-price commitment. There is no currency substitution; cross-currency aggregation needs its own governed FX contract. This contract activates nothing.",
+  "$defs": {
+    "valuationDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "SHA-256 over the canonical form of the valuation's binding fields: a JSON object with exactly basis, buyer_commitment_amount_minor, components (each with exactly component_kind, amount_minor, determination and source_reference, sorted by component_kind then source_reference), currency, maximum_commitment_reference (null unless GOVERNED_MAXIMUM), resource_id, resource_version and transaction_digest; keys sorted, no insignificant whitespace, integers in plain decimal, UTF-8. scripts/tests/test_buyer_commitment_valuation.py is the reference implementation."
+    },
+    "componentKind": {
+      "type": "string",
+      "description": "What the buyer becomes obligated to pay, or a genuine commercial reduction of it. Tender (gift card, wallet, store credit, deposit already collected, payment on account) is deliberately absent: a payment instrument never reduces the purchase obligation. A seller's own expenses that are not chargeable to the buyer are never components.",
+      "enum": [
+        "MERCHANDISE",
+        "ITEM_DISCOUNT",
+        "ORDER_DISCOUNT",
+        "SHIPPING",
+        "HANDLING",
+        "INSURANCE",
+        "SERVICE_CHARGE",
+        "TAX",
+        "DUTY_AND_IMPORT_CHARGE",
+        "REFUNDABLE_DEPOSIT"
+      ]
+    },
+    "determination": {
+      "type": "string",
+      "description": "FINAL: from the finalised native record or an authoritative final quotation. GOVERNED_MAXIMUM: the not-to-exceed amount of a separately governed maximum-price commitment. An estimate is neither and never authorises a commitment.",
+      "enum": ["FINAL", "GOVERNED_MAXIMUM"]
+    },
+    "ValuationComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component_kind", "amount_minor", "determination", "source_reference"],
+      "properties": {
+        "component_kind": { "$ref": "#/$defs/componentKind" },
+        "amount_minor": {
+          "type": "integer",
+          "description": "Signed minor units in the valuation currency: discounts are zero or negative, every charge zero or positive. A discount is deducted once, at the level it was granted."
+        },
+        "determination": { "$ref": "#/$defs/determination" },
+        "source_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[\\x21-\\x7E]+$",
+          "description": "The authoritative native fact the component was read from (for example a line item, adjustment, shipping method or tax line identifier), so the valuation can be independently reconciled."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "component_kind": { "enum": ["ITEM_DISCOUNT", "ORDER_DISCOUNT"] } } },
+          "then": { "properties": { "amount_minor": { "maximum": 0 } } },
+          "else": { "properties": { "amount_minor": { "minimum": 0 } } }
+        }
+      ]
+    },
+    "BuyerCommitmentValuation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One valuation of one immutable purchase version. Semantic rules consumers must also apply: buyer_commitment_amount_minor equals the sum of every component's amount_minor; at least one MERCHANDISE component exists; a FINAL basis has only FINAL components; valuation_digest equals the canonical digest of the binding fields.",
+      "required": [
+        "valuation_id",
+        "resource_id",
+        "resource_version",
+        "transaction_digest",
+        "currency",
+        "basis",
+        "components",
+        "buyer_commitment_amount_minor",
+        "valued_at",
+        "valuation_digest"
+      ],
+      "properties": {
+        "valuation_id": { "type": "string", "format": "uuid" },
+        "resource_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "resource_version": { "type": "integer", "minimum": 1 },
+        "transaction_digest": { "$ref": "buyer-execution-context.schema.json#/$defs/transactionDigest" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "basis": {
+          "type": "string",
+          "description": "FINAL_PRICED: every component is final. GOVERNED_MAXIMUM: some component is bounded by a governed maximum-price commitment named in maximum_commitment_reference.",
+          "enum": ["FINAL_PRICED", "GOVERNED_MAXIMUM"]
+        },
+        "maximum_commitment_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "The separately governed maximum-price commitment. Required for GOVERNED_MAXIMUM, forbidden otherwise."
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/ValuationComponent" }
+        },
+        "buyer_commitment_amount_minor": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The complete buyer purchase obligation. It populates amount_minor of the execution context, buyer receipt and spend reservation."
+        },
+        "incoterm": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "The agreed Incoterm when it decides who bears freight, insurance or duties; a change is a new valuation."
+        },
+        "valued_at": { "type": "string", "format": "date-time" },
+        "valuation_digest": { "$ref": "#/$defs/valuationDigest" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "basis": { "const": "GOVERNED_MAXIMUM" } } },
+          "then": { "required": ["maximum_commitment_reference"] },
+          "else": { "not": { "required": ["maximum_commitment_reference"] } }
+        }
+      ]
+    }
+  },
+  "$ref": "#/$defs/BuyerCommitmentValuation"
+}

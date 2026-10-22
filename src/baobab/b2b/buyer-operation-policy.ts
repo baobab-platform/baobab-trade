@@ -69,6 +69,8 @@ export const BUYER_OPERATION_RULES = {
     kind: "COMMITMENT",
   },
   "trade.order.commit": { roles: PURCHASING, market: true, site: "REQUIRED", kind: "COMMITMENT" },
+  // Decision 6: a direct order is a binding commitment, governed like a cart commit.
+  "trade.order.create": { roles: PURCHASING, market: true, site: "REQUIRED", kind: "COMMITMENT" },
   "trade.draft-order.finalize": {
     roles: PURCHASING,
     market: true,

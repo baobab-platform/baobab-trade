@@ -90,6 +90,7 @@
     "regression:checkout-commit-fence": "medusa exec ./src/scripts/regression-checkout-commit-fence.ts",
     "regression:native-configuration-attestation": "medusa exec ./src/scripts/regression-native-configuration-attestation.ts",
     "regression:spend-reservation-commands": "medusa exec ./src/scripts/regression-spend-reservation-commands.ts",
+    "regression:native-commitment-classification": "medusa exec ./src/scripts/regression-native-commitment-classification.ts",
     "regression:trade-a-entry-points": "medusa exec ./src/scripts/regression-trade-a-entry-points.ts",
     "regression:trade-a-commit-fences": "medusa exec ./src/scripts/regression-trade-a-commit-fences.ts"
   },

@@ -10,7 +10,7 @@
     },
     "buyerOperation": {
       "type": "string",
-      "description": "The exact buyer-side operation evaluated. Seller-side consequential classes remain trade/v2 order-operations.yaml; trade.order.commit and trade.draft-order.finalize appear in both because each needs both decisions.",
+      "description": "The exact buyer-side operation evaluated. Seller-side consequential classes remain trade/v2 order-operations.yaml; trade.order.commit, trade.order.create and trade.draft-order.finalize appear in both because each needs both decisions (ADR-SHARED-042 section 14, Decision 6: every binding B2B order commitment, whatever API, workflow, job or callback starts it).",
       "enum": [
         "trade.buyer-context.resolve",
         "trade.private-catalogue.view",
@@ -20,6 +20,7 @@
         "trade.cart.modify",
         "trade.purchase-approval.decide",
         "trade.order.commit",
+        "trade.order.create",
         "trade.draft-order.finalize",
         "trade.buyer-invitation.accept",
         "trade.buyer-member.manage"
@@ -149,7 +150,15 @@
         "resource_id": { "type": "string", "minLength": 1, "maxLength": 128 },
         "resource_version": { "type": "integer", "minimum": 1 },
         "transaction_digest": { "$ref": "#/$defs/transactionDigest" },
-        "amount_minor": { "type": "integer", "minimum": 0 },
+        "amount_minor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "For a purchase commitment, the buyer_commitment_amount_minor of its final BuyerCommitmentValuation (buyer-commitment-valuation.schema.json, Decision 7): the complete buyer obligation, never a merchandise subtotal or the amount paid now."
+        },
+        "valuation_digest": {
+          "$ref": "buyer-commitment-valuation.schema.json#/$defs/valuationDigest",
+          "description": "The final valuation the amount came from. Required for order commitments (Decision 7)."
+        },
         "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
         "policy_revision": { "type": "string", "minLength": 1, "maxLength": 128 },
         "approval_references": {
@@ -178,7 +187,7 @@
           "if": {
             "properties": {
               "operation": {
-                "enum": ["trade.contract-price.view", "trade.rfq.submit", "trade.quotation.accept", "trade.cart.modify", "trade.purchase-approval.decide", "trade.order.commit", "trade.draft-order.finalize"]
+                "enum": ["trade.contract-price.view", "trade.rfq.submit", "trade.quotation.accept", "trade.cart.modify", "trade.purchase-approval.decide", "trade.order.commit", "trade.order.create", "trade.draft-order.finalize"]
               }
             }
           },
@@ -189,7 +198,7 @@
           "if": {
             "properties": {
               "operation": {
-                "enum": ["trade.rfq.submit", "trade.quotation.accept", "trade.cart.modify", "trade.purchase-approval.decide", "trade.order.commit", "trade.draft-order.finalize"]
+                "enum": ["trade.rfq.submit", "trade.quotation.accept", "trade.cart.modify", "trade.purchase-approval.decide", "trade.order.commit", "trade.order.create", "trade.draft-order.finalize"]
               }
             }
           },
@@ -197,8 +206,8 @@
         },
         {
           "description": "An order commitment also binds the seller of record; buyer ALLOW never substitutes for seller authority.",
-          "if": { "properties": { "operation": { "enum": ["trade.order.commit", "trade.draft-order.finalize"] } } },
-          "then": { "required": ["seller_legal_entity_id", "seller_binding_reference"] }
+          "if": { "properties": { "operation": { "enum": ["trade.order.commit", "trade.order.create", "trade.draft-order.finalize"] } } },
+          "then": { "required": ["seller_legal_entity_id", "seller_binding_reference", "valuation_digest"] }
         }
       ]
     }

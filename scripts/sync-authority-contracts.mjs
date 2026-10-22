@@ -29,6 +29,11 @@ const roots = [
   "contracts/control-plane/v1/estate-client-binding.schema.json",
   "contracts/trade/v2/buyer-execution-context.schema.json",
   "contracts/trade/v2/buyer-spend-budget.schema.json",
+  // ADR-SHARED-042 section 14 Decisions 6-8.
+  "contracts/trade/v2/buyer-authority-receipt.schema.json",
+  "contracts/trade/v2/buyer-commitment-valuation.schema.json",
+  "contracts/control-plane/v1/estate-commerce-profile.schema.json",
+  "contracts/trade/v2/native-commitment-classification.schema.json",
 ]
 const schemas = new Map()
 const discover = (path) => {
