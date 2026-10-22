@@ -12,7 +12,7 @@ schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: 57b4eb2ce41a705dec71d685614a7a260f693d5b
+  commit: 6fa9df424bdd09c5d5ded05a0d445be4144223df
 contracts:
   - contracts/commerce/v1/seller-binding.schema.json
   - contracts/payments/v1/merchant-readiness.schema.json

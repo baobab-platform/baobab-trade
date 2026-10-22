@@ -8,6 +8,8 @@ export default async function verifyB2BModule({ container }: ExecArgs): Promise<
     b2b.listB2BOrganisations({}, { take: 1 }),
     b2b.listBuyerMemberships({}, { take: 1 }),
     b2b.listBuyerRoles({}, { take: 1 }),
+    b2b.listBuyerRoleMarketScopes({}, { take: 1 }),
+    b2b.listBuyerRoleSiteScopes({}, { take: 1 }),
     b2b.listApprovalPolicies({}, { take: 1 }),
     b2b.listSpendLimits({}, { take: 1 }),
     b2b.listPurchaseOrderRequirements({}, { take: 1 }),
