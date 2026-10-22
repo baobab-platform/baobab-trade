@@ -83,5 +83,50 @@ describe("B2B organisation authorization", () => {
     expect(() => assertApprovalAuthority(approver, "org-x", 120_000, 100_000)).toThrowError(
       B2BAuthorizationError,
     )
+    expect(() => assertApprovalAuthority(approver, "org-x", 90_000, 100_000)).not.toThrow()
+  })
+
+  // ADR-SHARED-042 section 14, CAA-05 ruling: absence is never permission.
+  it("treats a missing spend limit as no spending authority, not unlimited", () => {
+    for (const spendLimitMinor of [null, 0]) {
+      expect(() =>
+        decidePurchase(
+          buyer,
+          {
+            spendLimitMinor,
+            approvalThresholdMinor: 50_000,
+            approverLimitMinor: null,
+            purchaseOrderRequired: false,
+          },
+          1,
+        ),
+      ).toThrowError(expect.objectContaining({ code: "SPEND_POLICY_NOT_CONFIGURED" }))
+    }
+  })
+
+  it("denies a purchase above the limit unless an approval threshold permits escalation", () => {
+    const authority = {
+      spendLimitMinor: 100_000,
+      approverLimitMinor: null,
+      purchaseOrderRequired: false,
+    }
+    expect(() =>
+      decidePurchase(buyer, { ...authority, approvalThresholdMinor: null }, 150_000),
+    ).toThrowError(expect.objectContaining({ code: "SPEND_LIMIT_EXCEEDED" }))
+    expect(
+      decidePurchase(buyer, { ...authority, approvalThresholdMinor: 50_000 }, 150_000),
+    ).toEqual({
+      outcome: "REQUIRE_APPROVAL",
+      reason: "SPEND_LIMIT",
+    })
+  })
+
+  it("treats a missing approver limit as no approval authority", () => {
+    const approver: BuyerContext = { ...buyer, roles: ["APPROVER"] }
+    for (const limit of [null, 0]) {
+      expect(() => assertApprovalAuthority(approver, "org-x", 1, limit)).toThrowError(
+        expect.objectContaining({ code: "APPROVAL_AUTHORITY_NOT_CONFIGURED" }),
+      )
+    }
   })
 })

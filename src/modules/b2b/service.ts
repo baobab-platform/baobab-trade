@@ -9,6 +9,8 @@ import B2BOrganisation from "./models/b2b-organisation"
 import BuyerMembership from "./models/buyer-membership"
 import BuyerInvitationDelivery from "./models/buyer-invitation-delivery"
 import BuyerRole from "./models/buyer-role"
+import BuyerRoleMarketScope from "./models/buyer-role-market-scope"
+import BuyerRoleSiteScope from "./models/buyer-role-site-scope"
 import CommercialTerms from "./models/commercial-terms"
 import CreditTerms from "./models/credit-terms"
 import ContractPrice from "./models/contract-price"
@@ -33,6 +35,8 @@ class B2BModuleService extends MedusaService({
   BuyerMembership,
   BuyerInvitationDelivery,
   BuyerRole,
+  BuyerRoleMarketScope,
+  BuyerRoleSiteScope,
   CommercialTerms,
   ContractPrice,
   CreditTerms,

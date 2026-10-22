@@ -77,11 +77,53 @@ Two parts of Trade still key buyers on Medusa: `GET /store/b2b/context` (on the 
 
 **Switches.** The route is disabled (404) unless `BAOBAB_BUYER_IDENTITY_ENABLED=true`. Enabled without its configuration, it is `UNAVAILABLE` and never falls back.
 
+**CAA-05 operation policy** (Platform Owner ruling of 2026-10-22, ADR-SHARED-042 §14; `src/baobab/b2b/buyer-operation-policy.ts`, revision `trade.buyer-operation-policy:v1`). A pure evaluator decides one buyer operation from server-loaded facts and returns a Shared `BuyerOperationDecision`. The absence of a limit, grant or policy is never permission. Checks, in order:
+
+1. **Membership.** ACTIVE and in effect, else `BUYER_NOT_AUTHORISED`.
+2. **Role.** The exhaustive operation → role mapping for all 11 Shared operations:
+   - reads are open to all six roles;
+   - RFQ, cart, quotation acceptance, order commitment and draft finalization need `BUYER`, `SENIOR_BUYER`, `PROCUREMENT_MANAGER` or `ACCOUNT_ADMIN`;
+   - approval decisions need `APPROVER`, `PROCUREMENT_MANAGER` or `ACCOUNT_ADMIN`;
+   - member management needs `ACCOUNT_ADMIN`.
+
+   There is no hierarchy, and an unknown role grants nothing. Invitation acceptance and member management are refused `OPERATION_NOT_ACTIVATED`: they need their own single-use recipient evaluator and governed administrative scope.
+
+3. **Market.** A Market key and CP's current Market authority are required. Trade has no CP Market source yet, so callers supply `UNAVAILABLE` and no market-scoped operation can ALLOW.
+4. **Sites.** Each referenced Site belongs to this Organisation (a foreign or unknown one is `BUYER_NOT_AUTHORISED`), is ACTIVE, is in the operation's Market and supports its shipping or billing use. A commitment must name a delivery Site.
+5. **Role-bound scope.** One permitted role assignment must itself hold the active Market grant and every Site grant (`b2b_buyer_role_market_scope`, `b2b_buyer_role_site_scope`). Grants never compose across roles.
+6. **Commitments.**
+   - A required purchase order must be present and match its format.
+   - Exactly one in-effect spend limit for the Market and currency, with a positive order limit, is required; otherwise `SPEND_POLICY_NOT_CONFIGURED`.
+   - Over the limit is `SPEND_LIMIT_EXCEEDED`, unless an enabled approval policy for that exact Market and currency permits escalation (`APPROVAL_REQUIRED`).
+   - A bound approval releases the commitment only when its digest, version, amount, currency, Market and policy revision are unchanged (`TRANSACTION_CHANGED`), the initiator is this Principal, the approver is someone else, and the approver's current re-evaluation still ALLOWs.
+7. **Approval decisions.**
+   - Nobody approves their own transaction (`SEPARATION_OF_DUTIES`).
+   - An explicit in-effect approval limit for the Market and currency is required; otherwise `APPROVAL_AUTHORITY_NOT_CONFIGURED`, never `APPROVAL_REQUIRED`.
+   - The amount must be within it (`APPROVAL_THRESHOLD_EXCEEDED`).
+
+`buyer-operation-policy-source.ts` loads the facts. Each source fails independently to `UNAVAILABLE`. Malformed money rows are dropped, which fails closed. A purchase-order requirement applies organisation-wide where no Market-specific row exists, because it is a restriction.
+
+`Migration20261022120000` adds the grant tables and approval binding:
+
+- **Grant revisions:** owned by the database.
+- **Integrity:** a REVOKED grant is terminal, grants are never deleted or moved, and a Site grant may name only a Site of the role's own Organisation.
+- **Revision bump:** every grant change advances the membership revision.
+- **Approval binding:** `b2b_purchase_approval` gains the initiating and approving Principals, Market, digest, resource version and policy revision, with the approver distinct at database level.
+- **No backfill:** no existing membership receives a grant.
+
+The legacy `policy.ts` fails closed in the same way: a null spend or approver limit is no authority, and an over-limit purchase escalates only where a threshold is configured.
+
 ## Consequences
 
 - **Data backfill.** Existing relationships have no `engine_instance_id` or `link_provenance`, so they are refused until a governed reconciliation records both. No relationship is auto-promoted (ADR-SHARED-042 §11).
 - **Not yet built:**
-  - `BUYER_COMMITMENT` and `BUYER_ADMINISTRATION` operations, the remaining CAA-05 operation policy (sites, Markets, spend, PO, separation of duties), the buyer-authority receipt and its native fences (CAA-06) all remain outstanding;
+  - **CAA-05 remainder:**
+    - **Cumulative spend:** commitments are not yet counted against a budget, and no concurrent reservation exists, because the ruling's "remaining authority" needs a budget period and a reservation model that `SpendLimit` (a per-transaction cap) does not define;
+    - **Limit scope:** limits are scoped to the membership, not to the role;
+    - **Market mapping:** the governed `market_key` ↔ canonical CP Market mapping, and the CP Market authority source, are missing;
+    - **Unbuilt evaluators:** the invitation-recipient evaluator and the governed administrative scope for member management;
+    - **Scope workflow:** the governed scope-assignment and backfill workflow;
+  - the evaluator is not yet called by any route: composition with assurance, the buyer context, the seller decision, the buyer-authority receipt and native fences is CAA-06;
   - market binding: `requested_country_code` is accepted but not yet bound;
   - registration: governed buyer registration (`register-buyer`) is a separate onboarding operation and is not called here.
 - **Activation dependencies.** CP's estate binding route (CP #426) and IAM-issued `trade:buyer-handoff` tokens are required before the route can return ALLOW outside tests.

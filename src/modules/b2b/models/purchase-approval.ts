@@ -15,6 +15,13 @@ const PurchaseApproval = model.define(
     reason: model.text(),
     decision_note: model.text().nullable(),
     decided_at: model.dateTime().nullable(),
+    // ADR-SHARED-042 section 8 binding facts (Migration20261022120000).
+    requested_by_principal_id: model.text().nullable(),
+    decided_by_principal_id: model.text().nullable(),
+    market_key: model.text().nullable(),
+    transaction_digest: model.text().nullable(),
+    resource_version: model.text().nullable(),
+    policy_revision: model.text().nullable(),
   },
 )
 

@@ -8,6 +8,9 @@ export class B2BAuthorizationError extends Error {
       | "ORGANISATION_MISMATCH"
       | "ROLE_REQUIRED"
       | "PO_NUMBER_REQUIRED"
+      | "SPEND_POLICY_NOT_CONFIGURED"
+      | "SPEND_LIMIT_EXCEEDED"
+      | "APPROVAL_AUTHORITY_NOT_CONFIGURED"
       | "APPROVAL_LIMIT_EXCEEDED",
   ) {
     super(message)
@@ -36,6 +39,12 @@ export function assertRole(context: BuyerContext, permitted: readonly B2BRole[])
   }
 }
 
+/**
+ * ADR-SHARED-042 section 14, CAA-05 ruling: the absence of a limit is never
+ * permission. A null spend limit means no demonstrated spending authority, and
+ * a purchase above the limit escalates only where an approval threshold is
+ * configured. buyer-operation-policy.ts is the full evaluator.
+ */
 export function decidePurchase(
   context: BuyerContext,
   authority: PurchaseAuthority,
@@ -51,7 +60,19 @@ export function decidePurchase(
     )
   }
 
-  if (authority.spendLimitMinor !== null && amountMinor > authority.spendLimitMinor) {
+  if (authority.spendLimitMinor === null || authority.spendLimitMinor <= 0) {
+    throw new B2BAuthorizationError(
+      "No spend authority is configured for this purchase",
+      "SPEND_POLICY_NOT_CONFIGURED",
+    )
+  }
+  if (amountMinor > authority.spendLimitMinor) {
+    if (authority.approvalThresholdMinor === null) {
+      throw new B2BAuthorizationError(
+        "Purchase amount exceeds the buyer's spend limit",
+        "SPEND_LIMIT_EXCEEDED",
+      )
+    }
     return { outcome: "REQUIRE_APPROVAL", reason: "SPEND_LIMIT" }
   }
   if (authority.approvalThresholdMinor !== null && amountMinor > authority.approvalThresholdMinor) {
@@ -68,7 +89,14 @@ export function assertApprovalAuthority(
 ): void {
   assertActiveBuyerContext(context, organisationId)
   assertRole(context, ["APPROVER", "PROCUREMENT_MANAGER", "ACCOUNT_ADMIN"])
-  if (approverLimitMinor !== null && amountMinor > approverLimitMinor) {
+  // A missing approver limit is never unlimited approval authority (CAA-05 ruling).
+  if (approverLimitMinor === null || approverLimitMinor <= 0) {
+    throw new B2BAuthorizationError(
+      "No approval authority is configured for this purchase",
+      "APPROVAL_AUTHORITY_NOT_CONFIGURED",
+    )
+  }
+  if (amountMinor > approverLimitMinor) {
     throw new B2BAuthorizationError(
       "Purchase amount exceeds the buyer's approval authority",
       "APPROVAL_LIMIT_EXCEEDED",

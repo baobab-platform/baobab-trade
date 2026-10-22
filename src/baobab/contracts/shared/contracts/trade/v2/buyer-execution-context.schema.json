@@ -32,7 +32,7 @@
     },
     "decisionReason": {
       "type": "string",
-      "description": "Closed reasons. Reasons for an Organisation the actor cannot act for are never more specific than BUYER_NOT_AUTHORISED, so no foreign record can be probed.",
+      "description": "Closed reasons. Reasons for an Organisation the actor cannot act for are never more specific than BUYER_NOT_AUTHORISED, so no foreign record can be probed. SPEND_POLICY_NOT_CONFIGURED means no explicit, active spend authority applies for the operation's Market and currency (absence of a limit is never unlimited authority); SPEND_LIMIT_EXCEEDED means an applicable limit exists and the amount exceeds it. APPROVAL_AUTHORITY_NOT_CONFIGURED means the approver has no explicit, active approval limit for that Market and currency; APPROVAL_THRESHOLD_EXCEEDED means the amount exceeds an applicable threshold or limit (ADR-SHARED-042 section 14, CAA-05 ruling).",
       "enum": [
         "BUYER_TOKEN_INVALID",
         "ASSURANCE_INSUFFICIENT",
@@ -47,7 +47,9 @@
         "MARKET_NOT_PERMITTED",
         "PURCHASE_ORDER_REQUIRED",
         "SPEND_LIMIT_EXCEEDED",
+        "SPEND_POLICY_NOT_CONFIGURED",
         "APPROVAL_THRESHOLD_EXCEEDED",
+        "APPROVAL_AUTHORITY_NOT_CONFIGURED",
         "SEPARATION_OF_DUTIES",
         "TRANSACTION_CHANGED",
         "CONTEXT_NOT_USABLE",
