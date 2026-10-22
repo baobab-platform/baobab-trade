@@ -19,9 +19,16 @@ import {
  *
  * Local verification is necessary, never sufficient: the Control Plane also
  * verifies the token and confirms it is current by introspection.
+ *
+ * Handoff v1.1 (ADR-SHARED-042 section 14): the BFF also authenticates as
+ * itself with its own workload token (verifyBffCaller), whose client must
+ * equal the buyer token's azp, so a stolen buyer token cannot be presented by
+ * another caller.
  */
 export const TRADE_AUDIENCE = "baobab-trade"
 export const TRADE_BUY_SCOPE = "trade:buy"
+/** identity/v1 buyer-identity-handoff v1.1: the BFF's own caller credential. */
+export const TRADE_BUYER_HANDOFF_SCOPE = "trade:buyer-handoff"
 
 const CLOCK_SKEW_SECONDS = 30
 const MAXIMUM_LIFETIME_SECONDS = 15 * 60
@@ -43,6 +50,18 @@ export type VerifiedBuyerToken = {
   issuer: string
   subject: string
   authorisedParty: string
+  tokenId: string
+  expiresAt: Date
+  /** Issuer-asserted assurance evidence (ADR-SHARED-042 CAA-03); never authority by itself. */
+  acr?: string
+  amr: string[]
+  authTime?: Date
+}
+
+/** The registered estate BFF's own workload token (BffCallerTokenClaims). */
+export type VerifiedBffCaller = {
+  issuer: string
+  clientId: string
   tokenId: string
   expiresAt: Date
 }
@@ -99,7 +118,82 @@ export class BuyerTokenVerifier {
     this.timeoutMs = options.timeoutMs ?? 3000
   }
 
+  /** A human buyer token: actor human, trade:buy, an authorised BFF azp. */
   async verify(token: string): Promise<VerifiedBuyerToken> {
+    const invalid = (reason: string) => new BuyerTokenError("BUYER_TOKEN_INVALID", reason)
+    const claims = await this.verifySigned(token)
+    const {
+      iss,
+      sub,
+      exp,
+      jti,
+      scope,
+      actor_type: actorType,
+      azp,
+      acr,
+      amr,
+      auth_time: authTime,
+    } = claims
+    if (actorType !== "human") throw invalid("token is not a human token")
+    if (typeof scope !== "string" || !scope.split(" ").includes(TRADE_BUY_SCOPE)) {
+      throw invalid("token does not carry trade:buy")
+    }
+    if (typeof azp !== "string" || !this.authorisedParties.has(azp)) {
+      throw invalid("token was not obtained by an authorised BFF client")
+    }
+    // Assurance claims are evidence only. A malformed one is not ignored:
+    // it makes the token invalid rather than silently weaker.
+    if (acr !== undefined && (typeof acr !== "string" || acr.length === 0 || acr.length > 255)) {
+      throw invalid("token acr is malformed")
+    }
+    if (
+      amr !== undefined &&
+      (!Array.isArray(amr) ||
+        amr.some((m) => typeof m !== "string" || m.length === 0 || m.length > 64))
+    ) {
+      throw invalid("token amr is malformed")
+    }
+    if (authTime !== undefined && (typeof authTime !== "number" || !Number.isInteger(authTime))) {
+      throw invalid("token auth_time is malformed")
+    }
+    return {
+      issuer: iss as string,
+      subject: sub as string,
+      authorisedParty: azp,
+      tokenId: jti as string,
+      expiresAt: new Date((exp as number) * 1000),
+      acr: acr as string | undefined,
+      amr: (amr as string[] | undefined) ?? [],
+      authTime: authTime === undefined ? undefined : new Date((authTime as number) * 1000),
+    }
+  }
+
+  /**
+   * The BFF's own workload token, presented as the caller credential
+   * (buyer-identity-handoff v1.1): actor workload, trade:buyer-handoff and a
+   * registered BFF client. It authenticates the BFF, never a buyer.
+   */
+  async verifyBffCaller(token: string): Promise<VerifiedBffCaller> {
+    const invalid = (reason: string) => new BuyerTokenError("BUYER_TOKEN_INVALID", reason)
+    const claims = await this.verifySigned(token)
+    const { iss, exp, jti, scope, actor_type: actorType, client_id: clientId } = claims
+    if (actorType !== "workload") throw invalid("caller token is not a workload token")
+    if (typeof scope !== "string" || !scope.split(" ").includes(TRADE_BUYER_HANDOFF_SCOPE)) {
+      throw invalid("caller token does not carry trade:buyer-handoff")
+    }
+    if (typeof clientId !== "string" || !this.authorisedParties.has(clientId)) {
+      throw invalid("caller token is not for an authorised BFF client")
+    }
+    return {
+      issuer: iss as string,
+      clientId,
+      tokenId: jti as string,
+      expiresAt: new Date((exp as number) * 1000),
+    }
+  }
+
+  /** Signature, issuer, Trade audience, subject, token id and bounded lifetime. */
+  private async verifySigned(token: string): Promise<Claims> {
     const invalid = (reason: string) => new BuyerTokenError("BUYER_TOKEN_INVALID", reason)
     if (typeof token !== "string" || token.length > MAXIMUM_TOKEN_LENGTH)
       throw invalid("token is malformed")
@@ -132,7 +226,7 @@ export class BuyerTokenVerifier {
     if (!ok) throw invalid("token signature is invalid")
 
     const nowSeconds = Math.floor(this.now() / 1000)
-    const { iss, sub, aud, exp, iat, nbf, jti, scope, actor_type: actorType, azp } = claims
+    const { iss, sub, aud, exp, iat, nbf, jti } = claims
     const audiences = typeof aud === "string" ? [aud] : Array.isArray(aud) ? aud : []
     if (iss !== this.issuer) throw invalid("token issuer is not the configured IAM issuer")
     if (!audiences.includes(TRADE_AUDIENCE)) throw invalid("token is not audience-bound to Trade")
@@ -140,13 +234,6 @@ export class BuyerTokenVerifier {
       throw invalid("token subject is invalid")
     if (typeof jti !== "string" || jti.length === 0 || jti.length > 255)
       throw invalid("token id is missing")
-    if (actorType !== "human") throw invalid("token is not a human token")
-    if (typeof scope !== "string" || !scope.split(" ").includes(TRADE_BUY_SCOPE)) {
-      throw invalid("token does not carry trade:buy")
-    }
-    if (typeof azp !== "string" || !this.authorisedParties.has(azp)) {
-      throw invalid("token was not obtained by an authorised BFF client")
-    }
     if (
       typeof exp !== "number" ||
       typeof iat !== "number" ||
@@ -162,13 +249,7 @@ export class BuyerTokenVerifier {
     if (nbf !== undefined && (typeof nbf !== "number" || nbf > nowSeconds + CLOCK_SKEW_SECONDS)) {
       throw invalid("token is not yet valid")
     }
-    return {
-      issuer: iss,
-      subject: sub,
-      authorisedParty: azp,
-      tokenId: jti,
-      expiresAt: new Date(exp * 1000),
-    }
+    return claims
   }
 
   /** Keys come only from the issuer's own discovery document and same-origin JWKS. */

@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/identity/v1/buyer-identity-handoff.schema.json",
+  "title": "Buyer identity handoff from a confidential estate BFF to Trade",
+  "description": "Provider-neutral evidence a Digital Estate BFF presents to Trade for a B2B buyer operation (IAM ADR-0010 section 0, ADR-IAM-0023 sections 39-45, ADR-IAM-0033). The BFF carries authenticated evidence server-to-server; it never creates identity, context or authority. Trade validates the access token itself, resolves the canonical Principal and current context through the Control Plane, and independently checks an active buyer membership on every operation. A commerce-engine customer token alone authorises nothing. Validating against this schema is necessary, never sufficient. Version 1.1 (ADR-SHARED-042 Platform Owner ruling of 22 October 2026): the BFF authenticates to Trade as itself, independently of the human token. It presents its own IAM workload access token (BffCallerTokenClaims) as the caller credential and carries the human access token in the body (BuyerOperationHandoffRequest) as subject evidence, so a stolen buyer token cannot be replayed by another caller. The BFF client must equal the human token's azp. The v1.0 shape (human token as the bearer, BuyerOperationRequest body) stays valid only for consumers that have not adopted v1.1, and authorises no operation that needs the Digital Estate: the estate is attested by the Control Plane from the BFF's own evidence (control-plane/v1 estate-client-binding).",
+  "type": "object",
+  "$defs": {
+    "TradeBuyerAccessTokenClaims": {
+      "type": "object",
+      "description": "The decoded claims of the IAM access token Trade accepts for a buyer operation. Trade verifies the signature and issuer against the IAM issuer's published metadata; the issuer runtime (Hydra first, per ADR-IAM-0033) is not named here. Provider organisation, group, role, tenant or email claims are provider-local and are never buyer-membership or purchasing evidence: Trade derives no authority from them.",
+      "required": ["iss", "sub", "aud", "exp", "iat", "jti", "scope", "actor_type", "azp"],
+      "properties": {
+        "iss": { "type": "string", "format": "uri", "description": "Together with sub, the stable external-identity key (identity/v1 ExternalIdentity). Must equal the configured IAM issuer exactly." },
+        "sub": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "aud": {
+          "description": "Audience-bound to Trade (ADR-IAM-0023 section 43). A token for another audience is refused.",
+          "oneOf": [
+            { "const": "baobab-trade" },
+            { "type": "array", "contains": { "const": "baobab-trade" }, "items": { "type": "string" }, "uniqueItems": true }
+          ]
+        },
+        "exp": { "type": "integer" },
+        "nbf": { "type": "integer" },
+        "iat": { "type": "integer" },
+        "jti": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "scope": {
+          "type": "string",
+          "description": "Space-separated; must include trade:buy, which requests buying operations and grants no authority by itself.",
+          "pattern": "^(?:[^ ]+ )*trade:buy(?: [^ ]+)*$"
+        },
+        "actor_type": { "const": "human" },
+        "azp": { "type": "string", "minLength": 1, "maxLength": 255, "description": "The registered confidential BFF client that obtained the token. Trade accepts only clients allowlisted for buyer operations." },
+        "sid": { "type": "string", "minLength": 1, "maxLength": 255, "description": "IAM session reference, for revocation and logout correlation." },
+        "acr": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "amr": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 64 }, "uniqueItems": true },
+        "auth_time": { "type": "integer" }
+      }
+    },
+    "BuyerOperationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Non-authoritative request metadata the BFF sends alongside the token. Every field is a request to be resolved and attested (ADR-IAM-0023 section 63), never a proof. In particular the requested Organisation is checked by the Control Plane and then against an active Trade buyer membership; it is never the ZuriBeans tenant's own PRIMARY Organisation by default.",
+      "required": ["correlation_id"],
+      "properties": {
+        "requested_organisation_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId", "description": "The buyer company the person asks to act for, as a canonical Organisation identifier. Absent when the person has not selected one." },
+        "requested_country_code": { "$ref": "../../control-plane/v1/platform-context.schema.json#/$defs/countryCode", "description": "The market the person asks to trade in. Resolved against the tenant's ACTIVE market participation; never trusted as given." },
+        "correlation_id": { "type": "string", "format": "uuid", "description": "Bare UUID, as control-plane/v1 requires." }
+      }
+    },
+    "BffCallerTokenClaims": {
+      "type": "object",
+      "description": "The decoded claims of the BFF's own IAM workload access token, presented to Trade as the caller credential (Authorization: Bearer). Trade verifies signature and issuer against the IAM issuer's published metadata, requires the client to be a registered ACTIVE confidential estate BFF, and requires client_id to equal the azp of the human token in the same request. Trade forwards the same token to the Control Plane as client_evidence; it grants no estate, buyer or purchasing authority by itself.",
+      "required": [
+        "iss",
+        "sub",
+        "aud",
+        "exp",
+        "iat",
+        "jti",
+        "scope",
+        "actor_type",
+        "client_id"
+      ],
+      "properties": {
+        "iss": {
+          "type": "string",
+          "format": "uri",
+          "description": "Must equal the configured IAM issuer exactly, the same issuer as the human token."
+        },
+        "sub": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "aud": {
+          "oneOf": [
+            {
+              "const": "baobab-trade"
+            },
+            {
+              "type": "array",
+              "contains": {
+                "const": "baobab-trade"
+              },
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            }
+          ]
+        },
+        "exp": {
+          "type": "integer"
+        },
+        "nbf": {
+          "type": "integer"
+        },
+        "iat": {
+          "type": "integer"
+        },
+        "jti": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "scope": {
+          "type": "string",
+          "pattern": "^(?:[^ ]+ )*trade:buyer-handoff(?: [^ ]+)*$",
+          "description": "Space-separated; must include trade:buyer-handoff, which permits presenting buyer subject evidence and grants no authority by itself."
+        },
+        "actor_type": {
+          "const": "workload"
+        },
+        "client_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The registered confidential BFF client. Must equal the human token's azp."
+        }
+      }
+    },
+    "BuyerOperationHandoffRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Body of a v1.1 buyer operation. As BuyerOperationRequest, every field other than the subject evidence is a request to be resolved and attested, never a proof.",
+      "required": [
+        "subject_token",
+        "subject_token_type",
+        "correlation_id"
+      ],
+      "properties": {
+        "subject_token": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 8192,
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+          "description": "The human's compact-serialised JWS IAM access token (TradeBuyerAccessTokenClaims). Never logged, persisted or echoed."
+        },
+        "subject_token_type": {
+          "const": "urn:ietf:params:oauth:token-type:access_token"
+        },
+        "requested_organisation_id": {
+          "$ref": "#/$defs/BuyerOperationRequest/properties/requested_organisation_id"
+        },
+        "requested_country_code": {
+          "$ref": "#/$defs/BuyerOperationRequest/properties/requested_country_code"
+        },
+        "requested_digital_estate_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/estateId",
+          "description": "Optional narrowing hint passed to the Control Plane estate binding resolution; never establishes an estate."
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/BuyerOperationRequest/properties/correlation_id"
+        }
+      }
+    }
+  },
+  "required": ["access_token_claims", "request"],
+  "additionalProperties": false,
+  "properties": {
+    "access_token_claims": { "$ref": "#/$defs/TradeBuyerAccessTokenClaims" },
+    "request": { "$ref": "#/$defs/BuyerOperationRequest" }
+  }
+}

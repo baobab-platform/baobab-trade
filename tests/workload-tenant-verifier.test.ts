@@ -23,7 +23,24 @@ const fakeControlPlaneClient = (
 })
 
 describe("ControlPlaneWorkloadTenantVerifier", () => {
-  it("resolves without throwing when the Control Plane attests the asserted tenant", async () => {
+  it("refuses a context CP resolved for a different organisation", async () => {
+    const resolvePlatformContext = vi.fn().mockResolvedValue({
+      context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
+      tenant_id: "tn_1",
+      resolved_at: "2026-09-01T10:00:00Z",
+      expires_at: "2026-09-01T10:01:00Z",
+      organisation_id: "canon-org-2",
+    })
+    const verifier = new ControlPlaneWorkloadTenantVerifier(
+      fakeTokenProvider(),
+      fakeControlPlaneClient(resolvePlatformContext),
+    )
+    await expect(
+      verifier.verifyOrganisationTenant("tn_1", "canon-org-1", "corr-1"),
+    ).rejects.toBeInstanceOf(TenantAttestationError)
+  })
+
+  it("returns the attesting CP context when the Control Plane attests the asserted tenant", async () => {
     const resolvePlatformContext = vi.fn().mockResolvedValue({
       context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
       tenant_id: "tn_1",
@@ -36,7 +53,7 @@ describe("ControlPlaneWorkloadTenantVerifier", () => {
 
     await expect(
       verifier.verifyOrganisationTenant("tn_1", "canon-org-1", "corr-1"),
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ contextId: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b", expiresAt: undefined })
     expect(resolvePlatformContext).toHaveBeenCalledWith(
       "tn_1",
       "canon-org-1",

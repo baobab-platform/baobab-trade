@@ -17,6 +17,9 @@ const BuyerMembership = model
       invitation_accepted_at: model.dateTime().nullable(),
       effective_from: model.dateTime().nullable(),
       effective_until: model.dateTime().nullable(),
+      // ADR-SHARED-042 section 7 membership_revision: database-owned; a role
+      // change increments it too (Migration20261022090000).
+      revision: model.number().default(1),
     },
   )
   .indexes([

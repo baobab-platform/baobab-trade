@@ -25,6 +25,15 @@ export type BaobabTradeEnvironment = {
   buyerIdentityEnabled: boolean
   buyerIamIssuer?: string
   buyerAuthorisedParties: string[]
+  // ADR-SHARED-042 CAA-03 interim verifier (ADR-0033): the security-approved
+  // exact acr values for BUYER_SESSION operations and their approval. Unset,
+  // every buyer operation is OPERATION_NOT_ACTIVATED; there is no default.
+  buyerAcceptedAcr: string[]
+  buyerAssuranceApprovalReference?: string
+  // CAA-04: this Trade instance and its deployment boundary, as CP's estate
+  // client binding names them. Neither is ever taken from a request.
+  tradeEngineInstanceId?: string
+  deploymentEnvironment?: string
   logLevel: string
 }
 
@@ -64,5 +73,12 @@ export const getBaobabTradeEnvironment = (): BaobabTradeEnvironment => ({
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean),
+  buyerAcceptedAcr: (process.env.BAOBAB_BUYER_ACCEPTED_ACR ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+  buyerAssuranceApprovalReference: process.env.BAOBAB_BUYER_ASSURANCE_APPROVAL_REFERENCE,
+  tradeEngineInstanceId: process.env.BAOBAB_TRADE_ENGINE_INSTANCE_ID,
+  deploymentEnvironment: process.env.BAOBAB_ENVIRONMENT,
   logLevel: process.env.LOG_LEVEL || "info",
 })

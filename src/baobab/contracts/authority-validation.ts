@@ -88,3 +88,17 @@ export const orderAuthorityDecisionSchema = validator(
   "trade/v2/order-authority.schema.json",
   "OrderAuthorityDecision",
 )
+// ADR-SHARED-042 CAA-04/05: CP's estate client binding attestation and the
+// buyer execution context and decision Trade returns.
+export const estateBindingAttestationSchema = validator(
+  "control-plane/v1/estate-client-binding.schema.json",
+  "EstateBindingAttestation",
+)
+export const buyerExecutionContextSchema = validator(
+  "trade/v2/buyer-execution-context.schema.json",
+  "TradeBuyerExecutionContext",
+)
+export const buyerOperationDecisionSchema = validator(
+  "trade/v2/buyer-execution-context.schema.json",
+  "BuyerOperationDecision",
+)

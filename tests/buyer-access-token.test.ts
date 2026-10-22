@@ -102,6 +102,9 @@ describe("BuyerTokenVerifier", () => {
       authorisedParty: "zuribeans-bff",
       tokenId: "token-0001",
       expiresAt: new Date((nowSeconds + 300) * 1000),
+      acr: undefined,
+      amr: [],
+      authTime: undefined,
     })
     await expect(
       v.verify(token(claims({ aud: "baobab-trade" }), { alg: "ES256", kid: "ec-1" })),
@@ -141,7 +144,11 @@ describe("BuyerTokenVerifier", () => {
         }),
       ),
     )
+    // Assurance evidence is carried for the assurance verifier; nothing else.
     expect(Object.keys(verified).sort()).toEqual([
+      "acr",
+      "amr",
+      "authTime",
       "authorisedParty",
       "expiresAt",
       "issuer",
@@ -199,5 +206,80 @@ describe("BuyerTokenVerifier", () => {
         new BuyerTokenVerifier({ issuer: "http://iam.example.test/", authorisedParties: ["x"] }),
     ).toThrow()
     expect(() => new BuyerTokenVerifier({ issuer: ISSUER, authorisedParties: [" "] })).toThrow()
+  })
+  it("carries issuer-asserted assurance evidence and refuses malformed assurance claims", async () => {
+    const { v } = verifier()
+    const verified = await v.verify(
+      token(
+        claims({
+          acr: "urn:example.test:acr:synthetic-session",
+          amr: ["pwd", "otp"],
+          auth_time: nowSeconds - 60,
+        }),
+      ),
+    )
+    expect(verified).toMatchObject({
+      acr: "urn:example.test:acr:synthetic-session",
+      amr: ["pwd", "otp"],
+      authTime: new Date((nowSeconds - 60) * 1000),
+    })
+    expect((await v.verify(token())).amr).toEqual([])
+    for (const change of [
+      { acr: "" },
+      { acr: 3 },
+      { amr: "pwd" },
+      { amr: [""] },
+      { auth_time: "yesterday" },
+    ]) {
+      await rejects(v, token(claims(change)))
+    }
+  })
+})
+
+describe("BuyerTokenVerifier.verifyBffCaller (handoff v1.1)", () => {
+  const caller = (change: Record<string, unknown> = {}) =>
+    claims({
+      sub: "zuribeans-bff",
+      scope: "trade:buyer-handoff",
+      actor_type: "workload",
+      azp: undefined,
+      client_id: "zuribeans-bff",
+      ...change,
+    })
+  const callerRejects = async (v: BuyerTokenVerifier, raw: string) => {
+    const error = await v.verifyBffCaller(raw).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(BuyerTokenError)
+    expect((error as BuyerTokenError).code).toBe("BUYER_TOKEN_INVALID")
+  }
+
+  it("accepts the registered BFF's own workload token", async () => {
+    const { v } = verifier()
+    await expect(v.verifyBffCaller(token(caller()))).resolves.toEqual({
+      issuer: ISSUER,
+      clientId: "zuribeans-bff",
+      tokenId: "token-0001",
+      expiresAt: new Date((nowSeconds + 300) * 1000),
+    })
+  })
+
+  it("refuses a buyer token, another client, a missing scope or a foreign audience as the caller", async () => {
+    const { v } = verifier()
+    await callerRejects(v, token(claims()))
+    for (const change of [
+      { actor_type: "human" },
+      { client_id: "rogue-bff" },
+      { client_id: undefined },
+      { scope: "trade:buy" },
+      { aud: ["baobab-control-plane"] },
+      { exp: nowSeconds - 1 },
+    ]) {
+      await callerRejects(v, token(caller(change)))
+    }
+    await callerRejects(v, token(caller(), { key: attacker.privateKey }))
+  })
+
+  it("never accepts the BFF's workload token as buyer evidence", async () => {
+    const { v } = verifier()
+    await rejects(v, token(caller()))
   })
 })
