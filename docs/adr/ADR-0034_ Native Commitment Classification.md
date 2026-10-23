@@ -104,29 +104,12 @@ Anything else is `RESOLUTION_UNAVAILABLE`.
   - Nothing is deleted or truncated.
 - **Quotations.** Refused until a governed quotation seller attribution exists.
 
-### Commit check (Migration20261022220000)
-
-The TA-07 fence consumes the seller receipt and records a `trade_order_commitment` for every cart commit and draft finalisation, whatever path wrote the order. A deferred constraint trigger on that commitment then checks, at COMMIT of the same transaction:
-
-| Check                                                                                                                                                            | Refusal                                                                                                                   |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| No ACTIVE classification for the committed cart or draft                                                                                                         | `CLASSIFICATION_ABSENT`, or `CLASSIFICATION_CHANGED` if the resource's classification was retired                         |
-| The classification's Tenant or seller binding version differs from the seller receipt's                                                                          | `CLASSIFICATION_CONFLICT`                                                                                                 |
-| The latest CP answer for the estate, engine instance and Market is not a live ATTESTED one for the same profile and model, at the classified or a later revision | `PROFILE_NOT_ACTIVE` (Trade re-resolves within the attestation's lifetime)                                                |
-| B2B                                                                                                                                                              | `BUYER_AUTHORITY_ABSENT` until CAA-06b consumes the buyer-authority receipt and its spend reservation in this transaction |
-
-- **B2C** passes on the seller receipt the TA-07 fence already consumed; its consumer and payment controls are its own policy.
-- **Atomicity.** A refusal rolls back the order, the receipt consumption and the commitment together.
-- **Posture.** The check applies in every persistence posture, because a commitment exists only for an attributed, receipted record. Unattributed SANDBOX fixtures never reach it.
-- **Never B2C by default.** No path reinterprets a refused or unclassified commitment as B2C.
-
 ## Consequences
 
 - **Default state.** Nothing classifies today. No profile is registered and no workload holds the scope. `getCommerceProfileResolver()` is null outside the configured buyer identity path in development or staging.
-- **Not yet wired.** No route or workflow calls the classifier yet; the CAA-06b composition does. Until it does, every native cart commit and draft finalisation is refused for want of a classification, and every B2B one is refused for want of buyer authority.
+- **Not yet wired.** No route or workflow calls the classifier yet; the CAA-06b composition does. This record does not change the commit fences: the next increment (CAA-06 fence) makes the order commit fence require an ACTIVE classification and select the regime from it.
 - **Evidence.**
   - Unit tests: `tests/estate-commerce-profile.test.ts` and `tests/native-commitment-classification.test.ts`.
   - Disposable PostgreSQL 17 regression: `regression:native-commitment-classification`, covering guards, replay, concurrency, quarantine, replacement, conversion and expiry.
-  - `regression:trade-a-commit-fences` on the real `completeCartWorkflow` and `convertDraftOrderWorkflow`: classified B2C commitments complete; unclassified, B2B, retired, stale-profile and CP-withdrawn commitments are refused and nothing commits; a re-resolved attestation commits.
 
   All CP answers in these are synthetic. This is source and engine-local evidence only, not connected qualification, staging or go-live readiness (ZB-G03 and ZB-G07 remain open).
