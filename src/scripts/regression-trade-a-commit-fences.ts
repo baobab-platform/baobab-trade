@@ -876,7 +876,7 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
         amount_minor: amount,
         valuation_digest: `sha256:${"a".repeat(64)}`,
         currency: "UGX",
-        policy_revision: 1,
+        policy_revision: "1",
         spend_reservation_id: reserved.reservationId,
         spend_hold_revision: reserved.holdRevision,
         seller_legal_entity_id: responsible_legal_entity_id,

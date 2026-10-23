@@ -65,7 +65,7 @@ export class Migration20261023150000 extends Migration {
       amount_minor numeric NOT NULL CHECK (amount_minor > 0 AND amount_minor = trunc(amount_minor)),
       currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
       valuation_digest text NOT NULL,
-      policy_revision integer NOT NULL CHECK (policy_revision >= 1),
+      policy_revision text NOT NULL CHECK (length(policy_revision) BETWEEN 1 AND 128),
       approval_references text[] NOT NULL DEFAULT '{}',
       spend_reservation_id text NOT NULL,
       spend_hold_revision integer NOT NULL CHECK (spend_hold_revision >= 1),

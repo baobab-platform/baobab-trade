@@ -39,7 +39,7 @@ export type BuyerAuthorityReceipt = {
   amount_minor: number
   valuation_digest: string
   currency: string
-  policy_revision: number
+  policy_revision: string
   approval_references?: string[]
   spend_reservation_id: string
   spend_hold_revision: number
