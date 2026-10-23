@@ -99,6 +99,21 @@ export class Migration20261023120000 extends Migration {
     BEGIN
       RAISE EXCEPTION 'Decision 9: commit fence decisions are append-only evidence';
     END $$;
+    -- A verdict is written only from inside the fence trigger, for an existing
+    -- commitment with the same receipt and subject: never by a direct INSERT,
+    -- so the shadow evidence that justifies activation cannot be forged.
+    CREATE FUNCTION trade_commit_fence_decision_origin() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      IF pg_trigger_depth() < 2 OR NOT EXISTS (SELECT 1 FROM trade_order_commitment oc
+           WHERE oc.receipt_id = NEW.receipt_id AND oc.subject_type = NEW.subject_type
+             AND oc.subject_id = NEW.subject_id) THEN
+        RAISE EXCEPTION 'Decision 9: commit fence decisions are written only by the commit fence';
+      END IF;
+      RETURN NEW;
+    END $$;
+    CREATE TRIGGER trade_commit_fence_decision_origin
+      BEFORE INSERT ON trade_commit_fence_decision
+      FOR EACH ROW EXECUTE FUNCTION trade_commit_fence_decision_origin();
     CREATE TRIGGER trade_commit_fence_decision_immutable
       BEFORE UPDATE OR DELETE ON trade_commit_fence_decision
       FOR EACH ROW EXECUTE FUNCTION trade_commit_fence_decision_immutable();
@@ -112,7 +127,11 @@ export class Migration20261023120000 extends Migration {
             latest trade_commerce_profile_observation%ROWTYPE; gate trade_commit_fence_enforcement%ROWTYPE;
             reason text;
     BEGIN
-      SELECT * INTO gate FROM trade_commit_fence_enforcement WHERE singleton;
+      -- FOR SHARE serializes the verdict with a gate change: an uncommitted
+      -- switch blocks this check until it commits, and this check holds off a
+      -- switch until the order's transaction ends. There is no window in which
+      -- an order commits under the mode it was not evaluated in.
+      SELECT * INTO gate FROM trade_commit_fence_enforcement WHERE singleton FOR SHARE;
       IF gate.mode IS NULL THEN
         RAISE EXCEPTION 'Decision 9 denied: the commit fence enforcement gate is missing';
       END IF;

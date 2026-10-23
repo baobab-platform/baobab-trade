@@ -815,6 +815,16 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
       /one governed row/,
     )
     await refused(
+      "a forged verdict",
+      () =>
+        pool.query(
+          `INSERT INTO trade_commit_fence_decision (subject_type, subject_id, receipt_id, outcome, enforcement_mode,
+             enforcement_revision) VALUES ('cart', $1, $2, 'CLASSIFICATION_ABSENT', 'SHADOW', 1)`,
+          [held, heldReceipt.receipt_id],
+        ),
+      /written only by the commit fence/,
+    )
+    await refused(
       "a rewritten verdict",
       () => pool.query("UPDATE trade_commit_fence_decision SET outcome = 'ALLOWED'"),
       /append-only evidence/,

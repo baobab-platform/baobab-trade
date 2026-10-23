@@ -34,7 +34,8 @@ An earlier attempt landed the Decision 8 commit check enforcing immediately. Not
    - **`ENFORCED`:** any refusal raises, and the order, the receipt consumption and the commitment roll back together.
    - A change needs the next revision and its own evidence reference. The row cannot be added, deleted or truncated.
    - The fence has no session, caller or path exemption: the gate is the only switch, and it is global.
-3. **Evidence.** `trade_commit_fence_decision` is append-only. Each evaluation records:
+   - The fence reads the gate `FOR SHARE`, so a switch and an in-flight verdict are serialized: no order commits under a mode it was not evaluated in.
+3. **Evidence.** `trade_commit_fence_decision` is append-only, and only the fence can write it: an insert must come from inside the fence trigger, for an existing commitment with the same receipt and subject. Each evaluation records:
    - the subject;
    - the receipt;
    - the classification and model;
@@ -63,5 +64,5 @@ The migration leaves the gate in `SHADOW`. Rolling the migration back is refused
   - an unclassified draft finalisation is refused;
   - a re-resolved attestation commits;
 - under `SHADOW`, an unclassified commitment completes and is recorded `CLASSIFICATION_ABSENT`;
-- an unversioned gate change, a second gate row, a gate deletion, and a rewritten or deleted verdict are all refused;
+- an unversioned gate change, a second gate row, a gate deletion, and a forged, rewritten or deleted verdict are all refused;
 - the regression leaves the gate in `SHADOW`.
