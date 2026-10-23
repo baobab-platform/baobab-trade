@@ -28,7 +28,7 @@ Contracts: Shared at `1517429bcae601a1b0288ca0279e524ce48a3d77`, adding `control
 
 2. **Commerce profile provenance.** The commerce profile request now carries `estate_provenance` of either kind, `ESTATE_CLIENT_BINDING` or `GOVERNED_RESOURCE_ASSIGNMENT`, with its CP reference. CP re-verifies it from its own record.
 3. **Classification.** `classifyNativeCommitment` takes an `EstateProof` of either kind. If neither is present, or one is malformed, the result is `CLASSIFICATION_ABSENT`.
-   - An assignment must match the resource's Tenant, Trade's engine instance and the seller context's Market, and must be unexpired. Otherwise the result is `CLASSIFICATION_CONFLICT`.
+   - An assignment must match the resource's Tenant, Trade's engine instance, the seller context's Market and the operation being classified (an assignment attests exactly one operation), and must be unexpired. Otherwise the result is `CLASSIFICATION_CONFLICT`.
    - A B2B assigned commitment still needs a buyer context that Trade established itself for the same estate, Tenant and engine. Only a BFF-proven commitment additionally requires the buyer context to name that BFF's binding.
    - The classification's evidence names the assignment and its attestation instead of an estate binding.
 4. **Evidence (migration `Migration20261023090000`).** `trade_commerce_profile_observation` records each answer's `estate_provenance_kind` and `estate_provenance_reference`; the latter is the renamed `estate_binding_id`. Existing rows are estate-client bindings. Rolling back is refused once an assignment observation exists.
@@ -53,6 +53,6 @@ This step does not touch the commit fence. Fence enforcement, the reservation an
 - **`tests/native-commitment-classification.test.ts`:**
   - classification via assignment, with its evidence and the provenance passed to CP;
   - B2B assigned commitments still require a matching buyer context;
-  - refusal of an assignment for another Market, Tenant or engine, or one that has expired;
+  - refusal of an assignment for another Market, Tenant, engine or operation (or none), or one that has expired;
   - a missing or unknown provenance gives `CLASSIFICATION_ABSENT`.
 - **`regression:native-commitment-classification` (case 10), against PostgreSQL with the real migrations:** the same refusals, a contract-valid B2C classification on an assignment, the recorded provenance, and refusal of an unknown provenance kind.

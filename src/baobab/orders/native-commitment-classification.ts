@@ -36,7 +36,10 @@ import {
   type CommerceProfileResolver,
   type EstateProvenance,
 } from "../control-plane/estate-commerce-profile"
-import type { ResourceAssignmentAttestation } from "../control-plane/estate-resource-assignment"
+import type {
+  AssignmentOperation,
+  ResourceAssignmentAttestation,
+} from "../control-plane/estate-resource-assignment"
 import type { CommitmentAttribution } from "./commitment-attribution"
 import type { PgPool } from "./postgres-governed-binding-persistence"
 
@@ -115,6 +118,8 @@ type ProvenStatement = {
   expiresAt: Date
   /** The Market the provenance is limited to, when it is. */
   marketId: string | null
+  /** The one native commitment operation the provenance covers, when it is limited to one. */
+  operation: AssignmentOperation | null
   evidence: string[]
 }
 
@@ -127,6 +132,7 @@ const proven = (estate: EstateProof | undefined): ProvenStatement | null => {
       engineInstanceId: estate.engineInstanceId,
       expiresAt: estate.expiresAt,
       marketId: null,
+      operation: null,
       evidence: [`cp-estate-binding:${estate.bindingId}@r${estate.revision}`],
     }
   }
@@ -139,6 +145,7 @@ const proven = (estate: EstateProof | undefined): ProvenStatement | null => {
       engineInstanceId: a.engineInstanceId,
       expiresAt: a.expiresAt,
       marketId: a.marketId,
+      operation: a.operation,
       evidence: [
         `cp-resource-assignment:${a.assignmentId}@r${a.assignmentRevision}`,
         `cp-resource-assignment-attestation:${a.attestationId}`,
@@ -159,6 +166,12 @@ export type ClassifyRequest = {
   /** The CP platform context that attribution was resolved under. */
   sellerContext: { contextId: string; marketId?: string }
   estate: EstateProof
+  /**
+   * The native commitment operation this classification is for. A governed
+   * resource assignment attests exactly one operation, so it never proves
+   * the estate of another.
+   */
+  operation?: AssignmentOperation
   buyer: ClassificationBuyer
   correlationId: string
 }
@@ -254,6 +267,7 @@ export async function classifyNativeCommitment(
     estate.engineInstanceId !== deps.engineInstanceId ||
     estate.tenantId !== attribution.tenant_id ||
     (estate.marketId !== null && estate.marketId !== marketId) ||
+    (estate.operation !== null && estate.operation !== request.operation) ||
     !(estate.expiresAt.getTime() > now)
   ) {
     return refusal("CLASSIFICATION_CONFLICT")

@@ -646,6 +646,7 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
         attribution,
         sellerContext: { contextId: attribution.context_id, marketId: market },
         estate: estateProof,
+        operation: "trade.order.commit",
         buyer: consumer,
         correlationId: randomUUID(),
       },
@@ -657,6 +658,7 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
     ["another Tenant", assignment({ tenantId: "tn_other01" })],
     ["another engine instance", assignment({ engineInstanceId: "ei_other01" })],
     ["an expired attestation", assignment({ expiresAt: new Date(Date.now() - 1000) })],
+    ["another operation", assignment({ operation: "trade.draft-order.finalize" })],
   ] as const) {
     assert.deepEqual(
       await assigned(cartN, attributionN, proof),

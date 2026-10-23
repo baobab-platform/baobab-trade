@@ -342,6 +342,7 @@ describe("classifyNativeCommitment", () => {
     const { result, asked, store } = await run({
       request: {
         estate: assignment(),
+        operation: "trade.order.commit",
         buyer: { model: "CONSUMER", consumerReference: "consumer:1" },
       },
       attestation: { commerceModel: "B2C" },
@@ -372,11 +373,12 @@ describe("classifyNativeCommitment", () => {
   })
 
   it("still requires an independently established buyer for a B2B assigned commitment", async () => {
-    const b2b = await run({ request: { estate: assignment() } })
+    const b2b = await run({ request: { estate: assignment(), operation: "trade.order.commit" } })
     expect(b2b.result.outcome).toBe("CLASSIFIED")
     const consumer = await run({
       request: {
         estate: assignment(),
+        operation: "trade.order.commit",
         buyer: { model: "CONSUMER", consumerReference: "consumer:1" },
       },
     })
@@ -384,6 +386,7 @@ describe("classifyNativeCommitment", () => {
     const foreign = await run({
       request: {
         estate: assignment(),
+        operation: "trade.order.commit",
         buyer: { model: "BUYER_ORGANISATION", context: buyerContext({ tenant_id: "tn_other01" }) },
       },
     })
@@ -397,7 +400,19 @@ describe("classifyNativeCommitment", () => {
       { engineInstanceId: "ei_other01" },
       { expiresAt: new Date(NOW) },
     ]) {
-      const { result, asked } = await run({ request: { estate: assignment(change) } })
+      const { result, asked } = await run({
+        request: { estate: assignment(change), operation: "trade.order.commit" },
+      })
+      expect(result).toEqual({ outcome: "REFUSED", reason: "CLASSIFICATION_CONFLICT" })
+      expect(asked).toHaveLength(0)
+    }
+    // An assignment attests one operation: it never proves another, or none.
+    for (const operation of [
+      "trade.order.create",
+      "trade.draft-order.finalize",
+      undefined,
+    ] as const) {
+      const { result, asked } = await run({ request: { estate: assignment(), operation } })
       expect(result).toEqual({ outcome: "REFUSED", reason: "CLASSIFICATION_CONFLICT" })
       expect(asked).toHaveLength(0)
     }
