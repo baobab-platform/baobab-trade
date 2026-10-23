@@ -157,6 +157,7 @@ describe("the CAA-05 role matrix", () => {
     "trade.cart.modify": ["BUYER", "SENIOR_BUYER", "PROCUREMENT_MANAGER", "ACCOUNT_ADMIN"],
     "trade.purchase-approval.decide": ["APPROVER", "PROCUREMENT_MANAGER", "ACCOUNT_ADMIN"],
     "trade.order.commit": ["BUYER", "SENIOR_BUYER", "PROCUREMENT_MANAGER", "ACCOUNT_ADMIN"],
+    "trade.order.create": ["BUYER", "SENIOR_BUYER", "PROCUREMENT_MANAGER", "ACCOUNT_ADMIN"],
     "trade.draft-order.finalize": ["BUYER", "SENIOR_BUYER", "PROCUREMENT_MANAGER", "ACCOUNT_ADMIN"],
     "trade.buyer-invitation.accept": [],
     "trade.buyer-member.manage": ["ACCOUNT_ADMIN"],

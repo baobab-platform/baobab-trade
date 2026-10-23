@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/trade/v2/native-commitment-classification.schema.json",
+  "title": "Trade native commitment classification",
+  "description": "ADR-SHARED-042 section 14, Decision 8 (Platform Owner, 22 October 2026): Trade is the sole authority for recording each native commercial commitment's classification, derived from a current CP estate commerce profile attestation (control-plane/v1 estate-commerce-profile.schema.json) and independently validated against Trade's actual buyer relationship. The record is immutable: normal Store or Admin operations cannot edit it, and changing a transaction's business model is a governed replacement that preserves history. The database commit fence selects the authorization regime from it: B2B requires the buyer receipt, the seller receipt and the spend reservation in the order's own transaction (Decisions 6 and 7); B2C requires the seller receipt and its own consumer and payment controls. No known classification means no native order commitment. Nothing derives a classification from a sales channel, domain, currency, engine customer type or caller-supplied flag, and the absence of a buyer Organisation or membership is never proof of B2C. This contract activates nothing.",
+  "$defs": {
+    "resourceType": {
+      "type": "string",
+      "description": "The native resource the commitment is made through.",
+      "enum": ["cart", "quotation", "draft_order", "order"]
+    },
+    "buyerAccountModel": {
+      "type": "string",
+      "description": "The buyer relationship Trade positively established. BUYER_ORGANISATION: a Trade BuyerOrganisation with a current membership or a separately approved machine mandate (B2B). CONSUMER: a consumer transaction context under a separately governed B2C authorization policy (B2C).",
+      "enum": ["BUYER_ORGANISATION", "CONSUMER"]
+    },
+    "classificationStatus": {
+      "type": "string",
+      "description": "ACTIVE governs the resource. SUPERSEDED: replaced through a governed replacement transaction. QUARANTINED: a contradiction, revocation or legacy record awaiting governed reconciliation; it never commits.",
+      "enum": ["ACTIVE", "SUPERSEDED", "QUARANTINED"]
+    },
+    "NativeCommitmentClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Semantic rules consumers must also apply: commerce_model equals the CP attestation's model at classification time; the CP profile must still be ACTIVE at the attested or a later revision when the fence consumes it; a later classification of the same resource with a different model invalidates authority until governed reconciliation and reauthorization.",
+      "required": [
+        "classification_id",
+        "resource_type",
+        "resource_id",
+        "origin",
+        "digital_estate_id",
+        "tenant_id",
+        "trade_engine_instance_id",
+        "market_id",
+        "commerce_model",
+        "commerce_profile_id",
+        "profile_revision",
+        "profile_attestation_id",
+        "seller_binding_reference",
+        "buyer_account_model",
+        "status",
+        "revision",
+        "classified_at",
+        "evidence_references"
+      ],
+      "properties": {
+        "classification_id": { "type": "string", "format": "uuid" },
+        "resource_type": { "$ref": "#/$defs/resourceType" },
+        "resource_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "digital_estate_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/estateId" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "trade_engine_instance_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId" },
+        "market_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/resourceId" },
+        "commerce_model": { "$ref": "../../control-plane/v1/estate-commerce-profile.schema.json#/$defs/commerceModel" },
+        "commerce_profile_id": { "type": "string", "format": "uuid" },
+        "profile_revision": { "type": "integer", "minimum": 1 },
+        "profile_attestation_id": { "type": "string", "format": "uuid" },
+        "seller_binding_reference": {
+          "$ref": "seller-operating-binding.schema.json#/$defs/bindingReference",
+          "description": "The seller binding stays independently authoritative for seller of record and legal operating permission; it is referenced, never conflated with the estate classification."
+        },
+        "origin": {
+          "type": "string",
+          "enum": ["DIRECT", "CONVERTED", "REPLACEMENT"],
+          "description": "DIRECT: a commitment begun on this resource. CONVERTED: it continues another classified commitment (for example a binding quotation or a draft becoming an order) and must carry that commitment's reservation forward, never acquire a second one. REPLACEMENT: a governed replacement of another classification (for example a changed business model). A fence treats a missing or contradictory origin as CLASSIFICATION_ABSENT."
+        },
+        "lineage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parent_classification_id", "relation"],
+          "description": "The classification this commitment continues (for example a binding quotation converted to an order), so a reservation is carried forward, never taken twice. Required for CONVERTED and REPLACEMENT, forbidden for DIRECT, and its relation must match the origin.",
+          "properties": {
+            "parent_classification_id": { "type": "string", "format": "uuid" },
+            "relation": { "type": "string", "enum": ["CONVERTED_FROM", "REPLACES"] }
+          }
+        },
+        "buyer_account_model": { "$ref": "#/$defs/buyerAccountModel" },
+        "buyer_organisation_id": { "$ref": "../../buyer-organisation/v1/domain.schema.json#/$defs/buyerOrganisationId" },
+        "buyer_membership_id": { "$ref": "../../buyer-organisation/v1/domain.schema.json#/$defs/buyerMembershipId" },
+        "machine_mandate_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A separately approved machine procurement mandate, in place of a human membership (ADR-SHARED-042 section 8). Not activatable until its own delegation profile is accepted."
+        },
+        "consumer_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "The B2C consumer transaction context under the governed B2C authorization policy."
+        },
+        "status": { "$ref": "#/$defs/classificationStatus" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "classified_at": { "type": "string", "format": "date-time" },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "buyer-execution-context.schema.json#/$defs/evidenceReference" }
+        }
+      },
+      "allOf": [
+        {
+          "description": "A conversion or replacement always names its parent with the matching relation; a direct commitment names none.",
+          "if": { "properties": { "origin": { "const": "DIRECT" } } },
+          "then": { "not": { "required": ["lineage"] } },
+          "else": {
+            "required": ["lineage"],
+            "if": { "properties": { "origin": { "const": "CONVERTED" } } },
+            "then": { "properties": { "lineage": { "properties": { "relation": { "const": "CONVERTED_FROM" } } } } },
+            "else": { "properties": { "lineage": { "properties": { "relation": { "const": "REPLACES" } } } } }
+          }
+        },
+        {
+          "description": "B2B is a positively established buyer Organisation with a membership or an approved machine mandate, never a consumer.",
+          "if": { "properties": { "commerce_model": { "const": "B2B" } } },
+          "then": {
+            "properties": { "buyer_account_model": { "const": "BUYER_ORGANISATION" } },
+            "required": ["buyer_organisation_id"],
+            "oneOf": [{ "required": ["buyer_membership_id"] }, { "required": ["machine_mandate_reference"] }],
+            "not": { "required": ["consumer_reference"] }
+          }
+        },
+        {
+          "description": "B2C is a positively established consumer context, never inferred from a missing Organisation.",
+          "if": { "properties": { "commerce_model": { "const": "B2C" } } },
+          "then": {
+            "properties": { "buyer_account_model": { "const": "CONSUMER" } },
+            "required": ["consumer_reference"],
+            "allOf": [
+              { "not": { "required": ["buyer_organisation_id"] } },
+              { "not": { "required": ["buyer_membership_id"] } },
+              { "not": { "required": ["machine_mandate_reference"] } }
+            ]
+          }
+        }
+      ]
+    },
+    "classificationRefusal": {
+      "type": "string",
+      "description": "Why a native commit fence refused a commitment on classification grounds, each mapped to a decisionReason. CLASSIFICATION_ABSENT, PROFILE_NOT_ACTIVE, CLASSIFICATION_CONFLICT and CLASSIFICATION_CHANGED to CONTEXT_NOT_USABLE (CLASSIFICATION_CHANGED needs governed reconciliation and reauthorization); PROFILE_UNAVAILABLE to SOURCE_UNAVAILABLE (UNAVAILABLE, no commit); BUYER_AUTHORITY_ABSENT to BUYER_NOT_AUTHORISED (a B2B commitment is never reinterpreted as B2C).",
+      "enum": [
+        "CLASSIFICATION_ABSENT",
+        "PROFILE_NOT_ACTIVE",
+        "CLASSIFICATION_CONFLICT",
+        "CLASSIFICATION_CHANGED",
+        "PROFILE_UNAVAILABLE",
+        "BUYER_AUTHORITY_ABSENT"
+      ]
+    }
+  },
+  "$ref": "#/$defs/NativeCommitmentClassification"
+}

@@ -136,6 +136,10 @@ jobs:
         env:
           BAOBAB_SPEND_LEDGER_TEST_DB: baobab_trade_test
         run: npm run regression:spend-reservation-commands
+      - name: Regression — Decision 8 native commitment classification (disposable PostgreSQL 17 only)
+        env:
+          BAOBAB_CLASSIFICATION_TEST_DB: baobab_trade_test
+        run: npm run regression:native-commitment-classification
       - name: Verify required core modules
         run: npm run verify:core-modules
       - name: Bootstrap Uganda and South Africa Market projections

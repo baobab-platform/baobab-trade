@@ -31,6 +31,7 @@ export const CANONICAL_OPERATION_PROFILES = {
   "trade.quotation.accept": "BUYER_COMMITMENT",
   "trade.purchase-approval.decide": "BUYER_COMMITMENT",
   "trade.order.commit": "BUYER_COMMITMENT",
+  "trade.order.create": "BUYER_COMMITMENT",
   "trade.draft-order.finalize": "BUYER_COMMITMENT",
   "trade.buyer-invitation.accept": "BUYER_COMMITMENT",
   "trade.buyer-member.manage": "BUYER_ADMINISTRATION",
