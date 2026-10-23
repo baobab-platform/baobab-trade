@@ -17,9 +17,10 @@ import {
  *
  * Trade's own workload token (scope estate:commerce-profile:resolve)
  * authenticates the call. Trade names the estate, its own engine instance,
- * the Market and the estate provenance it already holds (the CP estate client
- * binding attestation of the buyer request); CP re-verifies that provenance
- * from its own record. Trade never names a Tenant, profile, model or
+ * the Market and the estate provenance it already holds: the CP estate client
+ * binding attestation of a governed BFF request, or (Decision 9) the CP
+ * governed resource assignment attestation of a non-BFF commitment. CP
+ * re-verifies that provenance from its own record. Trade never names a Tenant, profile, model or
  * revision, and nothing local (sales channel, domain, currency, customer
  * type) substitutes for the answer. An attestation classifies the estate
  * only; it is never seller, buyer or purchasing authority.
@@ -75,11 +76,16 @@ export class CommerceProfileError extends Error {
   }
 }
 
+/** The CP attestation that proved the request's Digital Estate. */
+export type EstateProvenance = {
+  kind: "ESTATE_CLIENT_BINDING" | "GOVERNED_RESOURCE_ASSIGNMENT"
+  reference: string
+}
+
 export type CommerceProfileRequest = {
   digitalEstateId: string
   marketId: string
-  /** The CP estate client binding attestation this request already holds. */
-  estateBindingId: string
+  provenance: EstateProvenance
   correlationId: string
 }
 
@@ -125,12 +131,20 @@ export class ControlPlaneCommerceProfileResolver implements CommerceProfileResol
       digital_estate_id: request.digitalEstateId,
       engine_instance_id: this.options.engineInstanceId,
       market_id: request.marketId,
-      estate_provenance: { kind: "ESTATE_CLIENT_BINDING", reference: request.estateBindingId },
+      estate_provenance: {
+        kind: request.provenance?.kind,
+        reference: request.provenance?.reference,
+      },
       correlation_id: request.correlationId,
     }
     // Never send what CP would refuse: a malformed estate, Market or
     // provenance is a Trade defect, not a classification answer.
-    if (!UUID.test(request.estateBindingId) || !commerceProfileRequestSchema(body)) {
+    if (
+      (request.provenance?.kind !== "ESTATE_CLIENT_BINDING" &&
+        request.provenance?.kind !== "GOVERNED_RESOURCE_ASSIGNMENT") ||
+      !UUID.test(request.provenance.reference ?? "") ||
+      !commerceProfileRequestSchema(body)
+    ) {
       throw unavailable()
     }
     let accessToken: string
@@ -217,16 +231,16 @@ export class ControlPlaneCommerceProfileResolver implements CommerceProfileResol
 let singleton: CommerceProfileResolver | null | undefined
 
 /**
- * Null unless the buyer identity path, this instance's engine id and a
- * development or staging environment are configured, as for the estate
- * client binding it depends on. Without it, every native commitment is
+ * Null unless a provenance path (the buyer identity path or Decision 9
+ * resource assignment), this instance's engine id and a development or
+ * staging environment are configured. Without it, every native commitment is
  * unclassified and the commit fence refuses it; there is no default model.
  */
 export const getCommerceProfileResolver = (): CommerceProfileResolver | null => {
   if (singleton !== undefined) return singleton
   const env = getBaobabTradeEnvironment()
   if (
-    !env.buyerIdentityEnabled ||
+    !(env.buyerIdentityEnabled || env.resourceAssignmentEnabled) ||
     !env.iamWorkloadTokenUrl ||
     !env.iamWorkloadClientSecret ||
     !env.controlPlaneBaseUrl ||

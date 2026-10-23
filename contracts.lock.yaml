@@ -12,7 +12,7 @@ schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: 742295e2b4f67a3de6d985e7da6bd89ed0be39cb
+  commit: 1517429bcae601a1b0288ca0279e524ce48a3d77
 contracts:
   - contracts/commerce/v1/seller-binding.schema.json
   - contracts/payments/v1/merchant-readiness.schema.json
@@ -70,6 +70,8 @@ contracts:
   - contracts/trade/v2/buyer-authority-receipt.schema.json
   - contracts/trade/v2/buyer-commitment-valuation.schema.json
   - contracts/control-plane/v1/estate-commerce-profile.schema.json
+  # ADR-SHARED-042 section 14 Decision 9: CP's governed estate resource assignment attestation.
+  - contracts/control-plane/v1/estate-resource-assignment.schema.json
   - contracts/control-plane/v1/estate-commerce-profile.openapi.yaml
   - contracts/trade/v2/native-commitment-classification.schema.json
   - contracts/buyer-organisation/v1/domain.schema.json

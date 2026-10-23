@@ -48,7 +48,7 @@ const resolver = (respond: () => Response | Promise<Response>) => {
 const request = {
   digitalEstateId: "estate_synthetic",
   marketId: "market_synthetic",
-  estateBindingId: BINDING,
+  provenance: { kind: "ESTATE_CLIENT_BINDING" as const, reference: BINDING },
   correlationId: CORRELATION,
 }
 
@@ -84,10 +84,26 @@ describe("ControlPlaneCommerceProfileResolver", () => {
     expect(requests[0].init.redirect).toBe("error")
   })
 
+  it("names a governed resource assignment attestation as its Decision 9 provenance", async () => {
+    const { instance, requests } = resolver(() => new Response(JSON.stringify(attestation())))
+    await instance.resolve({
+      ...request,
+      provenance: { kind: "GOVERNED_RESOURCE_ASSIGNMENT", reference: BINDING },
+    })
+    expect(JSON.parse(requests[0].init.body as string).estate_provenance).toEqual({
+      kind: "GOVERNED_RESOURCE_ASSIGNMENT",
+      reference: BINDING,
+    })
+  })
+
   it("never sends a request CP would have to refuse", async () => {
     const { instance, requests } = resolver(() => new Response(JSON.stringify(attestation())))
     for (const bad of [
-      { ...request, estateBindingId: "zuribeans" },
+      {
+        ...request,
+        provenance: { kind: "ESTATE_CLIENT_BINDING" as const, reference: "zuribeans" },
+      },
+      { ...request, provenance: { kind: "SALES_CHANNEL", reference: BINDING } as never },
       { ...request, marketId: "UG" },
       { ...request, digitalEstateId: "Estate-1" },
       { ...request, correlationId: "not-a-uuid" },

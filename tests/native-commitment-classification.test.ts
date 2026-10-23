@@ -11,6 +11,7 @@ import {
   classifyNativeCommitment,
   type ClassificationStore,
   type ClassifyRequest,
+  type EstateProof,
   type NativeCommitmentClassification,
   type NewClassification,
   type ProfileObservation,
@@ -62,11 +63,14 @@ const buyerContext = (change: Partial<TradeBuyerExecutionContext> = {}) =>
     ...change,
   }) as TradeBuyerExecutionContext
 
+const binding = () => request().estate as Extract<EstateProof, { kind: "ESTATE_CLIENT_BINDING" }>
+
 const request = (change: Partial<ClassifyRequest> = {}): ClassifyRequest => ({
   resource: { type: "cart", id: "cart_synthetic01" },
   attribution,
   sellerContext: { contextId: CONTEXT, marketId: "market_synthetic" },
   estate: {
+    kind: "ESTATE_CLIENT_BINDING",
     bindingId: BINDING,
     revision: 1,
     digitalEstateId: "estate_synthetic",
@@ -169,7 +173,7 @@ describe("classifyNativeCommitment", () => {
       {
         digitalEstateId: "estate_synthetic",
         marketId: "market_synthetic",
-        estateBindingId: BINDING,
+        provenance: { kind: "ESTATE_CLIENT_BINDING", reference: BINDING },
         correlationId: CORRELATION,
       },
     ])
@@ -249,8 +253,10 @@ describe("classifyNativeCommitment", () => {
         { attribution: { ...attribution, engine_instance_id: "ei_other01" } },
         "CLASSIFICATION_ABSENT",
       ],
-      [{ estate: { ...request().estate, tenantId: "tn_other01" } }, "CLASSIFICATION_CONFLICT"],
-      [{ estate: { ...request().estate, expiresAt: new Date(NOW) } }, "CLASSIFICATION_CONFLICT"],
+      [{ estate: { ...binding(), tenantId: "tn_other01" } }, "CLASSIFICATION_CONFLICT"],
+      [{ estate: { ...binding(), expiresAt: new Date(NOW) } }, "CLASSIFICATION_CONFLICT"],
+      [{ estate: undefined as never }, "CLASSIFICATION_ABSENT"],
+      [{ estate: { kind: "SALES_CHANNEL" } as never }, "CLASSIFICATION_ABSENT"],
       [
         {
           buyer: {
@@ -307,6 +313,113 @@ describe("classifyNativeCommitment", () => {
       outcome: "REFUSED",
       reason: "CLASSIFICATION_CHANGED",
     })
+  })
+
+  // Decision 9: a commitment that does not come through a BFF proves its
+  // estate with CP's governed resource assignment attestation.
+  const assignment = (change: Record<string, unknown> = {}): EstateProof => ({
+    kind: "GOVERNED_RESOURCE_ASSIGNMENT",
+    assignment: {
+      attestationId: "2e3f4a5b-6c7d-4e8f-9a0b-1c2d3e4f5a6b",
+      assignmentId: "3f4a5b6c-7d8e-4f9a-8b1c-2d3e4f5a6b7c",
+      assignmentRevision: 2,
+      scope: "WORKLOAD",
+      workloadClientId: "synthetic-server-checkout",
+      digitalEstateId: "estate_synthetic",
+      tenantId: "tn_synthetic01",
+      engineInstanceId: "ei_trade01",
+      marketId: "market_synthetic",
+      operation: "trade.order.commit",
+      issuedAt: new Date(NOW),
+      expiresAt: new Date(NOW + 60_000),
+      assignmentEffectiveUntil: null,
+      evidenceReference: "changeset:synthetic-assign",
+      ...change,
+    },
+  })
+
+  it("classifies a non-BFF commitment on its governed resource assignment", async () => {
+    const { result, asked, store } = await run({
+      request: {
+        estate: assignment(),
+        operation: "trade.order.commit",
+        buyer: { model: "CONSUMER", consumerReference: "consumer:1" },
+      },
+      attestation: { commerceModel: "B2C" },
+    })
+    expect(result.outcome).toBe("CLASSIFIED")
+    if (result.outcome !== "CLASSIFIED") throw new Error("unreachable")
+    expect(result.classification.evidence_references).toEqual(
+      expect.arrayContaining([
+        "cp-resource-assignment:3f4a5b6c-7d8e-4f9a-8b1c-2d3e4f5a6b7c@r2",
+        "cp-resource-assignment-attestation:2e3f4a5b-6c7d-4e8f-9a0b-1c2d3e4f5a6b",
+      ]),
+    )
+    expect(
+      result.classification.evidence_references.some((e) => e.startsWith("cp-estate-binding:")),
+    ).toBe(false)
+    expect(asked).toEqual([
+      {
+        digitalEstateId: "estate_synthetic",
+        marketId: "market_synthetic",
+        provenance: {
+          kind: "GOVERNED_RESOURCE_ASSIGNMENT",
+          reference: "2e3f4a5b-6c7d-4e8f-9a0b-1c2d3e4f5a6b",
+        },
+        correlationId: CORRELATION,
+      },
+    ])
+    expect(store.observations[0].provenance.kind).toBe("GOVERNED_RESOURCE_ASSIGNMENT")
+  })
+
+  it("still requires an independently established buyer for a B2B assigned commitment", async () => {
+    const b2b = await run({ request: { estate: assignment(), operation: "trade.order.commit" } })
+    expect(b2b.result.outcome).toBe("CLASSIFIED")
+    const consumer = await run({
+      request: {
+        estate: assignment(),
+        operation: "trade.order.commit",
+        buyer: { model: "CONSUMER", consumerReference: "consumer:1" },
+      },
+    })
+    expect(consumer.result).toEqual({ outcome: "REFUSED", reason: "BUYER_AUTHORITY_ABSENT" })
+    const foreign = await run({
+      request: {
+        estate: assignment(),
+        operation: "trade.order.commit",
+        buyer: { model: "BUYER_ORGANISATION", context: buyerContext({ tenant_id: "tn_other01" }) },
+      },
+    })
+    expect(foreign.result).toEqual({ outcome: "REFUSED", reason: "CLASSIFICATION_CONFLICT" })
+  })
+
+  it("refuses an assignment for another Market, Tenant, engine or after it expires", async () => {
+    for (const change of [
+      { marketId: "market_other" },
+      { tenantId: "tn_other01" },
+      { engineInstanceId: "ei_other01" },
+      { expiresAt: new Date(NOW) },
+    ]) {
+      const { result, asked } = await run({
+        request: { estate: assignment(change), operation: "trade.order.commit" },
+      })
+      expect(result).toEqual({ outcome: "REFUSED", reason: "CLASSIFICATION_CONFLICT" })
+      expect(asked).toHaveLength(0)
+    }
+    // An assignment attests one operation: it never proves another, or none.
+    for (const operation of [
+      "trade.order.create",
+      "trade.draft-order.finalize",
+      undefined,
+    ] as const) {
+      const { result, asked } = await run({ request: { estate: assignment(), operation } })
+      expect(result).toEqual({ outcome: "REFUSED", reason: "CLASSIFICATION_CONFLICT" })
+      expect(asked).toHaveLength(0)
+    }
+    const { result } = await run({
+      request: { estate: { kind: "GOVERNED_RESOURCE_ASSIGNMENT" } as EstateProof },
+    })
+    expect(result).toEqual({ outcome: "REFUSED", reason: "CLASSIFICATION_ABSENT" })
   })
 
   it("maps every refusal to the contract's decision reason", () => {

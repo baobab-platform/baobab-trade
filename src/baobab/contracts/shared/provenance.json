@@ -1,6 +1,6 @@
 {
   "repository": "baobab-platform/shared",
-  "commit": "742295e2b4f67a3de6d985e7da6bd89ed0be39cb",
+  "commit": "1517429bcae601a1b0288ca0279e524ce48a3d77",
   "roots": [
     "contracts/commerce/v1/seller-binding.schema.json",
     "contracts/payments/v1/merchant-readiness.schema.json",
@@ -17,7 +17,8 @@
     "contracts/trade/v2/buyer-authority-receipt.schema.json",
     "contracts/trade/v2/buyer-commitment-valuation.schema.json",
     "contracts/control-plane/v1/estate-commerce-profile.schema.json",
-    "contracts/trade/v2/native-commitment-classification.schema.json"
+    "contracts/trade/v2/native-commitment-classification.schema.json",
+    "contracts/control-plane/v1/estate-resource-assignment.schema.json"
   ],
   "tenancy_version": "2.0",
   "files": {
@@ -26,7 +27,8 @@
     "contracts/commerce/v1/seller-binding.schema.json": "59d66dd8c394340c336f23a9d64456b1e818529ac2d154e92e4525dc6819fa64",
     "contracts/control-plane/v1/domain.schema.json": "d310ea065ba9445a27a83d50875a2616514608782345e7bb4413d9d1d69416ee",
     "contracts/control-plane/v1/estate-client-binding.schema.json": "f1b2aac3b62d7f11d1b173d43b7b58e9a36b34e4ec05659fc09fa47e9f4745b0",
-    "contracts/control-plane/v1/estate-commerce-profile.schema.json": "f4fe12d7208a507d5c443f92065dd165155cb5393533a097b5e636c03eb3e995",
+    "contracts/control-plane/v1/estate-commerce-profile.schema.json": "0a5c0baad1afed20acd453163b5b5551aa9c0b5b2c2913b520158769401faf99",
+    "contracts/control-plane/v1/estate-resource-assignment.schema.json": "61bd31d1148aa76f57b0679a37568048d19cf58c42f11f2359ce33a69bfb23dd",
     "contracts/control-plane/v1/market.schema.json": "acbdc4c1e8c716f1dcd9b855b79f5206ebcb69fd911f5a14b515bbcb78cca2f9",
     "contracts/control-plane/v1/platform-context.schema.json": "92a3584f1db3c192fa0315820b6054607d377a52028f43a6fe48deda14c7ed2f",
     "contracts/identity/v1/assurance-policy.schema.json": "ac9722e6a9cf2b25d2d6b5ff888d6786eee07929b6706e2dd719c365da73577f",

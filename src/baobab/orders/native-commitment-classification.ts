@@ -4,9 +4,13 @@
  * native cart, draft order or order, whether the commitment is B2B or B2C.
  *
  * The model comes only from a current CP EstateCommerceProfile attestation
- * for the estate the buyer request is bound to (CAA-04) and the Market of the
- * CP context the resource's seller attribution was resolved under. Trade then
- * checks it against the buyer relationship it established itself:
+ * for the estate the commitment's CP-verified provenance names and the Market
+ * of the CP context the resource's seller attribution was resolved under. The
+ * provenance is either the CP estate client binding of a governed BFF request
+ * (CAA-04) or, for a commitment that does not come through a BFF, the CP
+ * governed resource assignment attestation (Decision 9). With neither there
+ * is no classification: never a B2C or implicit fallback. Trade then checks
+ * the model against the buyer relationship it established itself:
  *
  *   - B2B needs a current TradeBuyerExecutionContext for the same estate,
  *     Tenant, engine instance and estate binding. A consumer is never
@@ -30,7 +34,12 @@ import {
   type CommerceProfileAttestation,
   type CommerceProfileFailure,
   type CommerceProfileResolver,
+  type EstateProvenance,
 } from "../control-plane/estate-commerce-profile"
+import type {
+  AssignmentOperation,
+  ResourceAssignmentAttestation,
+} from "../control-plane/estate-resource-assignment"
 import type { CommitmentAttribution } from "./commitment-attribution"
 import type { PgPool } from "./postgres-governed-binding-persistence"
 
@@ -95,6 +104,57 @@ export type EstateBinding = {
   expiresAt: Date
 }
 
+/** The CP attestation that proved the commitment's Digital Estate. */
+export type EstateProof =
+  | ({ kind: "ESTATE_CLIENT_BINDING" } & EstateBinding)
+  | { kind: "GOVERNED_RESOURCE_ASSIGNMENT"; assignment: ResourceAssignmentAttestation }
+
+/** What every provenance proves, in one shape. */
+type ProvenStatement = {
+  provenance: EstateProvenance
+  digitalEstateId: string
+  tenantId: string
+  engineInstanceId: string
+  expiresAt: Date
+  /** The Market the provenance is limited to, when it is. */
+  marketId: string | null
+  /** The one native commitment operation the provenance covers, when it is limited to one. */
+  operation: AssignmentOperation | null
+  evidence: string[]
+}
+
+const proven = (estate: EstateProof | undefined): ProvenStatement | null => {
+  if (estate?.kind === "ESTATE_CLIENT_BINDING") {
+    return {
+      provenance: { kind: estate.kind, reference: estate.bindingId },
+      digitalEstateId: estate.digitalEstateId,
+      tenantId: estate.tenantId,
+      engineInstanceId: estate.engineInstanceId,
+      expiresAt: estate.expiresAt,
+      marketId: null,
+      operation: null,
+      evidence: [`cp-estate-binding:${estate.bindingId}@r${estate.revision}`],
+    }
+  }
+  if (estate?.kind === "GOVERNED_RESOURCE_ASSIGNMENT" && estate.assignment) {
+    const a = estate.assignment
+    return {
+      provenance: { kind: estate.kind, reference: a.attestationId },
+      digitalEstateId: a.digitalEstateId,
+      tenantId: a.tenantId,
+      engineInstanceId: a.engineInstanceId,
+      expiresAt: a.expiresAt,
+      marketId: a.marketId,
+      operation: a.operation,
+      evidence: [
+        `cp-resource-assignment:${a.assignmentId}@r${a.assignmentRevision}`,
+        `cp-resource-assignment-attestation:${a.attestationId}`,
+      ],
+    }
+  }
+  return null
+}
+
 export type ClassificationBuyer =
   | { model: "BUYER_ORGANISATION"; context: TradeBuyerExecutionContext }
   | { model: "CONSUMER"; consumerReference: string }
@@ -105,7 +165,13 @@ export type ClassifyRequest = {
   attribution: CommitmentAttribution
   /** The CP platform context that attribution was resolved under. */
   sellerContext: { contextId: string; marketId?: string }
-  estate: EstateBinding
+  estate: EstateProof
+  /**
+   * The native commitment operation this classification is for. A governed
+   * resource assignment attests exactly one operation, so it never proves
+   * the estate of another.
+   */
+  operation?: AssignmentOperation
   buyer: ClassificationBuyer
   correlationId: string
 }
@@ -114,7 +180,7 @@ export type ProfileObservation = {
   digitalEstateId: string
   engineInstanceId: string
   marketId: string
-  estateBindingId: string
+  provenance: EstateProvenance
   correlationId: string
 } & (
   | { outcome: "ATTESTED"; attestation: CommerceProfileAttestation }
@@ -177,7 +243,7 @@ export async function classifyNativeCommitment(
   request: ClassifyRequest,
 ): Promise<ClassificationResult> {
   const now = (deps.now ?? Date.now)()
-  const { resource, attribution, sellerContext, estate, buyer } = request
+  const { resource, attribution, sellerContext, buyer } = request
 
   // The resource, its seller attribution and the CP context belong together
   // and to this Trade instance.
@@ -194,10 +260,14 @@ export async function classifyNativeCommitment(
   // No canonical Market, no classification: Trade never mints a market_id.
   const marketId = sellerContext.marketId
   if (!marketId || !MARKET.test(marketId)) return refusal("CLASSIFICATION_ABSENT")
+  // No CP-verified estate provenance, no classification.
+  const estate = proven(request.estate)
+  if (!estate) return refusal("CLASSIFICATION_ABSENT")
   if (
-    !estate ||
     estate.engineInstanceId !== deps.engineInstanceId ||
     estate.tenantId !== attribution.tenant_id ||
+    (estate.marketId !== null && estate.marketId !== marketId) ||
+    (estate.operation !== null && estate.operation !== request.operation) ||
     !(estate.expiresAt.getTime() > now)
   ) {
     return refusal("CLASSIFICATION_CONFLICT")
@@ -211,9 +281,9 @@ export async function classifyNativeCommitment(
       c.digital_estate_id !== estate.digitalEstateId ||
       c.tenant_id !== estate.tenantId ||
       c.engine_instance_id !== deps.engineInstanceId ||
-      !c.evidence_references.includes(
-        `cp-estate-binding:${estate.bindingId}@r${estate.revision}`,
-      ) ||
+      // A buyer context established through a BFF names that BFF's binding.
+      (estate.provenance.kind === "ESTATE_CLIENT_BINDING" &&
+        !c.evidence_references.includes(estate.evidence[0])) ||
       !(Date.parse(c.expires_at) > now)
     ) {
       return refusal("CLASSIFICATION_CONFLICT")
@@ -227,7 +297,7 @@ export async function classifyNativeCommitment(
     digitalEstateId: estate.digitalEstateId,
     engineInstanceId: deps.engineInstanceId,
     marketId,
-    estateBindingId: estate.bindingId,
+    provenance: estate.provenance,
     correlationId: request.correlationId,
   }
   let attestation: CommerceProfileAttestation
@@ -235,7 +305,7 @@ export async function classifyNativeCommitment(
     attestation = await deps.profiles.resolve({
       digitalEstateId: estate.digitalEstateId,
       marketId,
-      estateBindingId: estate.bindingId,
+      provenance: estate.provenance,
       correlationId: request.correlationId,
     })
   } catch (error) {
@@ -289,7 +359,7 @@ export async function classifyNativeCommitment(
     evidence_references: [
       `cp-commerce-profile:${attestation.commerceProfileId}@r${attestation.profileRevision}`,
       `cp-commerce-profile-attestation:${attestation.attestationId}`,
-      `cp-estate-binding:${estate.bindingId}@r${estate.revision}`,
+      ...estate.evidence,
       `trade-attribution:${attribution.attribution_id}`,
       ...(buyer.model === "BUYER_ORGANISATION"
         ? [`trade-buyer-context:${buyer.context.context_id}`]
@@ -401,14 +471,15 @@ export class PostgresClassificationStore implements ClassificationStore {
     try {
       await db.query(
         `INSERT INTO trade_commerce_profile_observation (digital_estate_id, engine_instance_id, market_id,
-           estate_binding_id, outcome, attestation_id, commerce_profile_id, profile_revision, tenant_id,
-           commerce_model, issued_at, expires_at, profile_effective_until, evidence_reference, correlation_id)
-         VALUES ($1, $2, $3, $4::uuid, $5, $6::uuid, $7::uuid, $8, $9, $10, $11, $12, $13, $14, $15::uuid)`,
+           estate_provenance_kind, estate_provenance_reference, outcome, attestation_id, commerce_profile_id,
+           profile_revision, tenant_id, commerce_model, issued_at, expires_at, profile_effective_until,
+           evidence_reference, correlation_id)
+         VALUES ($1, $2, $3, $16, $4::uuid, $5, $6::uuid, $7::uuid, $8, $9, $10, $11, $12, $13, $14, $15::uuid)`,
         [
           o.digitalEstateId,
           o.engineInstanceId,
           o.marketId,
-          o.estateBindingId,
+          o.provenance.reference,
           o.outcome,
           a?.attestationId ?? null,
           a?.commerceProfileId ?? null,
@@ -420,6 +491,7 @@ export class PostgresClassificationStore implements ClassificationStore {
           a?.profileEffectiveUntil ?? null,
           a?.evidenceReference ?? null,
           o.correlationId,
+          o.provenance.kind,
         ],
       )
     } finally {
