@@ -104,6 +104,16 @@ export const commerceProfileAttestationSchema = validator(
   "control-plane/v1/estate-commerce-profile.schema.json",
   "EstateCommerceProfileAttestation",
 )
+// ADR-SHARED-042 section 14 Decision 9: CP's governed estate resource
+// assignment attestation, the non-BFF estate provenance.
+export const resourceAssignmentRequestSchema = validator(
+  "control-plane/v1/estate-resource-assignment.schema.json",
+  "EstateResourceAssignmentResolveRequest",
+)
+export const resourceAssignmentAttestationSchema = validator(
+  "control-plane/v1/estate-resource-assignment.schema.json",
+  "EstateResourceAssignmentAttestation",
+)
 export const nativeCommitmentClassificationSchema = validator(
   "trade/v2/native-commitment-classification.schema.json",
   "NativeCommitmentClassification",

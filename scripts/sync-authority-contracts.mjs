@@ -34,6 +34,8 @@ const roots = [
   "contracts/trade/v2/buyer-commitment-valuation.schema.json",
   "contracts/control-plane/v1/estate-commerce-profile.schema.json",
   "contracts/trade/v2/native-commitment-classification.schema.json",
+  // Decision 9.
+  "contracts/control-plane/v1/estate-resource-assignment.schema.json",
 ]
 const schemas = new Map()
 const discover = (path) => {

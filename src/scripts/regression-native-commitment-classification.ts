@@ -15,12 +15,14 @@ import { Pool } from "pg"
 import type { TradeBuyerExecutionContext } from "../baobab/b2b/buyer-authority"
 import { nativeCommitmentClassificationSchema } from "../baobab/contracts/authority-validation"
 import type { CommerceProfileAttestation } from "../baobab/control-plane/estate-commerce-profile"
+import type { ResourceAssignmentAttestation } from "../baobab/control-plane/estate-resource-assignment"
 import type { CommitmentAttribution } from "../baobab/orders/commitment-attribution"
 import {
   classifyNativeCommitment,
   PostgresClassificationStore,
   type ClassificationBuyer,
   type ClassifiedResourceType,
+  type EstateProof,
 } from "../baobab/orders/native-commitment-classification"
 import type { PgPool } from "../baobab/orders/postgres-governed-binding-persistence"
 
@@ -150,6 +152,7 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
     }
   }
   const estateBinding = () => ({
+    kind: "ESTATE_CLIENT_BINDING" as const,
     bindingId: binding,
     revision: 1,
     digitalEstateId: estate,
@@ -261,9 +264,9 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
     const a = { ...answer(), ...change } as CommerceProfileAttestation
     return sql(
       `INSERT INTO trade_commerce_profile_observation (digital_estate_id, engine_instance_id, market_id,
-         estate_binding_id, outcome, attestation_id, commerce_profile_id, profile_revision, tenant_id,
-         commerce_model, issued_at, expires_at, evidence_reference, correlation_id)
-       VALUES ($1, $2, $3, $4, 'ATTESTED', $5, $6, $7, $8, $9, $10, $11, 'synthetic', $12)`,
+         estate_provenance_kind, estate_provenance_reference, outcome, attestation_id, commerce_profile_id,
+         profile_revision, tenant_id, commerce_model, issued_at, expires_at, evidence_reference, correlation_id)
+       VALUES ($1, $2, $3, 'ESTATE_CLIENT_BINDING', $4, 'ATTESTED', $5, $6, $7, $8, $9, $10, $11, 'synthetic', $12)`,
       [
         a.digitalEstateId,
         engine,
@@ -314,8 +317,8 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
   await refused(
     "a denial naming a profile",
     `INSERT INTO trade_commerce_profile_observation (digital_estate_id, engine_instance_id, market_id,
-       estate_binding_id, outcome, commerce_profile_id, correlation_id)
-     VALUES ($1, $2, $3, $4, 'PROFILE_NOT_ACTIVE', $5, $6)`,
+       estate_provenance_kind, estate_provenance_reference, outcome, commerce_profile_id, correlation_id)
+     VALUES ($1, $2, $3, 'ESTATE_CLIENT_BINDING', $4, 'PROFILE_NOT_ACTIVE', $5, $6)`,
     [estate, engine, market, binding, profileId, randomUUID()],
   )
   await refused(
@@ -607,6 +610,94 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
     assert.match(String(error), /issued in the future/)
   }
   pass("a future-dated attestation is refused")
+
+  // 10. Decision 9: a non-BFF commitment classifies only on a CP governed
+  // resource assignment attestation for its own estate, Tenant, engine and
+  // Market, and the observation records that provenance.
+  model = "B2C"
+  const assignment = (change: Partial<ResourceAssignmentAttestation> = {}) => {
+    const now = Date.now()
+    return {
+      kind: "GOVERNED_RESOURCE_ASSIGNMENT" as const,
+      assignment: {
+        attestationId: randomUUID(),
+        assignmentId: randomUUID(),
+        assignmentRevision: 2,
+        scope: "NATIVE_RESOURCE" as const,
+        workloadClientId: null,
+        digitalEstateId: estate,
+        tenantId: tenant,
+        engineInstanceId: engine,
+        marketId: market,
+        operation: "trade.order.commit" as const,
+        issuedAt: new Date(now),
+        expiresAt: new Date(now + 60_000),
+        assignmentEffectiveUntil: null,
+        evidenceReference: "synthetic:regression-assignment",
+        ...change,
+      },
+    }
+  }
+  const assigned = (cart: string, attribution: CommitmentAttribution, estateProof: EstateProof) =>
+    classifyNativeCommitment(
+      { engineInstanceId: engine, store, profiles: { resolve: async () => answer() } },
+      {
+        resource: { type: "cart", id: cart },
+        attribution,
+        sellerContext: { contextId: attribution.context_id, marketId: market },
+        estate: estateProof,
+        buyer: consumer,
+        correlationId: randomUUID(),
+      },
+    )
+  const cartN = `cart_dec9n${run}`
+  const attributionN = await attribute("cart", cartN)
+  for (const [what, proof] of [
+    ["another Market", assignment({ marketId: "market_other" })],
+    ["another Tenant", assignment({ tenantId: "tn_other01" })],
+    ["another engine instance", assignment({ engineInstanceId: "ei_other01" })],
+    ["an expired attestation", assignment({ expiresAt: new Date(Date.now() - 1000) })],
+  ] as const) {
+    assert.deepEqual(
+      await assigned(cartN, attributionN, proof),
+      { outcome: "REFUSED", reason: "CLASSIFICATION_CONFLICT" },
+      what,
+    )
+  }
+  assert.deepEqual(
+    await assigned(cartN, attributionN, { kind: "GOVERNED_RESOURCE_ASSIGNMENT" } as EstateProof),
+    { outcome: "REFUSED", reason: "CLASSIFICATION_ABSENT" },
+  )
+  const proof = assignment()
+  const viaAssignment = await assigned(cartN, attributionN, proof)
+  assert.equal(viaAssignment.outcome, "CLASSIFIED")
+  if (viaAssignment.outcome !== "CLASSIFIED") throw new Error("unreachable")
+  assert.equal(viaAssignment.classification.commerce_model, "B2C")
+  assert.ok(nativeCommitmentClassificationSchema(viaAssignment.classification))
+  assert.ok(
+    viaAssignment.classification.evidence_references.includes(
+      `cp-resource-assignment-attestation:${proof.assignment.attestationId}`,
+    ),
+  )
+  assert.equal(
+    (
+      await sql(
+        `SELECT count(*)::int AS n FROM trade_commerce_profile_observation
+          WHERE estate_provenance_kind = 'GOVERNED_RESOURCE_ASSIGNMENT' AND estate_provenance_reference = $1`,
+        [proof.assignment.attestationId],
+      )
+    ).rows[0].n,
+    1,
+  )
+  await refused(
+    "an unknown provenance kind",
+    `INSERT INTO trade_commerce_profile_observation (digital_estate_id, engine_instance_id, market_id,
+       estate_provenance_kind, estate_provenance_reference, outcome, correlation_id)
+     VALUES ($1, $2, $3, 'SALES_CHANNEL', $4, 'PROFILE_NOT_REGISTERED', $5)`,
+    [estate, engine, market, randomUUID(), randomUUID()],
+  )
+  model = "B2B"
+  pass("a non-BFF commitment classifies only on its own governed resource assignment")
 
   return passed
 }

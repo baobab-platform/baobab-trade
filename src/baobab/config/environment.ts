@@ -23,6 +23,10 @@ export type BaobabTradeEnvironment = {
   // obtained by these confidential BFF clients, and resolves the canonical
   // Principal through the Control Plane with the workload identity above.
   buyerIdentityEnabled: boolean
+  // ADR-SHARED-042 section 14 Decision 9: CP governed resource assignment
+  // resolution, the non-BFF estate provenance. Default off; development and
+  // staging only. Off, a commitment without a governed BFF has no provenance.
+  resourceAssignmentEnabled: boolean
   buyerIamIssuer?: string
   buyerAuthorisedParties: string[]
   // ADR-SHARED-042 CAA-03 interim verifier (ADR-0033): the security-approved
@@ -68,6 +72,7 @@ export const getBaobabTradeEnvironment = (): BaobabTradeEnvironment => ({
   iamWorkloadClientId: process.env.BAOBAB_IAM_WORKLOAD_CLIENT_ID || "baobab-trade-workload",
   iamWorkloadClientSecret: process.env.BAOBAB_IAM_WORKLOAD_CLIENT_SECRET,
   buyerIdentityEnabled: process.env.BAOBAB_BUYER_IDENTITY_ENABLED === "true",
+  resourceAssignmentEnabled: process.env.BAOBAB_RESOURCE_ASSIGNMENT_ENABLED === "true",
   buyerIamIssuer: process.env.BAOBAB_IAM_BUYER_ISSUER,
   buyerAuthorisedParties: (process.env.BAOBAB_IAM_BUYER_AUTHORISED_PARTIES ?? "")
     .split(",")
