@@ -38,6 +38,11 @@ import type {
 } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import type { TradeBuyerExecutionContext } from "../baobab/b2b/buyer-authority"
+import {
+  PostgresBuyerAuthorityReceiptStore,
+  type BuyerAuthorityReceipt,
+} from "../baobab/b2b/buyer-authority-receipt-store"
+import { PostgresSpendReservationCommands } from "../baobab/b2b/spend-reservation-commands"
 import type { TradeAOperationClass } from "../baobab/control-plane/trade-order-authority"
 import { findByCountryCode, findByMarketKey, findByMetadataKey } from "../baobab/market/mapping"
 import { PostgresCommitmentAttributionStore } from "../baobab/orders/commitment-attribution"
@@ -785,6 +790,201 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
       true,
     )
 
+    // 8d. Decision 6: a B2B commitment consumes one current buyer receipt for
+    // the seller receipt's exact operation reference and converts its spend
+    // reservation to committed consumption, in the order's own transaction.
+    const buyerOrg = "b2borg_ta07regression"
+    const buyerMember = "b2bmem_ta07regression"
+    const canonicalOrg = randomUUID()
+    await pool.query(
+      `INSERT INTO b2b_organisation (id, tenant_id, legal_name, status) VALUES ($1, $2, 'Synthetic TA-07 buyer', 'ACTIVE')
+       ON CONFLICT (id) DO NOTHING`,
+      [buyerOrg, TENANT],
+    )
+    await pool.query(
+      `INSERT INTO b2b_buyer_membership (id, organisation_id, status) VALUES ($1, $2, 'ACTIVE') ON CONFLICT (id) DO NOTHING`,
+      [buyerMember, buyerOrg],
+    )
+    await pool.query(
+      `INSERT INTO b2b_spend_budget_policy (id, scope, tenant_id, organisation_id, membership_id, market_key, currency_code,
+         period_kind, timezone, limit_minor, raw_limit_minor, effective_from, evidence_reference)
+       VALUES ('b2bbud_ta07regression', 'MEMBERSHIP', $1, $2, $3, 'UG', 'UGX', 'CALENDAR_MONTH', 'UTC', 100000000, '{}',
+               now() - interval '1 day', 'synthetic/ta07-regression') ON CONFLICT (id) DO NOTHING`,
+      [TENANT, buyerOrg, buyerMember],
+    )
+    const spend = new PostgresSpendReservationCommands(pg)
+    const buyerReceipts = new PostgresBuyerAuthorityReceiptStore(pg)
+    const actor = randomUUID()
+    const amount = 125_000
+    /** Seller receipt, B2B classification, ACTIVE reservation and buyer receipt for one cart. */
+    const b2bReady = async (change: Partial<BuyerAuthorityReceipt> = {}, lifetimeMs = 50_000) => {
+      const id = await payableCart()
+      const seller = await authorise("trade.order.commit", "cart", id)
+      assert.ok(seller)
+      const { operation_reference, binding_id, binding_version, responsible_legal_entity_id } =
+        await one<{
+          operation_reference: string
+          binding_id: string
+          binding_version: number
+          responsible_legal_entity_id: string
+        }>(
+          `SELECT operation_reference, binding_id::text, binding_version, responsible_legal_entity_id
+           FROM trade_order_authority_receipt WHERE receipt_id = $1`,
+          [seller.receipt_id],
+        )
+      await classifyAs("B2B", "cart", id)
+      const transactionDigest = `sha256:${randomUUID().replaceAll("-", "").padEnd(64, "0")}`
+      const reserved = await spend.submit({
+        idempotencyKey: `ta07.reserve.${randomUUID().replaceAll("-", "")}`,
+        purchaseReference: id,
+        tenantId: TENANT,
+        organisationId: buyerOrg,
+        membershipId: buyerMember,
+        actorPrincipalId: actor,
+        marketKey: "UG",
+        currencyCode: "UGX",
+        agreementReference: null,
+        transactionDigest,
+        resourceVersion: 1,
+        amountMinor: BigInt(amount),
+        expiresAt: new Date(Date.now() + 3_600_000),
+      })
+      assert.equal(reserved.outcome, "APPLIED", JSON.stringify(reserved))
+      if (reserved.outcome !== "APPLIED") throw new Error("unreachable")
+      const now = Date.now()
+      const membership = await one<{ revision: number }>(
+        "SELECT revision FROM b2b_buyer_membership WHERE id = $1",
+        [buyerMember],
+      )
+      const receipt: BuyerAuthorityReceipt = {
+        receipt_id: randomUUID(),
+        context_id: randomUUID(),
+        decision_id: randomUUID(),
+        correlation_id: randomUUID(),
+        operation: "trade.order.commit",
+        operation_reference,
+        actor_principal_id: actor,
+        tenant_id: TENANT,
+        canonical_organisation_id: canonicalOrg,
+        buyer_organisation_id: buyerOrg,
+        buyer_membership_id: buyerMember,
+        membership_revision: membership.revision,
+        market_id: scopes.B2B.market,
+        resource_id: id,
+        resource_version: 1,
+        transaction_digest: transactionDigest,
+        amount_minor: amount,
+        valuation_digest: `sha256:${"a".repeat(64)}`,
+        currency: "UGX",
+        policy_revision: 1,
+        spend_reservation_id: reserved.reservationId,
+        spend_hold_revision: reserved.holdRevision,
+        seller_legal_entity_id: responsible_legal_entity_id,
+        seller_binding_reference: { binding_id, binding_version },
+        evaluated_at: new Date(now).toISOString(),
+        expires_at: new Date(now + lifetimeMs).toISOString(),
+        ...change,
+      }
+      await buyerReceipts.record(receipt)
+      return { id, receipt, reservationId: reserved.reservationId }
+    }
+    const reservationStatus = async (reservationId: string) =>
+      (
+        await one<{ status: string }>("SELECT status FROM b2b_spend_reservation WHERE id = $1", [
+          reservationId,
+        ])
+      ).status
+
+    const committed = await b2bReady()
+    const { result: b2bOrder } = await enforced(() => complete(committed.id))
+    assert.deepEqual(await linkedOrder(committed.id), [b2bOrder.id])
+    assert.equal(await reservationStatus(committed.reservationId), "COMMITTED")
+    assert.equal(
+      (
+        await one<{ n: number }>(
+          "SELECT count(*)::int AS n FROM trade_buyer_authority_consumption WHERE receipt_id = $1",
+          [committed.receipt.receipt_id],
+        )
+      ).n,
+      1,
+    )
+    assert.deepEqual(await verdicts(committed.id), [
+      { outcome: "ALLOWED", enforcement_mode: "ENFORCED" },
+    ])
+
+    for (const [what, setup, reason] of [
+      [
+        "a receipt for another Market",
+        () => b2bReady({ market_id: "ta07_other_ug" }),
+        /FOREIGN_RECEIPT/,
+      ],
+      [
+        "an expired receipt",
+        async () => {
+          const ready = await b2bReady({}, 1_200)
+          await new Promise((resolve) => setTimeout(resolve, 1_600))
+          return ready
+        },
+        /RECEIPT_EXPIRED/,
+      ],
+      [
+        "a revised membership",
+        async () => {
+          const ready = await b2bReady()
+          await pool.query(
+            "UPDATE b2b_buyer_membership SET revision = revision + 1 WHERE id = $1",
+            [buyerMember],
+          )
+          return ready
+        },
+        /MEMBERSHIP_REVISED/,
+      ],
+      [
+        "a released reservation",
+        async () => {
+          const ready = await b2bReady()
+          const released = await spend.release({
+            idempotencyKey: `ta07.release.${randomUUID().replaceAll("-", "")}`,
+            organisationId: buyerOrg,
+            reservationId: ready.reservationId,
+            actorPrincipalId: actor,
+            reason: "CANCELLED",
+          })
+          assert.equal(released.outcome, "APPLIED")
+          return ready
+        },
+        /RESERVATION_NOT_CURRENT/,
+      ],
+    ] as const) {
+      const ready = await setup()
+      await refused(what, () => enforced(() => complete(ready.id)), reason)
+      await notCompleted(ready.id)
+    }
+    await refused(
+      "a buyer receipt for a reservation that does not hold its purchase",
+      () => b2bReady({ amount_minor: amount + 1 }),
+      /not recorded/,
+    )
+    await refused(
+      "a consumption outside the fence",
+      () =>
+        pool.query(
+          `INSERT INTO trade_buyer_authority_consumption (receipt_id, operation_reference, seller_receipt_id,
+             spend_reservation_id, commitment_reference) VALUES ($1, 'x', $2, $3, 'x')`,
+          [committed.receipt.receipt_id, randomUUID(), committed.reservationId],
+        ),
+      /consumed only at the native commit fence/,
+    )
+    await refused(
+      "a rewritten buyer receipt",
+      () =>
+        pool.query(
+          "UPDATE trade_buyer_authority_receipt SET amount_minor = 1 WHERE receipt_id = $1",
+          [committed.receipt.receipt_id],
+        ),
+      /immutable/,
+    )
+
     // 8c. Decision 9: SHADOW records the verdict and refuses nothing; the gate
     // changes only by a governed revision and is never removed.
     await gate("SHADOW", "regression:ta07-shadow")
@@ -796,6 +996,14 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
       { outcome: "CLASSIFICATION_ABSENT", enforcement_mode: "SHADOW" },
     ])
     assert.deepEqual(await verdicts(first), [{ outcome: "ALLOWED", enforcement_mode: "ENFORCED" }])
+    // A refused B2B composition in SHADOW changes nothing: the order proceeds,
+    // the verdict is recorded and the reservation stays ACTIVE.
+    const shadowB2b = await b2bReady({ market_id: "ta07_other_ug" })
+    await enforced(() => complete(shadowB2b.id))
+    assert.deepEqual(await verdicts(shadowB2b.id), [
+      { outcome: "FOREIGN_RECEIPT", enforcement_mode: "SHADOW" },
+    ])
+    assert.equal(await reservationStatus(shadowB2b.reservationId), "ACTIVE")
     await refused(
       "an unversioned gate change",
       () => pool.query("UPDATE trade_commit_fence_enforcement SET mode = 'ENFORCED'"),

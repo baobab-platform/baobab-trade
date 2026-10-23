@@ -114,6 +114,12 @@ export const resourceAssignmentAttestationSchema = validator(
   "control-plane/v1/estate-resource-assignment.schema.json",
   "EstateResourceAssignmentAttestation",
 )
+// ADR-SHARED-042 sections 9 and 12, Decision 6: the buyer-authority receipt
+// the B2B commit fence consumes with the seller receipt and the reservation.
+export const buyerAuthorityReceiptSchema = validator(
+  "trade/v2/buyer-authority-receipt.schema.json",
+  "BuyerAuthorityReceipt",
+)
 export const nativeCommitmentClassificationSchema = validator(
   "trade/v2/native-commitment-classification.schema.json",
   "NativeCommitmentClassification",
