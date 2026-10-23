@@ -28,6 +28,8 @@ export const COMMERCE_PROFILE_SCOPE = "estate:commerce-profile:resolve"
 export const COMMERCE_PROFILE_PATH = "/internal/estate/v1/commerce-profiles/resolve"
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAXIMUM_ATTESTATION_MS = 60_000
+/** An attestation is never used before it was issued, beyond this skew. */
+const CLOCK_SKEW_MS = 5_000
 
 export type CommerceModel = "B2B" | "B2C"
 
@@ -189,6 +191,7 @@ export class ControlPlaneCommerceProfileResolver implements CommerceProfileResol
       !Number.isFinite(expiresAt) ||
       expiresAt <= now ||
       expiresAt <= issuedAt ||
+      issuedAt > now + CLOCK_SKEW_MS ||
       expiresAt - issuedAt > MAXIMUM_ATTESTATION_MS ||
       (until !== null && (!Number.isFinite(until) || expiresAt > until))
     ) {

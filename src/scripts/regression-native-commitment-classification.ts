@@ -79,6 +79,7 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
     type: "cart" | "draft_order" | "order",
     id: string,
     bindingId = sellerBinding,
+    bindingVersion = 1,
   ): Promise<CommitmentAttribution> => {
     const row = (
       await sql(
@@ -86,7 +87,7 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
            native_configuration_reference, native_configuration_digest, currency, tenant_id,
            operating_organisation_id, market, engine_instance_id, binding_id, binding_version, resolution_id,
            context_id, resolved_at, correlation_id)
-         VALUES ($1, $2, $3, $4, $5, 'UGX', $6, $7, 'UG', $8, $9, 1, $10, $11, now(), 'regression')
+         VALUES ($1, $2, $3, $4, $5, 'UGX', $6, $7, 'UG', $8, $9, $12, $10, $11, now(), 'regression')
          RETURNING attribution_id::text, context_id::text, resolved_at`,
         [
           type,
@@ -100,6 +101,7 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
           bindingId,
           randomUUID(),
           randomUUID(),
+          bindingVersion,
         ],
       )
     ).rows[0]
@@ -116,7 +118,7 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
       market: "UG",
       engine_instance_id: engine,
       binding_id: bindingId,
-      binding_version: 1,
+      binding_version: bindingVersion,
       resolution_id: randomUUID(),
       context_id: row.context_id,
       resolved_at: new Date(row.resolved_at).toISOString(),
@@ -563,6 +565,48 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
   )
   lifetimeMs = 60_000
   pass("an expired attestation never classifies")
+
+  // 8. Only the resource's current seller attribution, at its exact binding version.
+  const cartV = `cart_dec8v${run}`
+  const attributionV1 = await attribute("cart", cartV)
+  const attributionV2 = await attribute("cart", cartV, sellerBinding, 2)
+  const fresh = answer()
+  await observe({ attestationId: fresh.attestationId })
+  await raw(
+    "a classification against a superseded attribution",
+    {
+      resource_id: cartV,
+      attribution_id: attributionV1.attribution_id,
+      seller_context_id: attributionV1.context_id,
+      profile_attestation_id: fresh.attestationId,
+    },
+    /current seller attribution/,
+  )
+  const versioned = await classify({ type: "cart", id: cartV }, attributionV2)
+  assert.equal(versioned.outcome, "CLASSIFIED")
+  const cartW = `cart_dec8w${run}`
+  const first8 = await classify({ type: "cart", id: cartW }, await attribute("cart", cartW))
+  assert.equal(first8.outcome, "CLASSIFIED")
+  const bumped = await attribute("cart", cartW, sellerBinding, 2)
+  assert.deepEqual(await classify({ type: "cart", id: cartW }, bumped), {
+    outcome: "REFUSED",
+    reason: "CLASSIFICATION_CHANGED",
+  })
+  pass("a classification follows only the current attribution and its exact binding version")
+
+  // 9. An attestation is never recorded before it was issued.
+  {
+    const ahead = Date.now() + 30_000
+    const error = await observe({
+      issuedAt: new Date(ahead),
+      expiresAt: new Date(ahead + 30_000),
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    )
+    assert.match(String(error), /issued in the future/)
+  }
+  pass("a future-dated attestation is refused")
 
   return passed
 }

@@ -385,6 +385,9 @@ const sameCommitment = (current: NativeCommitmentClassification, row: NewClassif
   current.commerce_model === row.commerce_model &&
   current.commerce_profile_id === row.commerce_profile_id &&
   current.seller_binding_reference.binding_id === row.seller_binding_reference.binding_id &&
+  // Authority for one binding version is never authority for another.
+  current.seller_binding_reference.binding_version ===
+    row.seller_binding_reference.binding_version &&
   current.buyer_account_model === row.buyer_account_model &&
   current.buyer_organisation_id === row.buyer_organisation_id &&
   current.consumer_reference === row.consumer_reference

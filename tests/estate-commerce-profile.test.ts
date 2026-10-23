@@ -130,6 +130,10 @@ describe("ControlPlaneCommerceProfileResolver", () => {
       { market_id: "market_other" },
       { expires_at: new Date(NOW).toISOString() },
       { expires_at: new Date(NOW + 61_000).toISOString() },
+      {
+        issued_at: new Date(NOW + 10_000).toISOString(),
+        expires_at: new Date(NOW + 40_000).toISOString(),
+      },
       { profile_effective_until: new Date(NOW + 30_000).toISOString() },
       { outcome: "PROFILE_NOT_ACTIVE" },
       { extra: "field" },

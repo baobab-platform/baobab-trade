@@ -14,7 +14,7 @@ import { Migration } from "@medusajs/framework/mikro-orm/migrations"
  *    resource, the commerce model a CP attestation fixed for it:
  *    - only a live ATTESTED observation of the same estate, Tenant, engine
  *      instance, Market, profile, revision and model can classify;
- *    - the resource's own seller attribution must name the same Tenant,
+ *    - the resource's current seller attribution must name the same Tenant,
  *      engine instance, seller binding and CP context (the context the
  *      Market came from), so the classification never floats free of the
  *      seller decision;
@@ -86,6 +86,10 @@ export class Migration20261022210000 extends Migration {
         PERFORM pg_advisory_xact_lock(hashtextextended('trade-commerce-profile/' || NEW.commerce_profile_id::text, 0));
         IF NEW.expires_at <= clock_timestamp() THEN
           RAISE EXCEPTION 'Decision 8 denied: the commerce profile attestation has expired';
+        END IF;
+        -- Never valid before it was issued (5 s clock-skew allowance, as the client).
+        IF NEW.issued_at > clock_timestamp() + interval '5 seconds' THEN
+          RAISE EXCEPTION 'Decision 8 denied: the commerce profile attestation is issued in the future';
         END IF;
         -- CP fixes a profile's scope and model; a contradiction is never accepted.
         IF EXISTS (SELECT 1 FROM trade_commerce_profile_observation o
@@ -201,8 +205,12 @@ export class Migration20261022210000 extends Migration {
       IF a.attribution_id IS NULL OR a.subject_type <> NEW.resource_type OR a.subject_id <> NEW.resource_id
          OR a.tenant_id <> NEW.tenant_id OR a.engine_instance_id <> NEW.trade_engine_instance_id
          OR a.binding_id <> NEW.seller_binding_id OR a.binding_version <> NEW.seller_binding_version
-         OR a.context_id <> NEW.seller_context_id THEN
-        RAISE EXCEPTION 'Decision 8 denied: the classification does not match the resource''s seller attribution';
+         OR a.context_id <> NEW.seller_context_id
+         -- Only the resource's current attribution, never a superseded one.
+         OR EXISTS (SELECT 1 FROM trade_commitment_attribution later
+              WHERE later.subject_type = a.subject_type AND later.subject_id = a.subject_id
+                AND (later.recorded_at, later.attribution_id) > (a.recorded_at, a.attribution_id)) THEN
+        RAISE EXCEPTION 'Decision 8 denied: the classification does not match the resource''s current seller attribution';
       END IF;
 
       IF NEW.origin = 'REPLACEMENT' THEN
