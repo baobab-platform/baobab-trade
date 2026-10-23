@@ -37,6 +37,7 @@ import type {
   IStockLocationService,
 } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
+import type { TradeBuyerExecutionContext } from "../baobab/b2b/buyer-authority"
 import type { TradeAOperationClass } from "../baobab/control-plane/trade-order-authority"
 import { findByCountryCode, findByMarketKey, findByMetadataKey } from "../baobab/market/mapping"
 import { PostgresCommitmentAttributionStore } from "../baobab/orders/commitment-attribution"
@@ -45,6 +46,10 @@ import {
   attestNativeSellerConfiguration,
   PostgresNativeConfigurationAttestationStore,
 } from "../baobab/orders/native-configuration-attestation"
+import {
+  classifyNativeCommitment,
+  PostgresClassificationStore,
+} from "../baobab/orders/native-commitment-classification"
 import { PostgresAttestedNativeConfigurationReader } from "../baobab/orders/native-configuration-resolver"
 import {
   PostgresOrderAuthorityReceiptStore,
@@ -63,6 +68,8 @@ import type ThamaniModuleService from "../modules/thamani/service"
 const POLICY_REFERENCE = "regression:trade-a-ta07-commit-fences"
 const ENGINE = "ei_ta07regression"
 const TENANT = "tn_ta07regression"
+// Decision 8: an EXPLICITLY SYNTHETIC estate, CP Market ids and profiles.
+const ESTATE = "estate_ta07regression"
 const ACTIVITY: Record<TradeAOperationClass, string> = {
   "trade.order.commit": "CHECKOUT_ORDER_COMMITMENT",
   "trade.order.create": "DIRECT_ORDER_COMMITMENT",
@@ -329,6 +336,92 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
       )
     })
   const complete = (id: string) => completeCartWorkflow(container).run({ input: { id } })
+
+  /**
+   * Decision 8: classify the record from a synthetic CP commerce profile
+   * answer and Trade's own (synthetic) buyer relationship, as the CAA-06b
+   * composition will before commit.
+   */
+  const attributions = new PostgresCommitmentAttributionStore(pg)
+  const classifications = new PostgresClassificationStore(pg)
+  type Scope = { profile: string; market: string }
+  const scopes = {
+    B2C: { profile: randomUUID(), market: "ta07_b2c_ug" },
+    B2B: { profile: randomUUID(), market: "ta07_b2b_ug" },
+    denied: { profile: randomUUID(), market: "ta07_denied_ug" },
+  }
+  let profileLifetimeMs = 60_000
+  const classifyAs = async (
+    model: "B2B" | "B2C",
+    type: "cart" | "draft_order",
+    id: string,
+    scope: Scope = scopes[model],
+  ) => {
+    const attribution = await attributions.current({ type, id })
+    assert.ok(attribution, `${id} is not attributed`)
+    const binding = randomUUID()
+    const now = Date.now()
+    const result = await classifyNativeCommitment(
+      {
+        engineInstanceId: ENGINE,
+        store: classifications,
+        profiles: {
+          resolve: async (request) => ({
+            attestationId: randomUUID(),
+            commerceProfileId: scope.profile,
+            profileRevision: 1,
+            digitalEstateId: ESTATE,
+            tenantId: TENANT,
+            engineInstanceId: ENGINE,
+            marketId: request.marketId,
+            commerceModel: model,
+            issuedAt: new Date(now),
+            expiresAt: new Date(now + profileLifetimeMs),
+            profileEffectiveUntil: null,
+            evidenceReference: "synthetic:ta07-commerce-profile",
+          }),
+        },
+      },
+      {
+        resource: { type, id },
+        attribution,
+        sellerContext: { contextId: attribution.context_id, marketId: scope.market },
+        estate: {
+          kind: "ESTATE_CLIENT_BINDING",
+          bindingId: binding,
+          revision: 1,
+          digitalEstateId: ESTATE,
+          tenantId: TENANT,
+          engineInstanceId: ENGINE,
+          expiresAt: new Date(now + 60_000),
+        },
+        buyer:
+          model === "B2C"
+            ? { model: "CONSUMER", consumerReference: `consumer:ta07-${id}` }
+            : {
+                model: "BUYER_ORGANISATION",
+                context: {
+                  context_id: randomUUID(),
+                  digital_estate_id: ESTATE,
+                  tenant_id: TENANT,
+                  engine_instance_id: ENGINE,
+                  buyer_organisation_id: "b2borg_ta07regression",
+                  buyer_membership_id: "b2bmem_ta07regression",
+                  expires_at: new Date(now + 60_000).toISOString(),
+                  evidence_references: [`cp-estate-binding:${binding}@r1`],
+                } as TradeBuyerExecutionContext,
+              },
+        correlationId: randomUUID(),
+      },
+    )
+    assert.equal(result.outcome, "CLASSIFIED", JSON.stringify(result))
+    return result
+  }
+  /** Attribute, receipt and classify a cart as B2C, ready to complete. */
+  const ready = async (id: string) => {
+    await authorise("trade.order.commit", "cart", id)
+    await classifyAs("B2C", "cart", id)
+  }
   const one = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) =>
     (await pool.query(sql, values)).rows[0] as T
   const linkedOrder = async (cartId: string) => {
@@ -366,6 +459,30 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
       ],
     )
 
+  /**
+   * Decision 9: the fence ships behind an inactive gate (SHADOW). These
+   * checks prove what ENFORCED refuses, then return the gate to SHADOW and
+   * prove SHADOW records the same verdict without refusing.
+   */
+  const gate = async (mode: "SHADOW" | "ENFORCED", reference: string) =>
+    pool.query(
+      `UPDATE trade_commit_fence_enforcement SET mode = $1, revision = revision + 1, change_reference = $2`,
+      [mode, `${reference}:${randomUUID()}`],
+    )
+  const verdicts = async (id: string) =>
+    (
+      await pool.query(
+        `SELECT outcome, enforcement_mode FROM trade_commit_fence_decision WHERE subject_id = $1
+          ORDER BY decided_at`,
+        [id],
+      )
+    ).rows as { outcome: string; enforcement_mode: string }[]
+  assert.equal(
+    (await one<{ mode: string }>("SELECT mode FROM trade_commit_fence_enforcement")).mode,
+    "SHADOW",
+    "the fence must ship behind an inactive gate",
+  )
+  await gate("ENFORCED", "regression:ta07-enforced")
   try {
     // Setup is SANDBOX posture (the migration ran under the test profile).
     assert.equal(
@@ -377,6 +494,7 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
     //    INSERT consumes the hook's receipt and records one commitment for
     //    exactly this cart; completion then passes the cart fence.
     const first = await payableCart()
+    await ready(first)
     const { result: order } = await enforced(() => complete(first))
     assert.deepEqual(await linkedOrder(first), [order.id])
     const commitment = await one<{ receipt_id: string; subject_id: string }>(
@@ -407,6 +525,8 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
 
     // 2. Two concurrent authorised completions bind each order to its own cart.
     const [a, b] = [await payableCart(), await payableCart()]
+    await ready(a)
+    await ready(b)
     const [ra, rb] = await enforced(() => Promise.all([complete(a), complete(b)]))
     for (const [cartId, created] of [
       [a, ra.result],
@@ -453,6 +573,8 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
     const held = await payableCart()
     const heldReceipt = await authorise("trade.order.commit", "cart", held)
     assert.ok(heldReceipt)
+    // Classified, so the content check below is what refuses it.
+    await classifyAs("B2C", "cart", held)
     await refused(
       "attributed cart completion without a committed order",
       () => pool.query("UPDATE cart SET completed_at = clock_timestamp() WHERE id = $1", [held]),
@@ -530,6 +652,7 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
       draftInput(`ta07-draft-${randomUUID()}@example.invalid`),
     )
     await authorise("trade.draft-order.finalize", "draft_order", draft.id)
+    await classifyAs("B2C", "draft_order", draft.id)
     await convertDraftOrderWorkflow(container).run({ input: { id: draft.id } })
     assert.equal(
       (
@@ -573,6 +696,146 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
       /no current trade\.draft-order\.finalize authority/,
     )
 
+    // 8b. Decision 8: the commit check selects the regime from the classification.
+    const notCompleted = async (id: string) => {
+      assert.deepEqual(await linkedOrder(id), [])
+      assert.equal((await carts.retrieveCart(id)).completed_at, null)
+    }
+    const unclassified = await payableCart()
+    await authorise("trade.order.commit", "cart", unclassified)
+    await refused(
+      "an unclassified commitment",
+      () => enforced(() => complete(unclassified)),
+      /CLASSIFICATION_ABSENT/,
+    )
+    await notCompleted(unclassified)
+
+    const business = await payableCart()
+    await authorise("trade.order.commit", "cart", business)
+    await classifyAs("B2B", "cart", business)
+    await refused(
+      "a B2B commitment without buyer authority",
+      () => enforced(() => complete(business)),
+      /BUYER_AUTHORITY_ABSENT/,
+    )
+    await notCompleted(business)
+
+    const changed = await payableCart()
+    await ready(changed)
+    await pool.query(
+      `UPDATE trade_native_commitment_classification SET status = 'QUARANTINED', revision = revision + 1
+        WHERE resource_type = 'cart' AND resource_id = $1 AND status = 'ACTIVE'`,
+      [changed],
+    )
+    await refused(
+      "a commitment whose classification was retired",
+      () => enforced(() => complete(changed)),
+      /CLASSIFICATION_CHANGED/,
+    )
+    await notCompleted(changed)
+
+    // A stale profile attestation refuses until Trade re-resolves it.
+    profileLifetimeMs = 1_200
+    const stale = await payableCart()
+    await ready(stale)
+    profileLifetimeMs = 60_000
+    await new Promise((resolve) => setTimeout(resolve, 1_600))
+    await refused(
+      "a commitment on an expired profile attestation",
+      () => enforced(() => complete(stale)),
+      /PROFILE_NOT_ACTIVE/,
+    )
+    await notCompleted(stale)
+    await classifyAs("B2C", "cart", stale)
+    const { result: refreshed } = await enforced(() => complete(stale))
+    assert.deepEqual(await linkedOrder(stale), [refreshed.id])
+
+    // A later CP answer that is not ATTESTED withdraws the profile.
+    const withdrawn = await payableCart()
+    await authorise("trade.order.commit", "cart", withdrawn)
+    await classifyAs("B2C", "cart", withdrawn, scopes.denied)
+    await pool.query(
+      `INSERT INTO trade_commerce_profile_observation (digital_estate_id, engine_instance_id, market_id,
+         estate_provenance_kind, estate_provenance_reference, outcome, correlation_id)
+       VALUES ($1, $2, $3, 'ESTATE_CLIENT_BINDING', $4, 'PROFILE_NOT_ACTIVE', $5)`,
+      [ESTATE, ENGINE, scopes.denied.market, randomUUID(), randomUUID()],
+    )
+    await refused(
+      "a commitment after CP withdrew the profile",
+      () => enforced(() => complete(withdrawn)),
+      /PROFILE_NOT_ACTIVE/,
+    )
+    await notCompleted(withdrawn)
+
+    const { result: unclassifiedDraft } = await createOrderWorkflow(container).run(
+      draftInput(`ta07-draft-${randomUUID()}@example.invalid`),
+    )
+    await authorise("trade.draft-order.finalize", "draft_order", unclassifiedDraft.id)
+    await refused(
+      "an unclassified draft finalisation",
+      () => convertDraftOrderWorkflow(container).run({ input: { id: unclassifiedDraft.id } }),
+      /CLASSIFICATION_ABSENT/,
+    )
+    assert.equal(
+      (
+        await one<{ is_draft_order: boolean }>('SELECT is_draft_order FROM "order" WHERE id = $1', [
+          unclassifiedDraft.id,
+        ])
+      ).is_draft_order,
+      true,
+    )
+
+    // 8c. Decision 9: SHADOW records the verdict and refuses nothing; the gate
+    // changes only by a governed revision and is never removed.
+    await gate("SHADOW", "regression:ta07-shadow")
+    const shadowed = await payableCart()
+    await authorise("trade.order.commit", "cart", shadowed)
+    const { result: shadowOrder } = await enforced(() => complete(shadowed))
+    assert.deepEqual(await linkedOrder(shadowed), [shadowOrder.id])
+    assert.deepEqual(await verdicts(shadowed), [
+      { outcome: "CLASSIFICATION_ABSENT", enforcement_mode: "SHADOW" },
+    ])
+    assert.deepEqual(await verdicts(first), [{ outcome: "ALLOWED", enforcement_mode: "ENFORCED" }])
+    await refused(
+      "an unversioned gate change",
+      () => pool.query("UPDATE trade_commit_fence_enforcement SET mode = 'ENFORCED'"),
+      /next revision and its own evidence reference/,
+    )
+    await refused(
+      "a gate removal",
+      () => pool.query("DELETE FROM trade_commit_fence_enforcement"),
+      /one governed row/,
+    )
+    await refused(
+      "a second gate",
+      () =>
+        pool.query(
+          "INSERT INTO trade_commit_fence_enforcement (singleton, mode, revision, change_reference) VALUES (true, 'SHADOW', 9, 'x')",
+        ),
+      /one governed row/,
+    )
+    await refused(
+      "a forged verdict",
+      () =>
+        pool.query(
+          `INSERT INTO trade_commit_fence_decision (subject_type, subject_id, receipt_id, outcome, enforcement_mode,
+             enforcement_revision) VALUES ('cart', $1, $2, 'CLASSIFICATION_ABSENT', 'SHADOW', 1)`,
+          [held, heldReceipt.receipt_id],
+        ),
+      /written only by the commit fence/,
+    )
+    await refused(
+      "a rewritten verdict",
+      () => pool.query("UPDATE trade_commit_fence_decision SET outcome = 'ALLOWED'"),
+      /append-only evidence/,
+    )
+    await refused(
+      "a deleted verdict",
+      () => pool.query("DELETE FROM trade_commit_fence_decision"),
+      /append-only evidence/,
+    )
+    await gate("ENFORCED", "regression:ta07-enforced-again")
+
     // 9. Evidence is written only by the fences and never rewritten.
     await refused(
       "a receipt consumed outside the fence",
@@ -611,6 +874,8 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
         /only moves from SANDBOX to ENFORCED/,
       )
     } finally {
+      // Leave the disposable database as the fence ships: SHADOW.
+      await gate("SHADOW", "regression:ta07-restore").catch(() => undefined)
       await db.query("ROLLBACK")
       db.release()
     }
@@ -621,7 +886,7 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
       await refused(sql, () => pool.query(sql), /only moves from SANDBOX to ENFORCED/)
 
     console.log(
-      "Trade-A TA-07: native commit fences on real completeCartWorkflow/convertDraftOrderWorkflow (single consumption, cart binding, replay, concurrency, content binding at COMMIT, ambiguity, lease expiry, unattributed cart, draft finalisation, forged and rewritten evidence, posture) passed with synthetic CP/IAM; LOCAL_TESTED, not EA Gate D, not L4",
+      "Trade-A TA-07: native commit fences on real completeCartWorkflow/convertDraftOrderWorkflow (single consumption, cart binding, replay, concurrency, content binding at COMMIT, ambiguity, lease expiry, unattributed cart, draft finalisation, Decision 8 classification regime, forged and rewritten evidence, posture) passed with synthetic CP/IAM; LOCAL_TESTED, not EA Gate D, not L4",
     )
   } finally {
     if (!eligible)
