@@ -34,10 +34,13 @@ CP topology SQL, synthetic IAM response or invented provider is imported.
 
 Only after all sixteen implemented observations and cleanup pass is
 `artifacts/dev07/report.json` written, with a separate SHA-256 JSON file.
-Actions retains that sanitized pair as `dev07-native-b2b-components` for 30 days.
+Actions uploads that sanitized pair as `dev07-native-b2b-components` with a
+requested retention of 30 days; the artifact metadata expiry is authoritative
+when repository or organisation policy caps retention.
 The report records the exact checkout SHA, finite case/reason values and scope,
 never fixture IDs, customer details, claims, credentials, DSNs or raw responses.
-Missing, duplicated or unknown observations refuse report generation. A failed
+Missing, duplicated or unknown observations refuse report generation; a rerun
+removes its previous report pair before executing any observations. A failed
 step cannot publish a completed report. Source tests check boundaries but are
 not database evidence. Reviewers must download and hash-check the actual artifact
 before reconciling the programme register. Re-run after relevant module,

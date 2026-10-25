@@ -7,7 +7,7 @@
 import assert from "node:assert/strict"
 import { randomUUID, createHash } from "node:crypto"
 import { execFileSync } from "node:child_process"
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, writeFileSync, rmSync } from "node:fs"
 import type { ExecArgs, IProductModuleService } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
 import type B2BModuleService from "../modules/b2b/service"
@@ -36,6 +36,9 @@ export default async function ({ container }: ExecArgs) {
   ) {
     throw new Error("DEV07_REQUIRES_EXPLICIT_DISPOSABLE_TEST_DATABASE")
   }
+  // A failed rerun must not leave an earlier completed report in its output.
+  for (const name of ["report.json", "report.sha256.json"])
+    rmSync(`artifacts/dev07/${name}`, { force: true })
   const b2b = container.resolve<B2BModuleService>("b2b")
   const products = container.resolve<IProductModuleService>(Modules.PRODUCT)
   const passed: string[] = []
@@ -136,10 +139,28 @@ export default async function ({ container }: ExecArgs) {
           ? "UNAVAILABLE"
           : { rule: loaded.purchaseOrderRule },
     }
-    assert.deepEqual(evaluateBuyerOperation({ ...facts, roles: [] }), {
-      outcome: "DENY",
-      reasons: ["ROLE_NOT_PERMITTED"],
+    const unassigned = await b2b.createBuyerMemberships({
+      organisation_id: own.id,
+      principal_id: randomUUID(),
+      status: "ACTIVE",
     })
+    cleanups.push(() => b2b.softDeleteBuyerMemberships(unassigned.id))
+    absenceChecks.push(() => b2b.listBuyerMemberships({ id: unassigned.id }))
+    const noRolePolicy = await loadBuyerOperationPolicy(b2b as unknown as B2BPolicyStore, {
+      organisationId: own.id,
+      membershipId: unassigned.id,
+      marketKey: "zuribeans_ug",
+      siteIds: [],
+      now,
+    })
+    assert.deepEqual(noRolePolicy.roles, [])
+    assert.deepEqual(
+      evaluateBuyerOperation({ ...facts, membershipId: unassigned.id, roles: noRolePolicy.roles }),
+      {
+        outcome: "DENY",
+        reasons: ["ROLE_NOT_PERMITTED"],
+      },
+    )
     pass("absent-role-refused")
     // Never manufacture ATTESTED from the local market projection/grant.
     assert.deepEqual(evaluateBuyerOperation(facts), {
