@@ -56,13 +56,13 @@ export default async function ({ container }: ExecArgs) {
       legal_name: "Synthetic DEV07 buyer",
       status: "ACTIVE",
     })
-    cleanups.push(() => b2b.deleteB2BOrganisations(own.id))
+    cleanups.push(() => b2b.softDeleteB2BOrganisations(own.id))
     const other = await b2b.createB2BOrganisations({
       tenant_id: `other_${tenant}`,
       legal_name: "Unrelated synthetic buyer",
       status: "ACTIVE",
     })
-    cleanups.push(() => b2b.deleteB2BOrganisations(other.id))
+    cleanups.push(() => b2b.softDeleteB2BOrganisations(other.id))
     assert.notEqual(own.id, other.id)
     assert.notEqual(own.tenant_id, other.tenant_id)
     assert.equal((await b2b.retrieveB2BOrganisation(own.id)).canonical_organisation_id, null)
@@ -73,10 +73,10 @@ export default async function ({ container }: ExecArgs) {
       principal_id: principal,
       status: "ACTIVE",
     })
-    cleanups.push(() => b2b.deleteBuyerMemberships(member.id))
+    cleanups.push(() => b2b.softDeleteBuyerMemberships(member.id))
     absenceChecks.push(() => b2b.listBuyerMemberships({ id: member.id }))
     const role = await b2b.createBuyerRoles({ membership_id: member.id, role: "BUYER" })
-    cleanups.push(() => b2b.deleteBuyerRoles(role.id))
+    cleanups.push(() => b2b.softDeleteBuyerRoles(role.id))
     absenceChecks.push(() => b2b.listBuyerRoles({ id: role.id }))
     const grant = await b2b.createBuyerRoleMarketScopes({
       buyer_role_id: role.id,
@@ -84,8 +84,21 @@ export default async function ({ container }: ExecArgs) {
       granted_by_principal_id: principal,
       evidence_reference: "synthetic/dev07/component-only",
     })
-    cleanups.push(() => b2b.deleteBuyerRoleMarketScopes(grant.id))
-    absenceChecks.push(() => b2b.listBuyerRoleMarketScopes({ id: grant.id }))
+    // Grants are append-only authority history: revoke, never delete. Keep
+    // their referenced role soft-deleted until the disposable DB is destroyed.
+    cleanups.push(() =>
+      b2b.updateBuyerRoleMarketScopes({
+        id: grant.id,
+        status: "REVOKED",
+        revoked_at: new Date(),
+        revoked_by_principal_id: principal,
+        revocation_reason: "synthetic fixture teardown",
+      }),
+    )
+    absenceChecks.push(async () => {
+      assert.equal((await b2b.retrieveBuyerRoleMarketScope(grant.id)).status, "REVOKED")
+      return []
+    })
     const context = await resolveBuyerContext(b2b, own.id, customer)
     assert(context)
     assert.equal(context.principalId, principal)

@@ -25,7 +25,8 @@ reads the persisted records, invokes the maintained assortment route handler
 against those services, and removes its own active fixtures in reverse order.
 It attempts every cleanup on assertion failure and independently re-reads active
 absence for organisations, membership, role, grant, product and eligibility.
-Medusa soft-deletion is not physical row erasure. The surrounding Actions service
+Grant history is revoked and retained; its referenced role, membership and
+Organisation are soft-deleted. Medusa soft-deletion is not physical row erasure. The surrounding Actions service
 lifecycle disposes the complete test databases; this report does not certify host
 container, volume or image teardown, which remains Infrastructure's lifecycle.
 No native order is submitted, no global commit fence is activated, and no raw
