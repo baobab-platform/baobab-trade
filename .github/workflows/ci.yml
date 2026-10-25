@@ -156,6 +156,18 @@ jobs:
       - name: Verify Gate 6 catalogue and pricing projections
         run: npm run verify:catalogue
 
+      - name: DEV-07 native B2B and market components (INT-05 remains blocked)
+        env:
+          BAOBAB_DEV07_TEST_DB: baobab_trade_test
+        run: npm run regression:dev07-b2b-slice
+      - name: Retain completed DEV-07 component evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dev07-native-b2b-components
+          path: artifacts/dev07/*.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Bootstrap Gate 7 inventory projections
         run: npm run bootstrap:inventory
 

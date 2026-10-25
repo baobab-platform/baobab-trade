@@ -5,7 +5,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
-import { partitionMarketAssortment } from "../../../../baobab/b2b/product-assortment-policy"
+import { partitionCurrentMarketAssortment } from "../../../../baobab/b2b/product-assortment-policy"
 
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const marketKey = req.query.market_key
@@ -13,10 +13,12 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "market_key query parameter is required")
   }
 
-  const requireRegulatory =
-    req.query.require_regulatory_clearance === undefined ||
-    req.query.require_regulatory_clearance === "true" ||
-    req.query.require_regulatory_clearance === "1"
+  // Store callers cannot request the administrative preview's relaxed mode.
+  if (
+    ![undefined, "true", "1"].includes(req.query.require_regulatory_clearance as string | undefined)
+  ) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "regulatory clearance is mandatory")
+  }
 
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   const rows = await b2b.listMarketProductEligibilities(
@@ -24,13 +26,12 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     { take: 500 },
   )
 
-  const partition = partitionMarketAssortment(rows, {
-    requireRegulatoryClearance: requireRegulatory,
-  })
+  const partition = partitionCurrentMarketAssortment(rows, new Date())
 
+  res.setHeader("Cache-Control", "no-store")
   res.status(200).json({
     market_key: marketKey.trim(),
-    require_regulatory_clearance: requireRegulatory,
+    require_regulatory_clearance: true,
     ...partition,
   })
 }
