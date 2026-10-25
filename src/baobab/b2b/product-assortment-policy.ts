@@ -63,6 +63,28 @@ export type MarketAssortmentRow = {
   product_id: string
   status: CommercialAssortmentStatus | string
   regulatory_eligibility: RegulatoryEligibility | string
+  effective_from?: Date | string | null
+  effective_until?: Date | string | null
+}
+
+/** Public catalogue: only current, unambiguous clearance may be presented.
+ * The clock is server-owned. An invalid interval fails closed; the upper
+ * boundary is exclusive. The separate operations-preview helper below must
+ * never be selected by a store query parameter.
+ */
+export const partitionCurrentMarketAssortment = (rows: MarketAssortmentRow[], now: Date) => {
+  const counts = new Map<string, number>()
+  for (const row of rows) counts.set(row.product_id, (counts.get(row.product_id) ?? 0) + 1)
+  const instant = now.getTime()
+  return partitionMarketAssortment(
+    rows.map((row) => {
+      const from = row.effective_from == null ? -Infinity : new Date(row.effective_from).getTime()
+      const until = row.effective_until == null ? Infinity : new Date(row.effective_until).getTime()
+      const current = Number.isFinite(instant) && from < until && from <= instant && instant < until
+      return current && counts.get(row.product_id) === 1 ? row : { ...row, status: "WITHDRAWN" }
+    }),
+    { requireRegulatoryClearance: true },
+  )
 }
 
 /**

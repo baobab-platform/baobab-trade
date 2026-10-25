@@ -16,3 +16,6 @@ dump.rdb
 # Medusa local file provider output (uploads, order/product exports). Private
 # exports carry customer contact and shipping data and are never source.
 /static/
+
+# Sanitized development component reports are retained as CI artifacts.
+/artifacts/dev07/
