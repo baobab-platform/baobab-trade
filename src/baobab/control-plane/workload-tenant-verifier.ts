@@ -122,6 +122,7 @@ export const getWorkloadTenantVerifier = (): WorkloadTenantVerifier | null => {
     tokenUrl: env.iamWorkloadTokenUrl,
     clientId: env.iamWorkloadClientId,
     clientSecret: env.iamWorkloadClientSecret,
+    scope: "context:resolve",
     audience: "baobab-control-plane",
   })
   const controlPlaneClient = new HttpControlPlaneClient({
