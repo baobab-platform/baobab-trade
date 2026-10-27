@@ -193,7 +193,9 @@ shape is:
       "redirect_uri": "<exact registered HTTPS development callback>"
     },
     "wrong_audience": {
-      "code": "<separate native code for baobab-control-plane, same human/client>",
+      "client_id": "baobab-dev-human",
+      "client_secret": "<private CP-only development human-client secret>",
+      "code": "<separate native code for baobab-control-plane, same human, CP-only client>",
       "verifier": "<that request's original S256 PKCE verifier>",
       "redirect_uri": "<that request's exact registered callback>"
     }
@@ -259,3 +261,22 @@ The buyer verifier now preserves the exact configured issuer string; parsing
 an HTTPS URL must not add a slash to a slashless Hydra issuer identifier.
 Both discovery and signed `iss` must still exactly match that configured value.
 Reference: [OIDC Discovery §4.3 and §5](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfigurationValidation).
+
+### Companion adoption
+
+Shared #405 supplies the development registrations; CP #446 supplies the leased, guarded owner fixture and native public topology keys; IAM #139
+supplies the native dual-grant client builder. The Infrastructure companion
+assembles actual source pins and independent teardown. These are candidate
+source changes until reviewed and merged. This branch consumes Shared #405's
+exact head; merge it before accepting this consumer pin. Production scope
+ceilings and all original acceptance records remain unchanged.
+
+The isolated `Dockerfile.dev07` is a **source/component tool image**, built
+from pinned Node plus actual Trade source. It is not the production Trade image.
+The live qualifier invokes the maintained handler over real Medusa/PG and real
+issuer/CP transports; it still does not qualify browser/BFF HTTP routing.
+The wrong-audience human code uses the existing CP-only development client,
+not an unauthorized extension to the BFF's Trade-only human profile. Its token
+is revoked using that client's own credential. Generic CP Organisation echo
+is accepted without inventing exact-kind attestation when none was requested;
+the exact selected Organisation ID and bounded expiry remain required.

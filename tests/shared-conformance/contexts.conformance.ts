@@ -110,10 +110,10 @@ describe("platform context (POST /platform-context/resolve)", () => {
     },
     // Documented divergences:
     {
-      name: "organisation_id without organisation_type (Trade requires the pair)",
+      name: "generic organisation_id without an unrequested exact-kind attestation",
       patch: { organisation_type: undefined },
       schema: true,
-      trade: false,
+      trade: true,
     },
     {
       name: "extra property: reject undeclared wire authority",

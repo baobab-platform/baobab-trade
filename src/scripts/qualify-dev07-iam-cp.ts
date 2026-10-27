@@ -42,7 +42,7 @@ type Packet = {
   organisation_id: string
   other_organisation_id: string
   country_code: "UG" | "ZA"
-  codes: { buyer: Code; wrong_audience: Code }
+  codes: { buyer: Code; wrong_audience: Code & { client_id: string; client_secret: string } }
 }
 type Code = { code: string; verifier: string; redirect_uri: string }
 const OUTPUT = "artifacts/dev07-iam-cp"
@@ -191,21 +191,25 @@ export default async function ({ container }: ExecArgs) {
       const result = await request(
         revokeUrl,
         new URLSearchParams({ token, token_type_hint: hint }),
-        [bff.bff_client_id, bff.bff_client_secret],
+        issuedOwners.get(token) ?? [bff.bff_client_id, bff.bff_client_secret],
         true,
       )
       requireObserved(result.status === 200)
     }
-    const issue = async (fields: Record<string, string>) => {
-      const actual = await request(tokenUrl, new URLSearchParams(fields), [
-        bff.bff_client_id,
-        bff.bff_client_secret,
-      ])
+    const issuedOwners = new Map<string, [string, string]>()
+    const issue = async (
+      fields: Record<string, string>,
+      owner: [string, string] = [bff.bff_client_id, bff.bff_client_secret],
+    ) => {
+      const actual = await request(tokenUrl, new URLSearchParams(fields), owner)
       requireObserved(actual.status === 200 && typeof actual.body.access_token === "string")
       const token = actual.body.access_token as string
       tokens.push(token) // Track immediately, even if subsequent verification fails.
-      if (typeof actual.body.refresh_token === "string")
+      issuedOwners.set(token, owner)
+      if (typeof actual.body.refresh_token === "string") {
         refreshTokens.push(actual.body.refresh_token)
+        issuedOwners.set(actual.body.refresh_token, owner)
+      }
       return token
     }
     const exchange = (code: Code) =>
@@ -359,12 +363,26 @@ export default async function ({ container }: ExecArgs) {
     )
     pass(current)
     current = "wrong-audience-denial"
-    const wrong = await exchange(packet.codes.wrong_audience)
+    const negative = packet.codes.wrong_audience
+    requireObserved(
+      negative.client_id === "baobab-dev-human" &&
+        typeof negative.client_secret === "string" &&
+        negative.client_secret.length >= 32,
+    )
+    const wrong = await issue(
+      {
+        grant_type: "authorization_code",
+        code: negative.code,
+        code_verifier: negative.verifier,
+        redirect_uri: negative.redirect_uri,
+      },
+      [negative.client_id, negative.client_secret],
+    )
     const wrongStatus = (await introspect(wrong)) as Record<string, unknown>
     requireObserved(
       wrongStatus.active === true &&
         wrongStatus.sub === signed.subject &&
-        wrongStatus.client_id === signed.authorisedParty &&
+        wrongStatus.client_id === negative.client_id &&
         (wrongStatus.aud === "baobab-control-plane" ||
           JSON.stringify(wrongStatus.aud) === '["baobab-control-plane"]'),
     )

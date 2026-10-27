@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { isValidPlatformContextResolutionResponse } from "../src/baobab/contracts/platform-context"
 import type { ControlPlaneClient } from "../src/baobab/control-plane/client"
 import {
   ControlPlaneWorkloadTenantVerifier,
@@ -23,6 +24,23 @@ const fakeControlPlaneClient = (
 })
 
 describe("ControlPlaneWorkloadTenantVerifier", () => {
+  it("accepts CP's generic Organisation echo without inventing an exact-kind attestation", () => {
+    const generic = {
+      context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
+      tenant_id: "tn_example01",
+      resolved_at: "2026-10-27T06:00:00Z",
+      organisation_id: "019a0915-a8c0-7000-8000-000000000001",
+    }
+    expect(isValidPlatformContextResolutionResponse(generic)).toBe(true)
+    expect(
+      isValidPlatformContextResolutionResponse({
+        ...generic,
+        organisation_id: undefined,
+        organisation_type: "ORGANISATION",
+      }),
+    ).toBe(false)
+  })
+
   it("refuses a context CP resolved for a different organisation", async () => {
     const resolvePlatformContext = vi.fn().mockResolvedValue({
       context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
