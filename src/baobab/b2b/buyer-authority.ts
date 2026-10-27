@@ -57,7 +57,7 @@ import { B2B_ROLES, type B2BRole } from "./types"
  *
  * Nothing is cached across requests. The context names the membership and
  * relationship revisions it evaluated, lives at most 60 seconds and never
- * outlives its earliest evidence. It is not a credential and grants nothing
+ * outlives its earliest evidence or the membership effective end. It is not a credential and grants nothing
  * beyond this operation; buyer ALLOW never executes a transaction without the
  * seller decision and a native fence (ADR-SHARED-042 section 9). Reasons for
  * an Organisation the actor cannot act for are never more specific than
@@ -102,6 +102,7 @@ export type TradeBuyerExecutionContext = {
   tenant_id: string
   digital_estate_id: string
   engine_instance_id: string
+  market_id?: string
   canonical_organisation_id: string
   buyer_organisation_id: string
   buyer_membership_id: string
@@ -144,6 +145,7 @@ export type BuyerContextRequest = {
   subjectToken: string
   requestedOrganisationId?: string
   requestedDigitalEstateId?: string
+  requestedCountryCode?: string
   correlationId: string
 }
 
@@ -151,12 +153,19 @@ const OPERATION: BuyerOperation = "trade.buyer-context.resolve"
 const CANONICAL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const CONTEXT_LIFETIME_MS = 60_000
 /** The Trade operation policy this evaluator implements (trade/v2 policy_revision). */
-export const BUYER_CONTEXT_POLICY_REVISION = "trade.buyer-context.resolve:v1"
+export const BUYER_CONTEXT_POLICY_REVISION = "trade.buyer-context.resolve:v2"
 
 const inEffect = (from: unknown, until: unknown, now: number): boolean => {
-  const start = from ? new Date(from as string | Date).getTime() : -Infinity
-  const end = until ? new Date(until as string | Date).getTime() : Infinity
-  return !Number.isNaN(start) && !Number.isNaN(end) && start <= now && now < end
+  const start = from == null ? -Infinity : new Date(from as string | Date).getTime()
+  const end = until == null ? Infinity : new Date(until as string | Date).getTime()
+  return (
+    Number.isFinite(now) &&
+    !Number.isNaN(start) &&
+    !Number.isNaN(end) &&
+    start < end &&
+    start <= now &&
+    now < end
+  )
 }
 
 class Refusal extends Error {
@@ -202,7 +211,9 @@ async function evaluate(
   deps: BuyerAuthorityDependencies,
   request: BuyerContextRequest,
 ): Promise<TradeBuyerExecutionContext> {
-  const now = (deps.now ?? Date.now)()
+  const clock = deps.now ?? Date.now
+  const startedAt = clock()
+  if (!Number.isFinite(startedAt)) throw unavailable()
   const newId = deps.newId ?? randomUUID
 
   // 1-2. The BFF as itself, then the human token, bound to the same client.
@@ -276,10 +287,14 @@ async function evaluate(
     organisation.tenant_id !== estate.tenantId ||
     organisation.canonical_organisation_id !== requested ||
     organisation.engine_instance_id !== estate.engineInstanceId ||
+    !Number.isSafeInteger(organisation.relationship_revision) ||
+    organisation.relationship_revision < 1 ||
     !organisation.link_provenance
   ) {
     throw deny("BUYER_NOT_AUTHORISED")
   }
+
+  const membershipReadAt = clock()
 
   // 8. Exactly one ACTIVE, in-effect membership keyed on the Principal.
   const memberships = await deps.b2b
@@ -293,7 +308,9 @@ async function evaluate(
     membership.principal_id !== principal.principalId ||
     membership.organisation_id !== organisation.id ||
     membership.status !== "ACTIVE" ||
-    !inEffect(membership.effective_from, membership.effective_until, now)
+    !Number.isSafeInteger(membership.revision) ||
+    membership.revision < 1 ||
+    !inEffect(membership.effective_from, membership.effective_until, membershipReadAt)
   ) {
     throw deny("BUYER_NOT_AUTHORISED")
   }
@@ -302,26 +319,79 @@ async function evaluate(
       throw unavailable()
     })
   )
+    .filter((record) => record.membership_id === membership.id)
     .map((record) => record.role as B2BRole)
     .filter((role) => (B2B_ROLES as readonly string[]).includes(role))
+
+  if (roles.length === 0) throw deny("ROLE_NOT_PERMITTED")
 
   // 9. CP attests the Organisation for the seller-side Tenant.
   if (!deps.tenants) throw unavailable()
   const cpContext = await deps.tenants
-    .verifyOrganisationTenant(estate.tenantId, requested, request.correlationId)
+    .verifyOrganisationTenant(
+      estate.tenantId,
+      requested,
+      request.correlationId,
+      request.requestedCountryCode,
+    )
     .catch((error) => {
       throw error instanceof TenantAttestationError
         ? deny("ORGANISATION_NOT_ATTESTED")
         : unavailable()
     })
 
+  // Roles and CP are separate reads. An intervening native revocation,
+  // canonical relink or role edit invalidates this snapshot; never publish
+  // authority carrying an older membership/relationship revision.
+  const [currentOrganisations, currentMemberships] = await Promise.all([
+    deps.b2b.listB2BOrganisations({
+      canonical_organisation_id: requested,
+      tenant_id: estate.tenantId,
+    }),
+    deps.b2b.listBuyerMemberships({
+      organisation_id: organisation.id,
+      principal_id: principal.principalId,
+    }),
+  ]).catch(() => {
+    throw unavailable()
+  })
+  if (
+    currentOrganisations.length !== 1 ||
+    currentMemberships.length !== 1 ||
+    currentOrganisations[0].id !== organisation.id ||
+    currentOrganisations[0].relationship_revision !== organisation.relationship_revision ||
+    currentOrganisations[0].status !== "ACTIVE" ||
+    currentMemberships[0].id !== membership.id ||
+    currentMemberships[0].revision !== membership.revision ||
+    currentMemberships[0].status !== "ACTIVE"
+  ) {
+    throw deny("BUYER_NOT_AUTHORISED")
+  }
+
+  // External reads may cross a token, membership or attestation expiry.
+  // Evaluate again after all I/O; no request-start grace period is allowed.
+  const now = clock()
+  if (!Number.isFinite(now) || now < startedAt) throw unavailable()
+  if (!inEffect(membership.effective_from, membership.effective_until, now)) {
+    throw deny("BUYER_NOT_AUTHORISED")
+  }
+  if (!cpContext.expiresAt) throw unavailable()
+  if (
+    request.requestedCountryCode !== undefined &&
+    (cpContext.countryCode !== request.requestedCountryCode ||
+      !cpContext.marketId ||
+      !cpContext.currencyCode)
+  ) {
+    throw deny("MARKET_NOT_PERMITTED")
+  }
   const expiries = [
-    now + CONTEXT_LIFETIME_MS,
+    startedAt + CONTEXT_LIFETIME_MS,
     token.expiresAt.getTime(),
     caller.expiresAt.getTime(),
     principal.evidenceExpiresAt.getTime(),
     estate.expiresAt.getTime(),
-    ...(cpContext.expiresAt ? [cpContext.expiresAt.getTime()] : []),
+    cpContext.expiresAt.getTime(),
+    ...(membership.effective_until != null ? [new Date(membership.effective_until).getTime()] : []),
   ]
   const expiresAt = Math.min(...expiries)
   if (!Number.isFinite(expiresAt) || expiresAt <= now) throw deny("CONTEXT_NOT_USABLE")
@@ -336,6 +406,7 @@ async function evaluate(
     tenant_id: estate.tenantId,
     digital_estate_id: estate.digitalEstateId,
     engine_instance_id: estate.engineInstanceId,
+    ...(cpContext.marketId ? { market_id: cpContext.marketId } : {}),
     canonical_organisation_id: requested,
     buyer_organisation_id: organisation.id,
     buyer_membership_id: membership.id,

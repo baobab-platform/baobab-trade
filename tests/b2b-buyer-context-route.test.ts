@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import * as authority from "../src/baobab/b2b/buyer-authority"
 import { POST } from "../src/api/store/b2b/buyer-context/route"
 import { resetEstateBindingResolverForTests } from "../src/baobab/control-plane/estate-binding"
 import { resetBuyerPrincipalResolverForTests } from "../src/baobab/control-plane/principal-resolution"
@@ -35,7 +36,7 @@ const enable = () => {
 }
 
 const call = async (
-  options: { authorization?: string; body?: unknown; correlation?: string } = {},
+  options: { authorization?: string; body?: unknown; correlation?: string; store?: unknown } = {},
 ) => {
   const res: { statusCode?: number; body?: unknown; headers: Record<string, string> } = {
     headers: {},
@@ -67,6 +68,7 @@ const call = async (
       },
       scope: {
         resolve: () => {
+          if (options.store) return options.store
           throw new Error("no module may be read before the request is validated")
         },
       },
@@ -84,6 +86,7 @@ describe("POST /store/b2b/buyer-context", () => {
     resetWorkloadTenantVerifierForTests()
   })
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllEnvs()
     resetBuyerPrincipalResolverForTests()
     resetEstateBindingResolverForTests()
@@ -171,4 +174,27 @@ describe("POST /store/b2b/buyer-context", () => {
     })
     expect(res.statusCode).toBe(400)
   })
+  it.each(["UG", "ZA"])(
+    "hands %s selection to the canonical resolver without inventing a Market",
+    async (country) => {
+      enable()
+      const resolver = vi.spyOn(authority, "resolveBuyerContext").mockResolvedValue({
+        outcome: "UNAVAILABLE",
+        status: 503,
+        decision: { outcome: "UNAVAILABLE", reasons: ["SOURCE_UNAVAILABLE"] },
+      })
+      const response = await call({
+        authorization: "Bearer a.b.c",
+        store: {},
+        body: { ...evidence, requested_country_code: country },
+      })
+      expect(response.statusCode).toBe(503)
+      expect(resolver).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ requestedCountryCode: country }),
+      )
+      expect(JSON.stringify(response.body)).not.toContain(SUBJECT)
+      expect(response.headers["cache-control"]).toBe("private, no-store")
+    },
+  )
 })

@@ -50,10 +50,15 @@ type Change = {
   tenantError?: Error
   assurance?: null
   shortEvidence?: number
+  cpContext?: Record<string, unknown>
+  roles?: Array<{ role: string; membership_id: string }>
+  timeAfterCp?: number
+  mutateOnCp?: boolean
 }
 
 const world = (change: Change = {}) => {
   const calls: string[] = []
+  let currentTime = NOW
   let ids = 0
   const organisations = change.organisations ?? [
     {
@@ -87,7 +92,7 @@ const world = (change: Change = {}) => {
     },
   ]
   const deps = {
-    now: () => NOW,
+    now: () => currentTime,
     newId: () => `019a0915-a8c0-7000-8000-${String(++ids).padStart(12, "0")}`,
     engineInstanceId: ENGINE,
     assurance:
@@ -171,10 +176,28 @@ const world = (change: Change = {}) => {
       change.tenants === null
         ? null
         : {
-            verifyOrganisationTenant: async (tenantId: string, canonical: string) => {
+            verifyOrganisationTenant: async (
+              tenantId: string,
+              canonical: string,
+              _correlation: string,
+              country?: string,
+            ) => {
               calls.push(`attest:${tenantId}:${canonical}`)
               if (change.tenantError) throw change.tenantError
-              return { contextId: CP_CONTEXT, expiresAt: new Date(NOW + 50_000) }
+              if (change.timeAfterCp !== undefined) currentTime = change.timeAfterCp
+              if (change.mutateOnCp) memberships[0].revision += 1
+              return {
+                contextId: CP_CONTEXT,
+                expiresAt: new Date(NOW + 50_000),
+                ...(country
+                  ? {
+                      countryCode: country,
+                      marketId: `market_${country.toLowerCase()}`,
+                      currencyCode: country === "UG" ? "UGX" : "ZAR",
+                    }
+                  : {}),
+                ...change.cpContext,
+              }
             },
           },
     b2b: {
@@ -183,20 +206,30 @@ const world = (change: Change = {}) => {
         tenant_id: string
       }) => {
         calls.push("organisation")
-        return organisations.filter(
-          (o) =>
-            o.canonical_organisation_id === filter.canonical_organisation_id &&
-            o.tenant_id === filter.tenant_id,
-        )
+        return organisations
+          .filter(
+            (o) =>
+              o.canonical_organisation_id === filter.canonical_organisation_id &&
+              o.tenant_id === filter.tenant_id,
+          )
+          .map((o) => ({ ...o }))
       },
       listBuyerMemberships: async (filter: { organisation_id: string; principal_id: string }) => {
         calls.push("membership")
-        return memberships.filter(
-          (m) =>
-            m.organisation_id === filter.organisation_id && m.principal_id === filter.principal_id,
-        )
+        return memberships
+          .filter(
+            (m) =>
+              m.organisation_id === filter.organisation_id &&
+              m.principal_id === filter.principal_id,
+          )
+          .map((m) => ({ ...m }))
       },
-      listBuyerRoles: async () => [{ role: "BUYER" }, { role: "APPROVER" }, { role: "SUPERUSER" }],
+      listBuyerRoles: async () =>
+        change.roles ??
+        ["BUYER", "APPROVER", "SUPERUSER"].map((role) => ({
+          role,
+          membership_id: "b2bmem_01synthetic",
+        })),
     },
   }
   return { calls, deps }
@@ -207,6 +240,7 @@ const run = (
   request: Partial<{
     callerToken: string
     subjectToken: string
+    requestedCountryCode: string | undefined
     requestedOrganisationId: string | undefined
   }> = {},
 ) => {
@@ -271,6 +305,8 @@ describe("buyer execution context (ADR-SHARED-042 CAA-04/05)", () => {
       "organisation",
       "membership",
       `attest:${TENANT}:${ORG}`,
+      "organisation",
+      "membership",
     ])
   })
 
@@ -439,5 +475,59 @@ describe("buyer execution context (ADR-SHARED-042 CAA-04/05)", () => {
       outcome: "UNAVAILABLE",
     })
     expect(refused(await run({ tenants: null }).promise)).toMatchObject({ outcome: "UNAVAILABLE" })
+  })
+  it.each(["UG", "ZA"])("carries only CP's attested %s Market", async (country) => {
+    const result = await run({}, { requestedCountryCode: country }).promise
+    expect(result.outcome).toBe("ALLOW")
+    if (result.outcome === "ALLOW")
+      expect(result.context.market_id).toBe(`market_${country.toLowerCase()}`)
+    const wrong = await run({ cpContext: { countryCode: "KE" } }, { requestedCountryCode: country })
+      .promise
+    expect(refused(wrong).reasons).toEqual(["MARKET_NOT_PERMITTED"])
+  })
+
+  it("refuses unbounded CP authority and an expired result after slow I/O", async () => {
+    expect(refused(await run({ cpContext: { expiresAt: undefined } }).promise).outcome).toBe(
+      "UNAVAILABLE",
+    )
+    expect(refused(await run({ timeAfterCp: NOW + 45_000 }).promise).reasons).toEqual([
+      "CONTEXT_NOT_USABLE",
+    ])
+    expect(refused(await run({ timeAfterCp: NOW - 1 }).promise).outcome).toBe("UNAVAILABLE")
+  })
+
+  it("bounds its lifetime to the membership end and rechecks after I/O", async () => {
+    const membership = {
+      id: "b2bmem_01synthetic",
+      organisation_id: "b2borg_acme",
+      customer_id: null,
+      principal_id: PRINCIPAL,
+      status: "ACTIVE",
+      revision: 7,
+      effective_until: new Date(NOW + 1000).toISOString(),
+    }
+    const result = await run({ memberships: [membership] }).promise
+    expect(result.outcome).toBe("ALLOW")
+    if (result.outcome === "ALLOW") expect(Date.parse(result.context.expires_at)).toBe(NOW + 1000)
+    expect(
+      refused(await run({ memberships: [membership], timeAfterCp: NOW + 1000 }).promise).reasons,
+    ).toEqual(["BUYER_NOT_AUTHORISED"])
+    expect(
+      refused(await run({ memberships: [{ ...membership, effective_until: "" }] }).promise).reasons,
+    ).toEqual(["BUYER_NOT_AUTHORISED"])
+  })
+
+  it("refuses foreign or absent roles before CP organisation reads", async () => {
+    for (const roles of [[], [{ role: "BUYER", membership_id: "other-member" }]]) {
+      const { calls, promise } = run({ roles })
+      expect(refused(await promise).reasons).toEqual(["ROLE_NOT_PERMITTED"])
+      expect(calls.some((c) => c.startsWith("attest:"))).toBe(false)
+    }
+  })
+
+  it("refuses a revision changed while CP was resolving", async () => {
+    expect(refused(await run({ mutateOnCp: true }).promise).reasons).toEqual([
+      "BUYER_NOT_AUTHORISED",
+    ])
   })
 })

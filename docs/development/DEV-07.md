@@ -107,3 +107,55 @@ adding an authenticated operations-preview route.
 DEV-06/INT-07 remains partial while Subscriptions onboarding proceeds. That is
 not a dependency freeze on this DEV-07 engineering. Subscription provenance alone
 will not prove a CP binding or current resource-server enforcement.
+
+## Current buyer context and supplemental read qualification — 27 October
+
+`POST /store/b2b/buyer-context` passes `requested_country_code` to CP's existing
+`POST /v1/platform-context/resolve` as selection intent, after native membership
+has been established. The workload caller remains Trade, the buyer remains the
+independently resolved human, and CP selects the canonical `market_id` from
+current Tenant market participation. A mismatched country or missing CP Market/
+currency refuses the selected context. This neither translates `zuribeans_ug` or
+`zuribeans_za` to a canonical Market nor grants private pricing or purchasing.
+That mapping and operation-specific capability/legal authority remain separate.
+
+CP must echo the exact requested Organisation even when the Tenant agrees.
+For the canonical buyer path its context must also have a finite future expiry;
+an unbounded response is UNAVAILABLE. Canonical context policy revision v2
+requires positive native revisions and at least one known role belonging to the
+selected membership, re-reads relationship/membership revisions after external
+I/O, and refuses an intervening role edit, revocation or canonical relink.
+It rechecks the clock after those reads and bounds the result by the earlier
+of request-start + 60 seconds, token/Principal/estate/CP expiry, and membership
+end. This is a bounded read snapshot, not a lock on future authority. A later
+operation must independently re-evaluate its facts; no receipt or native order
+is authorised by this read response.
+
+A new, separate migrated Medusa/PostgreSQL regression is available:
+
+```sh
+NODE_ENV=test BAOBAB_DEV07_TEST_DB=baobab_trade_test npm run regression:dev07-buyer-context
+```
+
+Run it after migrations in the same disposable database configuration as above.
+It observes eleven native read/revision/cleanup cases, including exact membership
+boundaries and actual database-owned revision changes after membership and role
+writes. It uses no substituted IAM/CP responses. The output is a sanitized report
+and hash pair under `artifacts/dev07-buyer-context`, uploaded by CI as
+`dev07-native-buyer-context`. A failed run removes earlier outputs and cannot
+write a completed receipt. Every cleanup is attempted and active absence is read
+back before completion; soft-deletion remains distinct from physical teardown.
+Source/unit tests, including the country handoff checks, use explicit test doubles
+and are LOCAL_TESTED only. Actual PostgreSQL execution must be confirmed from the
+new CI artifact before reporting those eleven observations as passed.
+
+The original sixteen native observations, nine BLOCKED joined outcomes and their
+historical receipt bytes are unchanged. The new report is supplemental evidence;
+it cannot replace any original INT-05 case or activate the universal commitment
+fence. The canonical buyer-context proof still needs real IAM issuance, CP-owned
+Principal/Organisation/estate governance and independently retained run evidence.
+
+Rollback this increment by restoring the reviewed source pin or disabling the
+buyer-identity route. Keep unbounded/missing-Organisation CP evidence refused;
+do not use the legacy Medusa route as an IAM purchasing fallback. No schema,
+capability declaration, workload scope or fence activation changes are included.

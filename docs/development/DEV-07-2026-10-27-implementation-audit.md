@@ -37,3 +37,32 @@ Do not promote provider declarations or enable the SHADOW commitment fence by do
 ## Rollback
 
 Revert this bounded legacy-read hardening if a reviewed compatibility fault is demonstrated. Do not revert to allowing out-of-effect buyer identity in protected commerce; disable the legacy route pending correction. There are no schema or fixture migrations in this increment.
+
+## Continuation from Trade #176
+
+The canonical buyer-context path now forwards country selection to CP, retains
+CP's canonical Market in the derived context, requires exact Organisation echo
+and bounded cross-service context lifetime, filters roles by membership, and
+refuses invalid native revisions or authority changed during external reads.
+The last clock check and membership expiry bound close the stale read window.
+Policy revision is `trade.buyer-context.resolve:v2`. This is implemented source,
+not connected IAM/CP acceptance, private-catalogue authority or Market-key mapping.
+
+The independent supplemental native database suite and CI artifact described in
+`DEV-07.md` cover eleven read/revision/cleanup observations. Do not add those to
+the historical 16 PASS / 9 BLOCKED inventory or claim they ran from source tests.
+
+| DEV-07 delivery area                | Current implementation boundary / remaining action                                                                                                               |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Buyer Principal/Organisation        | Canonical two-token resolver present; current read freshness and CP country handoff implemented here. Real IAM/CP joined qualification remains open.             |
+| Market catalogue                    | Native UG/ZA public catalogue qualified historically; selected canonical Market now retained. Governed local Market-key mapping and entitled prices remain open. |
+| Supplier/ERP onboarding             | Requires actual independently owned supplier and ERP authority/readback; not supplied by buyer context.                                                          |
+| RFQ/quotation/approval              | Operation policy exists; exact canonical RFQ and quotation provider lifecycles remain unimplemented.                                                             |
+| Guarded native commitments          | Preserve existing seller fences and inactive buyer composition gate. Buyer receipt/reservation consumption in the native transaction remains unqualified.        |
+| ERP/documentary steps               | Wire only available owning adapters, with native execution evidence per operation. Joined results remain BLOCKED.                                                |
+| Negative/replay/jurisdiction checks | Native read negatives and revisions extended; complete INT-05 negatives require actual joined operations.                                                        |
+
+The current Shared main inspected for this continuation is
+`6b2199c550bfb70b10d3d7008bd6939806173c20`. Its Accepted EA-DEV DEV-07 and
+ADR-SHARED-042 govern. This records current-source consultation, not a change to
+the existing `contracts.lock.yaml` pin or an acceptance decision.

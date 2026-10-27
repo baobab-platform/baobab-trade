@@ -24,6 +24,9 @@ import {
 export type AttestedOrganisationContext = {
   contextId: string
   expiresAt?: Date
+  marketId?: string
+  countryCode?: string
+  currencyCode?: string
 }
 
 export interface WorkloadTenantVerifier {
@@ -31,6 +34,7 @@ export interface WorkloadTenantVerifier {
     tenantId: string,
     canonicalOrganisationId: string,
     correlationId: string,
+    countryCode?: string,
   ): Promise<AttestedOrganisationContext>
 }
 
@@ -51,6 +55,7 @@ export class ControlPlaneWorkloadTenantVerifier implements WorkloadTenantVerifie
     tenantId: string,
     canonicalOrganisationId: string,
     correlationId: string,
+    countryCode?: string,
   ): Promise<AttestedOrganisationContext> {
     const accessToken = await this.tokenProvider.getAccessToken()
     const resolved = await this.controlPlaneClient.resolvePlatformContext(
@@ -58,6 +63,8 @@ export class ControlPlaneWorkloadTenantVerifier implements WorkloadTenantVerifie
       canonicalOrganisationId,
       accessToken,
       correlationId,
+      undefined,
+      countryCode,
     )
 
     // Never trust a bare 200 -- confirm the Control Plane actually echoed
@@ -68,16 +75,27 @@ export class ControlPlaneWorkloadTenantVerifier implements WorkloadTenantVerifie
         "Control Plane platform context does not attest the asserted tenant for this organisation",
       )
     }
-    if (
-      resolved.organisation_id !== undefined &&
-      resolved.organisation_id !== canonicalOrganisationId
-    ) {
+    if (resolved.organisation_id !== canonicalOrganisationId) {
       throw new TenantAttestationError(
         "Control Plane platform context is for a different organisation",
       )
     }
+    // A country is selection intent. Only CP's current participation may
+    // supply its canonical Market; never derive it from a local market_key.
+    if (
+      countryCode !== undefined &&
+      (resolved.country_code !== countryCode || !resolved.market_id || !resolved.currency_code)
+    ) {
+      throw new TenantAttestationError("Control Plane did not attest the selected country")
+    }
     const expiresAt = resolved.expires_at ? new Date(resolved.expires_at) : undefined
-    return { contextId: resolved.context_id, expiresAt }
+    return {
+      contextId: resolved.context_id,
+      expiresAt,
+      ...(resolved.market_id ? { marketId: resolved.market_id } : {}),
+      ...(resolved.country_code ? { countryCode: resolved.country_code } : {}),
+      ...(resolved.currency_code ? { currencyCode: resolved.currency_code } : {}),
+    }
   }
 }
 
