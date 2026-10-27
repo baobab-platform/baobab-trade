@@ -12,5 +12,9 @@ RUN npm ci --include=dev
 COPY . .
 RUN chown -R ${BAOBAB_DEV07_UID}:${BAOBAB_DEV07_GID} /app
 ENV NODE_ENV=test
+# Numeric run identities have no guaranteed passwd home; keep npm/Medusa
+# caches beneath the owned working directory rather than /root or /home/node.
+ENV HOME=/app
+ENV npm_config_cache=/app/.npm-cache
 USER ${BAOBAB_DEV07_UID}:${BAOBAB_DEV07_GID}
 CMD ["npm", "run", "qualify:dev07-iam-cp"]
