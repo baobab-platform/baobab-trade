@@ -31,7 +31,8 @@ const contextFor = async (
     {
       listBuyerMemberships: async (filter: { organisation_id: string; customer_id: string }) =>
         memberships.filter(
-          (m) => m.organisation_id === filter.organisation_id && m.customer_id === filter.customer_id,
+          (m) =>
+            m.organisation_id === filter.organisation_id && m.customer_id === filter.customer_id,
         ),
       listBuyerRoles: async (filter: { membership_id: string }) =>
         roles.filter((r) => r.membership_id === filter.membership_id),
@@ -45,7 +46,7 @@ const contextFor = async (
  * Passing these tests is not joined IAM/CP identity or INT-05 qualification.
  */
 describe("DEV-07 legacy buyer context fails closed", () => {
-  it("accepts the active membership within its inclusive-start, exclusive-end interval", async () => {
+  it("resolves an ACTIVE membership within its effective interval", async () => {
     const now = Date.now()
     const context = await contextFor([
       member({
@@ -79,7 +80,7 @@ describe("DEV-07 legacy buyer context fails closed", () => {
     },
   )
 
-  it("refuses multiple current membership rows rather than selecting the first", async () => {
+  it("refuses duplicate membership rows", async () => {
     await expect(contextFor([member(), member({ id: "mem-2" })])).resolves.toBeNull()
   })
 
@@ -97,7 +98,7 @@ describe("DEV-07 legacy buyer context fails closed", () => {
     expect(context?.roles).toEqual(["BUYER"])
   })
 
-  it("refuses an inactive buyer organisation even with a currently active membership", async () => {
+  it("refuses an inactive organisation despite an active membership", async () => {
     const store = {
       listB2BOrganisations: async () => [
         {
