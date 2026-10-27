@@ -569,10 +569,9 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
     ]),
     0,
   )
-  const afterRollback = await sql(
-    'select "status" from "b2b_spend_reservation" where "id"=$1',
-    [atomicReservation.reservationId],
-  )
+  const afterRollback = await sql('select "status" from "b2b_spend_reservation" where "id"=$1', [
+    atomicReservation.reservationId,
+  ])
   assert.equal(afterRollback.rows[0].status, "ACTIVE")
   assert.equal(
     await count(
@@ -595,7 +594,11 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
      join "b2b_spend_command" c on c.idempotency_key=$3
      join "b2b_spend_ledger_entry" l on l.reservation_id=r.id and l.entry_kind='COMMIT'
      where p.id=$1`,
-    [atomicCommand.commitmentReference, atomicReservation.reservationId, atomicCommand.idempotencyKey],
+    [
+      atomicCommand.commitmentReference,
+      atomicReservation.reservationId,
+      atomicCommand.idempotencyKey,
+    ],
   )
   assert.equal(sameTransaction.rowCount, 1)
   const tx = sameTransaction.rows[0]
@@ -608,9 +611,7 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   assert.equal(attempts, 3)
   // The capacity-only API and the composed API cannot replay each other.
   assert.deepEqual(await commands.commit(atomicCommand), { outcome: "CONFLICT" })
-  pass(
-    "same-transaction mutation and spend; callback/deferred refusal rolls back; replay writes once",
-  )
+  pass("same-transaction mutation and spend; callback/deferred refusal rolls back; replay writes once")
 
   return passed
 }
