@@ -44,16 +44,22 @@ describe("interim buyer assurance verifier", () => {
     }
   })
 
-  it("normalises the configured issuer like the token verifier", () => {
-    const unslashed = interimAssurancePolicy({
-      issuer: "https://iam.example.test",
-      acceptedAcr: [SESSION],
-      approvalReference: "security-approval:synthetic",
-    })
-    expect(
-      evaluateAssurance(unslashed, "trade.contract-price.view", { issuer: ISSUER, acr: SESSION })
-        .ok,
-    ).toBe(true)
+  it("preserves exact issuer spelling, including slashless Hydra issuers", () => {
+    for (const issuer of ["https://iam.example.test", ISSUER, "https://iam.example.test/realm"]) {
+      const exact = interimAssurancePolicy({
+        issuer,
+        acceptedAcr: [SESSION],
+        approvalReference: "security-approval:synthetic",
+      })
+      expect(exact?.issuer).toBe(issuer)
+      expect(
+        evaluateAssurance(exact, "trade.contract-price.view", { issuer, acr: SESSION }),
+      ).toEqual({ ok: true, policyRevision: INTERIM_POLICY_REVISION })
+      const alternate = issuer.endsWith("/") ? issuer.slice(0, -1) : issuer + "/"
+      expect(
+        evaluateAssurance(exact, "trade.contract-price.view", { issuer: alternate, acr: SESSION }),
+      ).toEqual({ ok: false, reason: "ASSURANCE_INSUFFICIENT" })
+    }
   })
 
   it("never activates commitment or administration operations on the interim allowlist", () => {
@@ -80,6 +86,14 @@ describe("interim buyer assurance verifier", () => {
       { issuer: undefined, acceptedAcr: [SESSION], approvalReference: "a" },
       { issuer: ISSUER, acceptedAcr: ["*"], approvalReference: "a" },
       { issuer: ISSUER, acceptedAcr: ["two values"], approvalReference: "a" },
+      ...[
+        "http://iam.example.test",
+        "https://user:private@iam.example.test",
+        "https://iam.example.test?query=value",
+        "https://iam.example.test#fragment",
+        " https://iam.example.test",
+        "https://iam.example.test ",
+      ].map((issuer) => ({ issuer, acceptedAcr: [SESSION], approvalReference: "a" })),
       { issuer: "not a url", acceptedAcr: [SESSION], approvalReference: "a" },
     ]) {
       const built = interimAssurancePolicy(config)
@@ -90,3 +104,4 @@ describe("interim buyer assurance verifier", () => {
     }
   })
 })
+

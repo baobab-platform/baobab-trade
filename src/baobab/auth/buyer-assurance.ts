@@ -67,8 +67,20 @@ export const interimAssurancePolicy = (config: {
   if (values.some((value) => value === "*" || value.length > 255 || /\s/.test(value))) return null
   let issuer: string
   try {
-    // The same normalisation BuyerTokenVerifier applies to the issuer.
-    issuer = new URL(config.issuer).href
+    // OIDC issuer identifiers are exact trust identifiers. Validate the
+    // transport like BuyerTokenVerifier, without URL.href rewriting a bare
+    // origin with a trailing slash (Hydra's configured issuer is slashless).
+    const url = new URL(config.issuer)
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      config.issuer.trim() !== config.issuer
+    )
+      return null
+    issuer = config.issuer
   } catch {
     return null
   }
@@ -89,3 +101,4 @@ export const evaluateAssurance = (
   }
   return { ok: true, policyRevision: INTERIM_POLICY_REVISION }
 }
+
