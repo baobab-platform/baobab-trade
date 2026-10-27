@@ -176,7 +176,10 @@ export default async function ({ container }: ExecArgs) {
       return result
     }
     const tokenUrl = endpoint("token_endpoint")
-    const statusUrl = endpoint("introspection_endpoint")
+    // Hydra omits administrative introspection from public OIDC discovery.
+    // The disposable fixture independently exposes the issuer-origin route
+    // through Basic-authenticated private edge; never use a caller URL.
+    const statusUrl = developmentEndpoint(new URL("/oauth2/introspect", issuer).href)
     const revokeUrl = endpoint("revocation_endpoint")
     const bff = packet
     introspect = async (token) => {
