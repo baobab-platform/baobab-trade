@@ -86,7 +86,7 @@ const store = (change: Partial<B2BPolicyStore> = {}): B2BPolicyStore => ({
     {
       market_key: "KE",
       currency_code: "KES",
-      order_limit_minor: "12.5",
+      order_limit_minor: "125",
       approval_limit_minor: null,
       effective_from: null,
       effective_until: null,
@@ -94,7 +94,7 @@ const store = (change: Partial<B2BPolicyStore> = {}): B2BPolicyStore => ({
   ],
   listApprovalPolicies: async () => [
     { market_key: "ZA", currency_code: "ZAR", threshold_minor: "50000", enabled: true },
-    { market_key: "KE", currency_code: "KES", threshold_minor: 1.5, enabled: true },
+    { market_key: "KE", currency_code: "KES", threshold_minor: 150, enabled: true },
   ],
   listPurchaseOrderRequirements: async () => [
     { market_key: null, required: true, format_pattern: null },
@@ -170,23 +170,39 @@ describe("loadBuyerOperationPolicy", () => {
     ])
   })
 
-  it("drops malformed money rather than repairing it", async () => {
+  it("preserves valid money and refuses malformed sources instead of dropping restrictions", async () => {
     const facts = await loadBuyerOperationPolicy(store(), request)
-    expect(facts.spendAuthorities).toEqual([
-      {
-        marketKey: "ZA",
-        currencyCode: "ZAR",
-        orderLimitMinor: 100000n,
-        approvalLimitMinor: 500000n,
-        effectiveFrom: null,
-        effectiveUntil: null,
-      },
+    expect(facts.spendAuthorities).toMatchObject([
+      { marketKey: "ZA", orderLimitMinor: 100000n, approvalLimitMinor: 500000n },
+      { marketKey: "KE", orderLimitMinor: 125n, approvalLimitMinor: null },
     ])
     expect(facts.approvalPolicies).toEqual([
       { marketKey: "ZA", currencyCode: "ZAR", thresholdMinor: 50000n, enabled: true },
+      { marketKey: "KE", currencyCode: "KES", thresholdMinor: 150n, enabled: true },
     ])
     for (const value of ["12.5", 1.5, "1e3", " 5", "01", Number.MAX_SAFE_INTEGER + 2]) {
       expect(typeof toMinorUnits(value)).toBe("symbol")
+      const limits = await store().listSpendLimits({ membership_id: request.membershipId })
+      for (const field of ["order_limit_minor", "approval_limit_minor"] as const) {
+        const loaded = await loadBuyerOperationPolicy(
+          store({ listSpendLimits: async () => [...limits, { ...limits[0], [field]: value }] }),
+          request,
+        )
+        // A malformed duplicate may not disappear and leave a usable limit.
+        expect(loaded.spendAuthorities).toBe("UNAVAILABLE")
+      }
+      const policies = await store().listApprovalPolicies({ organisation_id: ORG })
+      for (const rows of [
+        [{ ...policies[0], threshold_minor: value }],
+        [...policies, { ...policies[0], threshold_minor: value }],
+      ]) {
+        const loaded = await loadBuyerOperationPolicy(
+          store({ listApprovalPolicies: async () => rows }),
+          request,
+        )
+        // Removing an invalid threshold must not remove the approval requirement.
+        expect(loaded.approvalPolicies).toBe("UNAVAILABLE")
+      }
     }
     expect(toMinorUnits(null)).toBeNull()
   })
@@ -304,6 +320,26 @@ describe("loadBuyerOperationPolicy", () => {
       request,
     )
     expect(negative.budgets).toBe("UNAVAILABLE")
+  })
+
+  it("refuses malformed balance periods rather than inventing zero consumption", async () => {
+    for (const [start, end] of [
+      ["invalid", "2026-11-01T00:00:00Z"],
+      ["2026-10-01T00:00:00Z", "invalid"],
+      ["2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z"],
+      ["2026-11-01T00:00:00Z", "2026-10-01T00:00:00Z"],
+    ]) {
+      const facts = await loadBuyerOperationPolicy(
+        store({ listSpendBudgetBalances: async () => [balanceRow(start, end, "100", "200")] }),
+        request,
+      )
+      expect(facts.budgets).toBe("UNAVAILABLE")
+    }
+    const invalidClock = await loadBuyerOperationPolicy(store(), {
+      ...request,
+      now: new Date(Number.NaN),
+    })
+    expect(invalidClock.budgets).toBe("UNAVAILABLE")
   })
 
   it("loads the named reservation of this Organisation only, with its holds", async () => {

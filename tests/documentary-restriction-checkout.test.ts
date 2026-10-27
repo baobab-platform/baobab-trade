@@ -46,6 +46,27 @@ describe("PEO-02T native Trade negative restriction consumer", () => {
     }
   })
 
+  it("refuses an invalid clock and empty or reversed leases within clock skew", () => {
+    for (const clock of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(() => assertUnblockedDocumentaryScope(fresh(), expected, clock)).toThrow(
+        "Documentary restriction denied",
+      )
+    }
+    for (const expiry of [now + 500, now + 1000]) {
+      expect(() =>
+        assertUnblockedDocumentaryScope(
+          {
+            ...fresh(),
+            evaluated_at: new Date(now + 1000).toISOString(),
+            expires_at: new Date(expiry).toISOString(),
+          },
+          expected,
+          now,
+        ),
+      ).toThrow("Documentary restriction denied")
+    }
+  })
+
   it("calls CP over workload-authenticated private HTTP and denies transport errors", async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => fresh() }))
     vi.stubGlobal("fetch", fetchMock)

@@ -27,6 +27,7 @@ import {
   developmentEndpoint,
   DEV07_IDENTITY_CASES,
   identityReport,
+  nativeContextDiagnostic,
   issuerReadbackMatches,
   IdentityQualificationError,
   type IdentityCase,
@@ -351,14 +352,15 @@ export default async function ({ container }: ExecArgs) {
     }
     current = "native-buyer-context"
     const positive = await invoke()
-    requireObserved(
+    const contextMatches =
       positive.status === 200 &&
-        positive.body.actor_principal_id === principal.principalId &&
-        positive.body.canonical_organisation_id === packet.organisation_id &&
-        positive.body.market_id === cp.marketId &&
-        positive.body.buyer_membership_id === member.id &&
-        Date.parse(String(positive.body.expires_at)) > Date.now(),
-    )
+      positive.body.actor_principal_id === principal.principalId &&
+      positive.body.canonical_organisation_id === packet.organisation_id &&
+      positive.body.market_id === cp.marketId &&
+      positive.body.buyer_membership_id === member.id &&
+      Date.parse(String(positive.body.expires_at)) > Date.now()
+    if (!contextMatches) console.log(nativeContextDiagnostic(positive.status, positive.body))
+    requireObserved(contextMatches)
     pass(current)
     current = "wrong-company-denial"
     requireObserved(

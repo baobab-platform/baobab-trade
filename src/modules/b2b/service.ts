@@ -1,4 +1,5 @@
 import { MedusaService } from "@medusajs/framework/utils"
+import { withBuyerRecordIds } from "../../baobab/b2b/buyer-record-id"
 import ApprovalPolicy from "./models/approval-policy"
 import BuyerApplication from "./models/buyer-application"
 import BuyerApplicationDecision from "./models/buyer-application-decision"
@@ -61,6 +62,9 @@ class B2BModuleService extends MedusaService({
   SpendLedgerEntry,
   SpendCommand,
   TaxRegistration,
-}) {}
+}) {
+  createB2BOrganisations = withBuyerRecordIds(super.createB2BOrganisations, "b2borg")
+  createBuyerMemberships = withBuyerRecordIds(super.createBuyerMemberships, "b2bmem")
+}
 
 export default B2BModuleService
