@@ -55,10 +55,12 @@ export function assertUnblockedDocumentaryScope(
   const evaluated = Date.parse(result.evaluated_at)
   const expires = Date.parse(result.expires_at)
   if (
+    !Number.isFinite(nowMs) ||
     !Number.isFinite(evaluated) ||
     !Number.isFinite(expires) ||
     evaluated > nowMs + 1000 ||
     evaluated < nowMs - 3000 ||
+    expires <= evaluated ||
     expires <= nowMs ||
     expires > evaluated + 2000
   ) {

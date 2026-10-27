@@ -17,12 +17,10 @@ import type {
  * to UNAVAILABLE, never to an empty answer that could read as "no
  * restriction".
  *
- * Money rows that are not whole minor units are dropped, never repaired.
- * That fails closed: a dropped spend limit is SPEND_POLICY_NOT_CONFIGURED and
- * a dropped approval policy permits no escalation. Cumulative budgets are the
- * exception: dropping an ORGANISATION or AGREEMENT budget would remove a
- * ceiling, so any malformed budget or balance row makes the whole budget
- * source UNAVAILABLE instead.
+ * Malformed monetary rows make their source UNAVAILABLE. Dropping a row
+ * could erase an approval threshold or turn ambiguous spend authority into
+ * one apparently valid limit. Invalid budget-balance periods likewise must
+ * not disappear as though no capacity had been consumed.
  */
 export type B2BPolicyStore = {
   listBuyerRoles(filter: { membership_id: string }): Promise<Array<{ id: string; role: string }>>
@@ -168,11 +166,17 @@ const toBudget = (row: BudgetPolicyRow, balances: BalanceRow[], now: Date): Budg
   if (limitMinor <= 0n || !Number.isSafeInteger(row.revision) || row.revision < 1) {
     throw new MalformedRow()
   }
-  const current = balances.filter(
-    (b) =>
-      b.budget_policy_id === row.id &&
-      new Date(b.period_starts_at) <= now &&
-      now < new Date(b.period_ends_at),
+  if (!Number.isFinite(now.getTime())) throw new MalformedRow()
+  const periods = balances.filter((b) => b.budget_policy_id === row.id)
+  for (const balance of periods) {
+    const start = new Date(balance.period_starts_at).getTime()
+    const end = new Date(balance.period_ends_at).getTime()
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+      throw new MalformedRow()
+    }
+  }
+  const current = periods.filter(
+    (b) => new Date(b.period_starts_at) <= now && now < new Date(b.period_ends_at),
   )
   if (current.length > 1) throw new MalformedRow()
   const [balance] = current
@@ -257,7 +261,7 @@ export async function loadBuyerOperationPolicy(
     return rows.flatMap((row) => {
       const order = toMinorUnits(row.order_limit_minor)
       const approval = toMinorUnits(row.approval_limit_minor)
-      if (order === MALFORMED || approval === MALFORMED) return []
+      if (order === MALFORMED || approval === MALFORMED) throw new MalformedRow()
       return [
         {
           marketKey: row.market_key,
@@ -275,7 +279,7 @@ export async function loadBuyerOperationPolicy(
     const rows = await store.listApprovalPolicies({ organisation_id: request.organisationId })
     return rows.flatMap((row) => {
       const threshold = toMinorUnits(row.threshold_minor)
-      if (threshold === MALFORMED) return []
+      if (threshold === MALFORMED) throw new MalformedRow()
       return [
         {
           marketKey: row.market_key,

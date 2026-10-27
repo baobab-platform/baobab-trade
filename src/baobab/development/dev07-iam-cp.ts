@@ -106,3 +106,30 @@ export function developmentEndpoint(value: unknown): URL {
   }
   return url
 }
+
+/** Closed diagnostic only: never serialize a handler body or credential. */
+export function nativeContextDiagnostic(status: number, body: Record<string, unknown>): string {
+  const statuses = [200, 400, 401, 403, 404, 409, 503]
+  const reasons = [
+    "BUYER_TOKEN_INVALID",
+    "ASSURANCE_INSUFFICIENT",
+    "IDENTITY_NOT_RESOLVED",
+    "PRINCIPAL_NOT_ACTIVE",
+    "BUYER_NOT_AUTHORISED",
+    "ORGANISATION_NOT_ATTESTED",
+    "ROLE_NOT_PERMITTED",
+    "MARKET_NOT_PERMITTED",
+    "CONTEXT_NOT_USABLE",
+    "OPERATION_NOT_ACTIVATED",
+    "SOURCE_UNAVAILABLE",
+  ]
+  const decision = body.decision
+  const values =
+    typeof decision === "object" && decision !== null && "reasons" in decision
+      ? decision.reasons
+      : undefined
+  const reason = Array.isArray(values) && values.length === 1 ? values[0] : undefined
+  return `DEV07_NATIVE_CONTEXT=HTTP_${statuses.includes(status) ? status : "OTHER"}_REASON_${
+    status === 200 ? "CONTEXT_MISMATCH" : reasons.includes(reason) ? reason : "OTHER"
+  }`
+}
