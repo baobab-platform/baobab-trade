@@ -14,8 +14,12 @@ const inEffect = (
   end: Date | string | null | undefined,
   now: number,
 ): boolean => {
-  const from = start == null ? -Infinity : start instanceof Date ? start.getTime() : Date.parse(start)
-  const until = end == null ? Infinity : end instanceof Date ? end.getTime() : Date.parse(end)
+  const boundary = (value: Date | string | null | undefined, fallback: number): number => {
+    if (value == null) return fallback
+    return value instanceof Date ? value.getTime() : Date.parse(value)
+  }
+  const from = boundary(start, -Infinity)
+  const until = boundary(end, Infinity)
   return !Number.isNaN(from) && !Number.isNaN(until) && from < until && from <= now && now < until
 }
 
