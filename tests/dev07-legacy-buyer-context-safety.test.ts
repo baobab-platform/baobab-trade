@@ -26,6 +26,7 @@ const member = (changes: Partial<Membership> = {}): Membership => ({
 const contextFor = async (
   memberships: Membership[],
   roles: { id: string; membership_id: string; role: string }[] = [],
+  at: number = Date.now(),
 ) =>
   resolveBuyerContext(
     {
@@ -39,6 +40,7 @@ const contextFor = async (
     } as never,
     "org-1",
     "cus-1",
+    () => at,
   )
 
 /**
@@ -79,6 +81,40 @@ describe("DEV-07 legacy buyer context fails closed", () => {
       await expect(contextFor([member(intervals[caseName])])).resolves.toBeNull()
     },
   )
+
+  it("includes the exact start and excludes the exact end of a membership window", async () => {
+    const at = Date.UTC(2026, 9, 27, 12, 0, 0)
+    const active = member({
+      effective_from: new Date(at).toISOString(),
+      effective_until: new Date(at + 1).toISOString(),
+    })
+    expect((await contextFor([active], [], at))?.membershipId).toBe("mem-1")
+    await expect(contextFor([active], [], at + 1)).resolves.toBeNull()
+  })
+
+  it("refuses wrong-actor membership returned by an untrustworthy native source", async () => {
+    const source = {
+      listBuyerMemberships: async () => [member({ customer_id: "cus-other" })],
+      listBuyerRoles: async () => {
+        throw new Error("untrusted role source must not be called")
+      },
+    }
+    await expect(
+      resolveBuyerContext(source as never, "org-1", "cus-1", () => Date.now()),
+    ).resolves.toBeNull()
+  })
+
+  it("refuses wrong-organisation membership returned by an untrustworthy native source", async () => {
+    const source = {
+      listBuyerMemberships: async () => [member({ organisation_id: "org-other" })],
+      listBuyerRoles: async () => {
+        throw new Error("untrusted role source must not be called")
+      },
+    }
+    await expect(
+      resolveBuyerContext(source as never, "org-1", "cus-1", () => Date.now()),
+    ).resolves.toBeNull()
+  })
 
   it("refuses duplicate membership rows", async () => {
     await expect(contextFor([member(), member({ id: "mem-2" })])).resolves.toBeNull()
