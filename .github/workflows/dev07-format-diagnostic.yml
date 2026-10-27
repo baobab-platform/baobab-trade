@@ -1,0 +1,22 @@
+name: DEV-07 formatter diagnostic (temporary)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  formatter-output:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Print exact formatted test source
+        run: ./node_modules/.bin/prettier tests/dev07-legacy-buyer-context-safety.test.ts
