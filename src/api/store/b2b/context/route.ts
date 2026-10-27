@@ -58,10 +58,7 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     organisation.status !== "ACTIVE" ||
     organisation.canonical_organisation_id !== canonicalOrganisationId
   ) {
-    throw new MedusaError(
-      MedusaError.Types.FORBIDDEN,
-      "the buyer organisation is not active",
-    )
+    throw new MedusaError(MedusaError.Types.FORBIDDEN, "the buyer organisation is not active")
   }
 
   const tenantVerifier = getWorkloadTenantVerifier()
