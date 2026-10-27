@@ -225,6 +225,29 @@ export class PostgresSpendReservationCommands {
    * reservation must be rolled over or resubmitted first.
    */
   commit(command: CommitCommand): Promise<SpendCommandResult> {
+    return this.commitCapacity(command)
+  }
+
+  /**
+   * Compose a trusted owner's database mutation with the spend conversion.
+   * The callback must use only this query interface for database writes; it
+   * must not open another connection, finish the transaction or perform an
+   * external side effect. The database's native receipt fence remains required.
+   * A replay never calls the mutation again. Its digest is distinct from a
+   * capacity-only COMMIT, so an old ledger command cannot claim a native write.
+   */
+  commitWithMutation(
+    command: CommitCommand,
+    mutation: (db: Pick<PgClient, "query">) => Promise<void>,
+  ): Promise<SpendCommandResult> {
+    if (typeof mutation !== "function") throw new TypeError("a database mutation is required")
+    return this.commitCapacity(command, mutation)
+  }
+
+  private commitCapacity(
+    command: CommitCommand,
+    mutation?: (db: Pick<PgClient, "query">) => Promise<void>,
+  ): Promise<SpendCommandResult> {
     assertReservationCommand(command)
     if (
       !DIGEST.test(command.transactionDigest) ||
@@ -234,7 +257,8 @@ export class PostgresSpendReservationCommands {
     ) {
       throw new TypeError("invalid commit command")
     }
-    return this.run("COMMIT", command, command.organisationId, async (db) => {
+    const request = mutation ? { ...command, execution: "ATOMIC_DATABASE_MUTATION" } : command
+    return this.run("COMMIT", request, command.organisationId, async (db) => {
       const reservation = await this.lockReservation(
         db,
         command.organisationId,
@@ -287,6 +311,8 @@ export class PostgresSpendReservationCommands {
       await db.query(`update "b2b_spend_reservation" set "status" = 'COMMITTED' where "id" = $1`, [
         reservation.id,
       ])
+      // Bound to the same connected transaction; do not expose release().
+      if (mutation) await mutation({ query: db.query.bind(db) })
       return {
         reservationId: reservation.id,
         status: "COMMITTED" as const,

@@ -11,7 +11,7 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
-import type { PgPool } from "../baobab/orders/postgres-governed-binding-persistence"
+import type { PgClient, PgPool } from "../baobab/orders/postgres-governed-binding-persistence"
 import {
   PostgresSpendReservationCommands,
   type SpendCommandResult,
@@ -506,6 +506,111 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
     { outcome: "REFUSED", reason: "BUYER_NOT_AUTHORISED" },
   )
   pass("a foreign reservation is BUYER_NOT_AUTHORISED")
+
+  // Same-connection composition, against real PG17. This isolated probe is
+  // deliberately not a native order or a buyer/seller authority receipt.
+  await sql(`create table if not exists dev07_atomic_spend_probe (
+    id text primary key, transaction_id text not null,
+    unique_value text unique deferrable initially deferred)`)
+  const atomicOrg = await organisation("atomic")
+  const atomicMember = await membership(atomicOrg, "atomic")
+  const atomicBudget = await budget(atomicOrg, "MEMBERSHIP", atomicMember, 100_000n, "atomic")
+  const atomicSubmission = submission(atomicOrg, atomicMember, 10_000n, "atomic")
+  const atomicReservation = applied(await commands.submit(atomicSubmission))
+  const atomicCommand = commitOf(atomicOrg, atomicReservation.reservationId, atomicSubmission)
+  const count = async (text: string, values: unknown[]) => (await sql(text, values)).rowCount
+  let attempts = 0
+  const write = async (db: Pick<PgClient, "query">) => {
+    attempts += 1
+    await db.query(
+      `insert into dev07_atomic_spend_probe (id,transaction_id,unique_value)
+       values ($1,pg_current_xact_id()::text,$1)`,
+      [atomicCommand.commitmentReference],
+    )
+  }
+  // An application refusal after a write must undo both the mutation and ledger.
+  assert.deepEqual(
+    await commands.commitWithMutation(atomicCommand, async (db) => {
+      await write(db)
+      throw new Error("synthetic mutation refusal")
+    }),
+    { outcome: "REFUSED", reason: "SOURCE_UNAVAILABLE" },
+  )
+  assert.deepEqual(await balance(atomicBudget), [0n, 10_000n])
+  assert.equal(
+    await count("select 1 from dev07_atomic_spend_probe where id=$1", [
+      atomicCommand.commitmentReference,
+    ]),
+    0,
+  )
+  assert.equal(
+    await count('select 1 from "b2b_spend_command" where "idempotency_key"=$1', [
+      atomicCommand.idempotencyKey,
+    ]),
+    0,
+  )
+  // A deferred constraint can reject COMMIT after the callback returned. It
+  // must also undo the mutation, spend entries, status and idempotency result.
+  assert.deepEqual(
+    await commands.commitWithMutation(atomicCommand, async (db) => {
+      await write(db)
+      await db.query(
+        `insert into dev07_atomic_spend_probe (id,transaction_id,unique_value)
+         values ($1,pg_current_xact_id()::text,$2)`,
+        [atomicCommand.commitmentReference + "-duplicate", atomicCommand.commitmentReference],
+      )
+    }),
+    { outcome: "REFUSED", reason: "SOURCE_UNAVAILABLE" },
+  )
+  assert.deepEqual(await balance(atomicBudget), [0n, 10_000n])
+  assert.equal(
+    await count("select 1 from dev07_atomic_spend_probe where unique_value=$1", [
+      atomicCommand.commitmentReference,
+    ]),
+    0,
+  )
+  const afterRollback = await sql(
+    'select "status" from "b2b_spend_reservation" where "id"=$1',
+    [atomicReservation.reservationId],
+  )
+  assert.equal(afterRollback.rows[0].status, "ACTIVE")
+  assert.equal(
+    await count(
+      `select 1 from "b2b_spend_ledger_entry" where "reservation_id"=$1 and "entry_kind"='COMMIT'`,
+      [atomicReservation.reservationId],
+    ),
+    0,
+  )
+  const composed = await Promise.all([
+    commands.commitWithMutation(atomicCommand, write),
+    commands.commitWithMutation(atomicCommand, write),
+  ])
+  assert.deepEqual(composed.map((result) => result.outcome).sort(), ["APPLIED", "REPLAYED"])
+  assert.deepEqual(await balance(atomicBudget), [10_000n, 0n])
+  const sameTransaction = await sql(
+    `select p.transaction_id, p.xmin::text as mutation_xid, r.xmin::text as reservation_xid,
+       c.xmin::text as command_xid, l.xmin::text as ledger_xid
+     from dev07_atomic_spend_probe p
+     join "b2b_spend_reservation" r on r.id=$2
+     join "b2b_spend_command" c on c.idempotency_key=$3
+     join "b2b_spend_ledger_entry" l on l.reservation_id=r.id and l.entry_kind='COMMIT'
+     where p.id=$1`,
+    [atomicCommand.commitmentReference, atomicReservation.reservationId, atomicCommand.idempotencyKey],
+  )
+  assert.equal(sameTransaction.rowCount, 1)
+  const tx = sameTransaction.rows[0]
+  assert.ok(
+    [tx.mutation_xid, tx.reservation_xid, tx.command_xid, tx.ledger_xid].every(
+      (xid) => xid === tx.transaction_id,
+    ),
+  )
+  assert.equal((await commands.commitWithMutation(atomicCommand, write)).outcome, "REPLAYED")
+  assert.equal(attempts, 3)
+  // The capacity-only API and the composed API cannot replay each other.
+  assert.deepEqual(await commands.commit(atomicCommand), { outcome: "CONFLICT" })
+  pass(
+    "same-transaction mutation and spend; callback/deferred refusal rolls back; replay writes once",
+  )
 
   return passed
 }
