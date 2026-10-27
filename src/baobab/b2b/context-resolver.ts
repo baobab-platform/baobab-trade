@@ -1,22 +1,31 @@
 import type B2BModuleService from "../../modules/b2b/service"
-import type { BuyerContext, B2BRole, MembershipStatus } from "./types"
+import { B2B_ROLES, type BuyerContext, type B2BRole, type MembershipStatus } from "./types"
 
 type MembershipRecord = Awaited<ReturnType<B2BModuleService["listBuyerMemberships"]>>[number]
 type RoleRecord = Awaited<ReturnType<B2BModuleService["listBuyerRoles"]>>[number]
 
-// resolveBuyerContext is the composition this module's pure policy layer
-// (assertActiveBuyerContext, decidePurchase, ...) always assumed existed but
-// never built: given an organisation and an authenticated customer, look up
-// that customer's buyer_membership and buyer_role rows and assemble the
-// BuyerContext those policy functions take as input. Before this, no code
-// path in the repository ever turned raw B2BModuleService rows into a
-// BuyerContext -- callers had to construct one by hand (as every existing
-// test in tests/b2b-policy.test.ts does).
-//
-// Returns null when the customer has no membership row for the organisation
-// at all (never invited) -- distinct from an INVITED/SUSPENDED/REVOKED
-// membership, which resolves to a BuyerContext that
-// assertActiveBuyerContext then rejects with a specific, actionable reason.
+/**
+ * Local Medusa membership dates are start-inclusive and end-exclusive. An
+ * invalid or reversed interval cannot establish a current buyer relationship.
+ * This is a legacy native read guard, NOT canonical IAM/CP authorisation.
+ */
+const inEffect = (
+  start: Date | string | null | undefined,
+  end: Date | string | null | undefined,
+  now: number,
+): boolean => {
+  const from = start == null ? -Infinity : start instanceof Date ? start.getTime() : Date.parse(start)
+  const until = end == null ? Infinity : end instanceof Date ? end.getTime() : Date.parse(end)
+  return !Number.isNaN(from) && !Number.isNaN(until) && from < until && from <= now && now < until
+}
+
+/**
+ * Resolve one legacy Medusa customer to its native B2B membership. This
+ * response is not a canonical buyer Principal or purchase decision: the new
+ * IAM/BFF/CP route resolves those independently. Null denotes a missing,
+ * ambiguous, invalid or not-current native relationship. Non-ACTIVE statuses
+ * remain visible to the local policy so it can refuse them explicitly.
+ */
 export async function resolveBuyerContext(
   b2b: B2BModuleService,
   organisationId: string,
@@ -26,20 +35,33 @@ export async function resolveBuyerContext(
     organisation_id: organisationId,
     customer_id: customerId,
   })
-  if (memberships.length === 0) {
+  // Never choose the first of duplicate memberships. The database should
+  // enforce uniqueness, but stale/corrupt source responses also fail closed.
+  if (memberships.length !== 1) return null
+  const membership = memberships[0]
+  // Medusa 2.21 permits null on historical identifiers. An unbound identity,
+  // incorrect row owner or out-of-effect ACTIVE membership grants nothing.
+  if (
+    membership.organisation_id !== organisationId ||
+    membership.customer_id !== customerId ||
+    !membership.principal_id ||
+    !membership.customer_id ||
+    (membership.status === "ACTIVE" &&
+      !inEffect(membership.effective_from, membership.effective_until, Date.now()))
+  ) {
     return null
   }
-  const membership = memberships[0]
   const roles: RoleRecord[] = await b2b.listBuyerRoles({ membership_id: membership.id })
-  // Medusa 2.21's generated types now allow null for historic nullable
-  // membership identifiers; a missing principal/customer is NEVER a buyer.
-  if (!membership.principal_id || !membership.customer_id) return null
   return {
     principalId: membership.principal_id,
     customerId: membership.customer_id,
     organisationId: membership.organisation_id,
     membershipId: membership.id,
     membershipStatus: membership.status as MembershipStatus,
-    roles: roles.map((role) => role.role as B2BRole),
+    // Never promote an unknown role to authority or trust unscoped role rows.
+    roles: roles
+      .filter((record) => record.membership_id === membership.id)
+      .map((record) => record.role as B2BRole)
+      .filter((role) => (B2B_ROLES as readonly string[]).includes(role)),
   }
 }
