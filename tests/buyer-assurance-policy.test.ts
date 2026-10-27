@@ -149,7 +149,8 @@ describe("Shared full buyer assurance policy", () => {
   it("snapshots immutable requirements and records a bounded, version-bound revision", () => {
     const doc = document()
     doc.policy_id = "a".repeat(128)
-    const policy = load(doc)!
+    const policy = load(doc)
+    if (!policy) throw new Error("expected a valid synthetic policy")
     expect(Object.isFrozen(policy.profiles.BUYER_COMMITMENT.accepted_acr_values)).toBe(true)
     expect(("trade.buyer-context:v1;" + policy.policyRevision).length).toBeLessThanOrEqual(128)
     expect(load({ ...doc, policy_version: 3 })?.policyRevision).not.toBe(policy.policyRevision)
