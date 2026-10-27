@@ -17,6 +17,7 @@ The legacy Medusa-customer `GET /store/b2b/context` and its local resolver must 
 - Suspended organisation denies even if membership is active; active organisation with active membership remains available in the legacy development path.
 - Evaluation time is injected into the legacy membership resolver for deterministic source tests. Production still evaluates the current clock after the membership lookup; no earlier request-time authority snapshot is used.
 - Exact start-inclusive/end-exclusive millisecond boundaries are exercised, and malformed native membership responses keyed to the wrong customer or Organisation are independently refused before any role read.
+- The legacy read handler now emits `Cache-Control: private, no-store` on both successful buyer-context reads and refusal paths; regression tests explicitly verify both, matching the canonical BFF route's privacy posture without treating a Medusa session as IAM authority.
 - Full repository TypeScript, lint, formatting, unit and PostgreSQL-backed CI must pass at the final reviewed head. Source tests are not independent IAM/CP join evidence.
 
 ## Outstanding joined INT-05 obligations — all BLOCKED until proven
