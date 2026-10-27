@@ -90,7 +90,6 @@ describe("DEV07 driver fail-closed orchestration (not runtime evidence)", () => 
             issuer: ISSUER,
             jwks_uri: ISSUER + "/jwks",
             token_endpoint: ISSUER + "/token",
-            introspection_endpoint: ISSUER + "/status",
             revocation_endpoint: ISSUER + "/revoke",
           })
         if (path === "/jwks")
@@ -133,7 +132,8 @@ describe("DEV07 driver fail-closed orchestration (not runtime evidence)", () => 
           revoked.add(bearer)
           return new Response(null, { status: 200 })
         }
-        if (path === "/status") {
+        // Hydra exposes introspection through its protected native route, not OIDC discovery.
+        if (path === "/oauth2/introspect") {
           expect(new Headers(init?.headers).get("authorization")).toBe(
             "Basic " + Buffer.from("synthetic-verifier:private-reader-secret").toString("base64"),
           )
