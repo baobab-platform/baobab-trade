@@ -66,3 +66,33 @@ The current Shared main inspected for this continuation is
 `6b2199c550bfb70b10d3d7008bd6939806173c20`. Its Accepted EA-DEV DEV-07 and
 ADR-SHARED-042 govern. This records current-source consultation, not a change to
 the existing `contracts.lock.yaml` pin or an acceptance decision.
+
+## Sequential continuation — workstream 1
+
+Trade now owns a real-transport `qualify:dev07-iam-cp` Medusa command. It exchanges
+native code/PKCE grants, separately obtains the BFF workload token, verifies
+issuer signatures and independently introspects exact subject/client/audience/
+expiry, then uses the existing actual CP Principal, estate and Organisation/
+Market resolvers before creating disposable native buyer fixtures. Wrong-audience
+and revoked-token observations must also be refused directly by CP, not merely
+by Trade's local token verifier. Every dependent case starts BLOCKED. A missing
+scope/binding cannot become PASS. Directly issued buyer/BFF access/refresh tokens
+and native fixtures are cleaned on failure, with independent readback. Host,
+CP workload and BFF HTTP teardown/qualification remain separately unobserved.
+
+The implementation uncovered and fixes an actual Hydra compatibility bug:
+`new URL(issuer).href` added a trailing slash to the configured issuer string.
+OIDC discovery and signed `iss` still compare exactly, now against the unmodified
+configured trust identifier. Regression tests cover slashless issuers and deny
+alternate discovery/token spellings. Source fault-injection also verifies that
+CP's CALLER_NOT_PERMITTED produces BLOCKED and still revokes every directly
+issued access/refresh credential; it is expressly not real IAM/CP evidence.
+
+**Runtime status:** NOT EXECUTED for this new live driver. Current Shared
+`6b2199c550bfb70b10d3d7008bd6939806173c20` and CP
+`055568a6ce2f2c22dd76273329b57b12429188bd` were inspected. They do not supply the
+required development scope allocation/subject-validation registration and
+CP-owned leased estate-client binding. These are cross-repository owning
+implementation dependencies, not an independent-human approval request. All
+Trade changes remain in #176. No copied CP topology SQL, invented binding,
+self-issued token or development registry override substitutes for those owners.

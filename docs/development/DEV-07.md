@@ -159,3 +159,103 @@ Rollback this increment by restoring the reviewed source pin or disabling the
 buyer-identity route. Keep unbounded/missing-Organisation CP evidence refused;
 do not use the legacy Medusa route as an IAM purchasing fallback. No schema,
 capability declaration, workload scope or fence activation changes are included.
+
+## Workstream 1 — actual IAM/CP buyer qualification driver
+
+`npm run qualify:dev07-iam-cp` executes `src/scripts/qualify-dev07-iam-cp.ts`
+inside the migrated, explicitly marked native Trade test database. This is a
+live protocol driver, not a mocked CI acceptance test. Run only in
+`NODE_ENV=test`, `BAOBAB_ENVIRONMENT=development`, with the existing
+`BAOBAB_DEV07_TEST_DB` marker and actual buyer-identity settings. The issuer and
+CP URLs must be HTTPS development `.test` endpoints (or HTTPS localhost).
+The driver never creates CP topology, registers a workload, inserts canonical
+SQL, signs a bearer, supplies a fake CP result or enables a commitment fence.
+
+The isolated topology owner supplies a private **0600**, current-user-owned,
+non-symlink JSON file through `BAOBAB_DEV07_CODE_PACKET`. Its closed top-level
+shape is:
+
+```json
+{
+  "schema": "baobab-trade.dev07-code-packet.v1",
+  "deadline": "<UTC timestamp within the next hour>",
+  "bff_client_id": "<registered development BFF>",
+  "bff_client_secret": "<private ephemeral credential>",
+  "verifier_client_id": "<distinct issuer introspection reader>",
+  "verifier_client_secret": "<private ephemeral credential>",
+  "organisation_id": "<CP-governed selected buyer Organisation UUID>",
+  "other_organisation_id": "<unrelated synthetic Organisation UUID>",
+  "country_code": "UG",
+  "codes": {
+    "buyer": {
+      "code": "<fresh native Hydra authorization code for baobab-trade>",
+      "verifier": "<the original S256 PKCE verifier>",
+      "redirect_uri": "<exact registered HTTPS development callback>"
+    },
+    "wrong_audience": {
+      "code": "<separate native code for baobab-control-plane, same human/client>",
+      "verifier": "<that request's original S256 PKCE verifier>",
+      "redirect_uri": "<that request's exact registered callback>"
+    }
+  }
+}
+```
+
+These examples are placeholders, not usable credentials. The topology owns
+Kratos login and Hydra consent/code issuance; a Medusa login cannot supply the
+packet. The BFF must have both its reviewed authorization-code and own workload
+client-credentials grant, `trade:buy` for the buyer and `trade:buyer-handoff`
+for itself. The independent reader must introspect those exact clients. The
+normal Trade workload credentials remain separately configured through the
+existing environment. The driver consumes each code at the real discovered
+issuer token endpoint, verifies signed buyer/BFF tokens, and independently
+binds status to exact issuer, subject, client, audience and expiry. A token for
+the wrong audience is actually issued, not edited locally.
+
+CP resolves the human, attests the BFF estate and the selected Organisation/
+country before any native buyer fixture is created. Native fixture references
+come only from those independently returned facts. The maintained Trade handler
+is exercised for own-company success, wrong-company refusal, wrong-audience
+refusal, native membership suspension and restoration, and native issuer
+revocation observed before bearer expiry. All generated native roles,
+memberships and relationships are soft-deleted with active-absence readback;
+all directly issued buyer/BFF access and refresh bearers are revoked and
+independently read inactive in `finally`. The enclosing topology owner remains
+responsible for Trade workload client/token deletion and host/store disposal;
+the driver does not claim those credentials have been removed.
+No production-like email, person, legal document or identity is synthesized.
+
+The sanitized `artifacts/dev07-iam-cp/report.json` and SHA-256 sidecar record
+all eight component cases. Missing configuration/current authority is BLOCKED;
+a failed assertion or cleanup is FAIL; either exits nonzero. The initial
+report says `NOT_OBSERVED`, and only actual issuer observation can change the
+evidence class. Unit tests are explicitly source-only. The driver does not
+witness host teardown, browser/BFF HTTP routing, provider certification or any
+original complete INT-05 journey; those flags remain false even after all eight
+component observations pass. Keep its artifact separate from the historical
+native receipt. The surrounding Infrastructure lifecycle must later join and
+independently retain accepting-runtime teardown evidence.
+
+### Current owning dependencies (not permission requests)
+
+At the inspected Shared/CP source, the normal `baobab-trade-workload` ceiling
+contains `context:resolve` and `erp:read`, but no
+`identity:principal:resolve` / `estate:client-binding:resolve` and no
+`subject_principal_audiences` relationship. CP's current ordinary development
+bootstrap also does not create an estate-client binding. A registration entry
+alone would still not create a native IAM credential, canonical Principal,
+current Tenant/Organisation mapping or bound CP estate.
+
+Those are Shared/CP/IAM-owned implementation dependencies. They cannot be
+silently added to Trade's private test configuration or published as source
+changes inside this Trade PR. Until reviewed development registrations and a
+CP-owned, leased synthetic estate binding exist, the live driver must report
+BLOCKED. This is not a staging-human approval gate and does not stop independent
+RFQ/quotation engineering. The existing Infrastructure synthetic development
+lifecycle remains the topology/teardown authority. No actual joined execution
+is claimed merely because this driver compiles or its source tests pass.
+
+The buyer verifier now preserves the exact configured issuer string; parsing
+an HTTPS URL must not add a slash to a slashless Hydra issuer identifier.
+Both discovery and signed `iss` must still exactly match that configured value.
+Reference: [OIDC Discovery §4.3 and §5](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfigurationValidation).

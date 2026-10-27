@@ -94,6 +94,26 @@ const rejects = async (v: BuyerTokenVerifier, raw: string, code = "BUYER_TOKEN_I
 }
 
 describe("BuyerTokenVerifier", () => {
+  it("preserves the exact slashless issuer used by Hydra, without trusting an alternate spelling", async () => {
+    const issuer = "https://iam.example.test"
+    const { fetcher } = issuerFetch({ discoveryIssuer: issuer })
+    const v = new BuyerTokenVerifier({
+      issuer,
+      authorisedParties: ["zuribeans-bff"],
+      fetcher,
+      now: () => NOW,
+    })
+    await expect(v.verify(token(claims({ iss: issuer })))).resolves.toMatchObject({ issuer })
+    await rejects(v, token(claims({ iss: issuer + "/" })))
+    const wrongDiscovery = new BuyerTokenVerifier({
+      issuer,
+      authorisedParties: ["zuribeans-bff"],
+      fetcher: issuerFetch({ discoveryIssuer: issuer + "/" }).fetcher,
+      now: () => NOW,
+    })
+    await rejects(wrongDiscovery, token(claims({ iss: issuer })), "BUYER_TOKEN_UNAVAILABLE")
+  })
+
   it("accepts an RS256 and an ES256 Trade buyer token from the issuer's keys", async () => {
     const { v } = verifier()
     await expect(v.verify(token())).resolves.toEqual({

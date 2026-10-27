@@ -108,7 +108,12 @@ export class BuyerTokenVerifier {
   private keys: { byKid: Map<string, KeyObject>; fetchedAt: number } | null = null
 
   constructor(options: BuyerTokenVerifierOptions) {
-    this.issuer = httpsUrl(options.issuer).href
+    // OIDC issuer identifiers compare exactly. URL.href adds a slash to a
+    // bare HTTPS origin, which changes Hydra's valid slashless issuer.
+    // Validate transport separately without rewriting the trust identifier.
+    httpsUrl(options.issuer)
+    if (options.issuer.trim() !== options.issuer) throw new Error("issuer whitespace is invalid")
+    this.issuer = options.issuer
     this.issuerOrigin = new URL(this.issuer).origin
     const parties = options.authorisedParties.map((party) => party.trim()).filter(Boolean)
     if (parties.length === 0) throw new Error("at least one authorised BFF client is required")
