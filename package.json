@@ -93,7 +93,9 @@
     "regression:native-commitment-classification": "medusa exec ./src/scripts/regression-native-commitment-classification.ts",
     "regression:trade-a-entry-points": "medusa exec ./src/scripts/regression-trade-a-entry-points.ts",
     "regression:trade-a-commit-fences": "medusa exec ./src/scripts/regression-trade-a-commit-fences.ts",
-    "regression:dev07-b2b-slice": "medusa exec ./src/scripts/regression-dev07-b2b-slice.ts"
+    "regression:dev07-b2b-slice": "medusa exec ./src/scripts/regression-dev07-b2b-slice.ts",
+    "qualify:dev07-iam-cp": "medusa exec ./src/scripts/qualify-dev07-iam-cp.ts",
+    "regression:dev07-buyer-context": "medusa exec ./src/scripts/regression-dev07-buyer-context.ts"
   },
   "dependencies": {
     "@medusajs/auth-oidc": "2.21.2",

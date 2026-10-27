@@ -236,6 +236,7 @@ export const getEstateBindingResolver = (): EstateBindingResolver | null => {
         clientId: env.iamWorkloadClientId,
         clientSecret: env.iamWorkloadClientSecret,
         scope: ESTATE_BINDING_SCOPE,
+        audience: "baobab-control-plane",
       }),
     })
   } catch {

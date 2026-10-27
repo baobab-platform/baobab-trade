@@ -180,6 +180,7 @@ export const getBuyerPrincipalResolver = (): BuyerPrincipalResolver | null => {
       clientId: env.iamWorkloadClientId,
       clientSecret: env.iamWorkloadClientSecret,
       scope: PRINCIPAL_RESOLVE_SCOPE,
+      audience: "baobab-control-plane",
     }),
   })
   return singleton

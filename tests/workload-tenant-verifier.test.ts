@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { isValidPlatformContextResolutionResponse } from "../src/baobab/contracts/platform-context"
 import type { ControlPlaneClient } from "../src/baobab/control-plane/client"
 import {
   ControlPlaneWorkloadTenantVerifier,
@@ -23,6 +24,23 @@ const fakeControlPlaneClient = (
 })
 
 describe("ControlPlaneWorkloadTenantVerifier", () => {
+  it("accepts CP's generic Organisation echo without inventing an exact-kind attestation", () => {
+    const generic = {
+      context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
+      tenant_id: "tn_example01",
+      resolved_at: "2026-10-27T06:00:00Z",
+      organisation_id: "019a0915-a8c0-7000-8000-000000000001",
+    }
+    expect(isValidPlatformContextResolutionResponse(generic)).toBe(true)
+    expect(
+      isValidPlatformContextResolutionResponse({
+        ...generic,
+        organisation_id: undefined,
+        organisation_type: "ORGANISATION",
+      }),
+    ).toBe(false)
+  })
+
   it("refuses a context CP resolved for a different organisation", async () => {
     const resolvePlatformContext = vi.fn().mockResolvedValue({
       context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
@@ -44,6 +62,7 @@ describe("ControlPlaneWorkloadTenantVerifier", () => {
     const resolvePlatformContext = vi.fn().mockResolvedValue({
       context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
       tenant_id: "tn_1",
+      organisation_id: "canon-org-1",
       resolved_at: "2026-09-01T10:00:00Z",
     })
     const verifier = new ControlPlaneWorkloadTenantVerifier(
@@ -59,6 +78,8 @@ describe("ControlPlaneWorkloadTenantVerifier", () => {
       "canon-org-1",
       "workload-token",
       "corr-1",
+      undefined,
+      undefined,
     )
   })
 
@@ -89,6 +110,63 @@ describe("ControlPlaneWorkloadTenantVerifier", () => {
       verifier.verifyOrganisationTenant("tn_1", "canon-org-1", "corr-1"),
     ).rejects.toThrow("not found")
   })
+  it("refuses a missing organisation echo even when the tenant agrees", async () => {
+    const resolve = vi.fn().mockResolvedValue({ context_id: "ctx", tenant_id: "tn_1" })
+    const verifier = new ControlPlaneWorkloadTenantVerifier(
+      fakeTokenProvider(),
+      fakeControlPlaneClient(resolve),
+    )
+    await expect(
+      verifier.verifyOrganisationTenant("tn_1", "canon-org-1", "corr-1"),
+    ).rejects.toBeInstanceOf(TenantAttestationError)
+  })
+
+  it.each(["UG", "ZA"])(
+    "passes %s selection to CP and returns its canonical Market",
+    async (country) => {
+      const resolve = vi.fn().mockResolvedValue({
+        context_id: "ctx",
+        tenant_id: "tn_1",
+        organisation_id: "canon-org-1",
+        country_code: country,
+        market_id: "market_from_cp",
+        currency_code: country === "UG" ? "UGX" : "ZAR",
+      })
+      const verifier = new ControlPlaneWorkloadTenantVerifier(
+        fakeTokenProvider(),
+        fakeControlPlaneClient(resolve),
+      )
+      await expect(
+        verifier.verifyOrganisationTenant("tn_1", "canon-org-1", "corr-1", country),
+      ).resolves.toMatchObject({ marketId: "market_from_cp", countryCode: country })
+      expect(resolve).toHaveBeenCalledWith(
+        "tn_1",
+        "canon-org-1",
+        "workload-token",
+        "corr-1",
+        undefined,
+        country,
+      )
+      for (const change of [
+        { country_code: "KE" },
+        { market_id: undefined },
+        { currency_code: undefined },
+      ]) {
+        resolve.mockResolvedValueOnce({
+          context_id: "ctx",
+          tenant_id: "tn_1",
+          organisation_id: "canon-org-1",
+          country_code: country,
+          market_id: "market_from_cp",
+          currency_code: "ZAR",
+          ...change,
+        })
+        await expect(
+          verifier.verifyOrganisationTenant("tn_1", "canon-org-1", "corr-1", country),
+        ).rejects.toBeInstanceOf(TenantAttestationError)
+      }
+    },
+  )
 })
 
 describe("getWorkloadTenantVerifier", () => {

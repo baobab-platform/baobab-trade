@@ -149,6 +149,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       callerToken: match[1],
       subjectToken: body.subject_token,
       requestedOrganisationId: body.requested_organisation_id as string | undefined,
+      requestedCountryCode: body.requested_country_code as string | undefined,
       requestedDigitalEstateId: body.requested_digital_estate_id as string | undefined,
       correlationId,
     },

@@ -5,7 +5,7 @@
  * Plane persists the resolved context and returns its `context_id`, which a
  * workload redeems for mapping and capability resolution (ADR-SHARED-014).
  * P0-04A validates the pinned Shared wire shape before applying the
- * consumer's additional organisation-attestation pairing rule.
+ * consumer's exact Organisation echo and optional exact-kind checks.
  */
 import { platformContextSchema } from "./authority-validation"
 
@@ -48,8 +48,8 @@ export const isValidPlatformContextResolutionResponse = (
     isOptionalMatch(value.market_id, /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/) &&
     isOptionalMatch(value.country_code, /^[A-Z]{2}$/) &&
     isOptionalMatch(value.currency_code, /^[A-Z]{3}$/) &&
-    hasOrganisationId === hasOrganisationType &&
-    (!hasOrganisationId ||
-      (isNonEmptyString(value.organisation_id) && isNonEmptyString(value.organisation_type)))
+    (!hasOrganisationType || hasOrganisationId) &&
+    (!hasOrganisationId || isNonEmptyString(value.organisation_id)) &&
+    (!hasOrganisationType || isNonEmptyString(value.organisation_type))
   )
 }
