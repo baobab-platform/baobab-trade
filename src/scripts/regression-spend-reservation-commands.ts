@@ -611,7 +611,9 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   assert.equal(attempts, 3)
   // The capacity-only API and the composed API cannot replay each other.
   assert.deepEqual(await commands.commit(atomicCommand), { outcome: "CONFLICT" })
-  pass("same-transaction mutation and spend; callback/deferred refusal rolls back; replay writes once")
+  pass(
+    "same-transaction mutation and spend; callback/deferred refusal rolls back; replay writes once",
+  )
 
   return passed
 }
