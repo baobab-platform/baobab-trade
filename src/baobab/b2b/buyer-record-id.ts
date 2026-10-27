@@ -20,8 +20,11 @@ export function withBuyerRecordIds<T extends (data: never, context?: never) => u
     if (row.id) return value
     return { ...row, id: `${prefix}_${randomUUID().replaceAll("-", "")}` }
   }
-  return function (this: unknown, data: unknown, context: unknown) {
-    const identified = Array.isArray(data) ? data.map(identify) : identify(data)
-    return create.call(this, identified as never, context as never)
-  } as T
+  return new Proxy(create, {
+    apply(target, receiver, args: unknown[]) {
+      const [data, ...context] = args
+      const identified = Array.isArray(data) ? data.map(identify) : identify(data)
+      return Reflect.apply(target, receiver, [identified, ...context])
+    },
+  })
 }
