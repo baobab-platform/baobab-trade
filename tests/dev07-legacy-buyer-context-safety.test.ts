@@ -156,7 +156,8 @@ describe("DEV-07 legacy buyer context fails closed", () => {
       headers: {},
       scope: { resolve: (name: string) => (name === B2B_MODULE ? store : undefined) },
     }
-    await expect(GET(req as never, {} as never)).rejects.toMatchObject({
+    const res = { setHeader: (_name: string, _value: string) => undefined }
+    await expect(GET(req as never, res as never)).rejects.toMatchObject({
       type: MedusaError.Types.FORBIDDEN,
     })
   })
