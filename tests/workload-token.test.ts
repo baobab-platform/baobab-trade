@@ -37,6 +37,30 @@ describe("ClientCredentialsWorkloadTokenProvider", () => {
     )
   })
 
+  it("binds CP workload grants to the exact CP audience when configured", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, { access_token: "cp-token", expires_in: 55 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const provider = new ClientCredentialsWorkloadTokenProvider({
+      tokenUrl: "https://iam.example.test/oauth2/token",
+      clientId: "baobab-dev-trade-buyer-validator",
+      clientSecret: "private-client-secret",
+      scope: "identity:principal:resolve",
+      audience: "baobab-control-plane",
+    })
+    expect(await provider.getAccessToken()).toBe("cp-token")
+    const body = new URLSearchParams(fetchMock.mock.calls[0][1].body.toString())
+    expect(Object.fromEntries(body.entries())).toEqual({
+      grant_type: "client_credentials",
+      client_id: "baobab-dev-trade-buyer-validator",
+      client_secret: "private-client-secret",
+      scope: "identity:principal:resolve",
+      audience: "baobab-control-plane",
+    })
+  })
+
   it("caches the token until close to its stated expiry", async () => {
     let now = 0
     const fetchMock = vi
