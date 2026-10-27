@@ -32,6 +32,9 @@ import {
 import { getWorkloadTenantVerifier } from "../../../../baobab/control-plane/workload-tenant-verifier"
 
 export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) => {
+  // Buyer membership, roles and denial outcomes are session-specific. Do not
+  // permit a browser, proxy or CDN to retain them across identity transitions.
+  res.setHeader("Cache-Control", "private, no-store")
   const canonicalOrganisationId = req.query.canonical_organisation_id
   if (typeof canonicalOrganisationId !== "string" || canonicalOrganisationId.trim() === "") {
     throw new MedusaError(
