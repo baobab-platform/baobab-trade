@@ -104,4 +104,3 @@ describe("interim buyer assurance verifier", () => {
     }
   })
 })
-

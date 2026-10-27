@@ -101,4 +101,3 @@ export const evaluateAssurance = (
   }
   return { ok: true, policyRevision: INTERIM_POLICY_REVISION }
 }
-
