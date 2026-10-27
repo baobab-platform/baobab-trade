@@ -7,4 +7,5 @@ RUN npm ci --ignore-scripts
 COPY . .
 RUN chown -R node:node /app
 ENV NODE_ENV=test
+USER node
 CMD ["npm", "run", "qualify:dev07-iam-cp"]
