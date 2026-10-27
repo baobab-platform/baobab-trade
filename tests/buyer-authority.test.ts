@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { interimAssurancePolicy } from "../src/baobab/auth/buyer-assurance"
+import {
+  CANONICAL_OPERATION_PROFILES,
+  interimAssurancePolicy,
+} from "../src/baobab/auth/buyer-assurance"
+import { loadBuyerAssurancePolicy } from "../src/baobab/auth/buyer-assurance-policy"
 import { BuyerTokenError } from "../src/baobab/auth/buyer-access-token"
 import { resolveBuyerContext, type BuyerContextResult } from "../src/baobab/b2b/buyer-authority"
 import { buyerExecutionContextSchema } from "../src/baobab/contracts/authority-validation"
@@ -265,6 +269,56 @@ const refused = (result: BuyerContextResult) => {
 }
 
 describe("buyer execution context (ADR-SHARED-042 CAA-04/05)", () => {
+  it("bounds a full-policy context to assurance freshness, including I/O delay", async () => {
+    const profile = {
+      accepted_acr_values: [SESSION_ACR],
+      required_methods: ["pwd"],
+      step_up_required: true,
+      max_authentication_age_seconds: 30,
+    }
+    const assurance = loadBuyerAssurancePolicy(
+      JSON.stringify({
+        policy_id: "synthetic.buyer",
+        policy_version: 1,
+        status: "APPROVED",
+        issuer: ISSUER,
+        audience: "baobab-trade",
+        approval_reference: "synthetic:source-tests-only",
+        effective_from: new Date(NOW - 1000).toISOString(),
+        profiles: {
+          BUYER_SESSION: profile,
+          BUYER_COMMITMENT: profile,
+          BUYER_ADMINISTRATION: profile,
+        },
+        operation_profiles: CANONICAL_OPERATION_PROFILES,
+      }),
+      ISSUER,
+    )
+    for (const elapsed of [0, 5000]) {
+      const { deps } = world({ timeAfterCp: NOW + elapsed })
+      const verify = deps.tokens.verify
+      deps.tokens.verify = async (token) => ({
+        ...(await verify(token)),
+        authTime: new Date(NOW - 25000),
+      })
+      const result = await resolveBuyerContext({ ...deps, assurance } as never, {
+        callerToken: "bff-token",
+        subjectToken: "buyer-token",
+        requestedOrganisationId: ORG,
+        correlationId: CORRELATION,
+      })
+      if (elapsed === 0) {
+        expect(result.outcome).toBe("ALLOW")
+        if (result.outcome === "ALLOW") {
+          expect(buyerExecutionContextSchema(result.context)).toBe(true)
+          expect(Date.parse(result.context.expires_at)).toBe(NOW + 5000)
+          expect(result.context.evidence_references).toContain(
+            `assurance:${assurance?.policyRevision}@synthetic:source-tests-only`,
+          )
+        }
+      } else expect(refused(result).reasons).toEqual(["CONTEXT_NOT_USABLE"])
+    }
+  })
   it("builds a schema-valid context from every independent fact", async () => {
     const { calls, promise } = run()
     const result = await promise

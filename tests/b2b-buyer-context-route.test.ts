@@ -21,6 +21,7 @@ const ENV = [
   "BAOBAB_CONTROL_PLANE_BASE_URL",
   "BAOBAB_TRADE_ENGINE_INSTANCE_ID",
   "BAOBAB_ENVIRONMENT",
+  "BAOBAB_BUYER_ASSURANCE_POLICY_JSON",
 ] as const
 const SUBJECT = "synthetic-header.synthetic-payload.synthetic-signature"
 const TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
@@ -173,6 +174,23 @@ describe("POST /store/b2b/buyer-context", () => {
       correlation: "5d2a3c4b-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
     })
     expect(res.statusCode).toBe(400)
+  })
+  it("does not fall back to an interim allowlist after explicit policy configuration fails", async () => {
+    enable()
+    vi.stubEnv("BAOBAB_BUYER_ACCEPTED_ACR", "synthetic:session")
+    vi.stubEnv("BAOBAB_BUYER_ASSURANCE_APPROVAL_REFERENCE", "synthetic:approval")
+    vi.stubEnv("BAOBAB_BUYER_ASSURANCE_POLICY_JSON", "invalid JSON")
+    const resolver = vi.spyOn(authority, "resolveBuyerContext").mockResolvedValue({
+      outcome: "DENY",
+      status: 403,
+      decision: { outcome: "DENY", reasons: ["OPERATION_NOT_ACTIVATED"] },
+    })
+    const response = await call({ authorization: "Bearer a.b.c", store: {} })
+    expect(response.statusCode).toBe(403)
+    expect(resolver).toHaveBeenCalledWith(
+      expect.objectContaining({ assurance: null }),
+      expect.any(Object),
+    )
   })
   it.each(["UG", "ZA"])(
     "hands %s selection to the canonical resolver without inventing a Market",

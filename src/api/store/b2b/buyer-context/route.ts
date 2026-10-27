@@ -19,6 +19,7 @@
 import { randomUUID } from "node:crypto"
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { interimAssurancePolicy } from "../../../../baobab/auth/buyer-assurance"
+import { loadBuyerAssurancePolicy } from "../../../../baobab/auth/buyer-assurance-policy"
 import { BuyerTokenVerifier } from "../../../../baobab/auth/buyer-access-token"
 import { resolveBuyerContext } from "../../../../baobab/b2b/buyer-authority"
 import { getBaobabTradeEnvironment } from "../../../../baobab/config/environment"
@@ -134,11 +135,14 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const result = await resolveBuyerContext(
     {
       tokens: tokenVerifier(env.buyerIamIssuer, env.buyerAuthorisedParties),
-      assurance: interimAssurancePolicy({
-        issuer: env.buyerIamIssuer,
-        acceptedAcr: env.buyerAcceptedAcr,
-        approvalReference: env.buyerAssuranceApprovalReference,
-      }),
+      assurance:
+        env.buyerAssurancePolicyJson !== undefined
+          ? loadBuyerAssurancePolicy(env.buyerAssurancePolicyJson, env.buyerIamIssuer)
+          : interimAssurancePolicy({
+              issuer: env.buyerIamIssuer,
+              acceptedAcr: env.buyerAcceptedAcr,
+              approvalReference: env.buyerAssuranceApprovalReference,
+            }),
       principals,
       estates: getEstateBindingResolver(),
       tenants: getWorkloadTenantVerifier(),
