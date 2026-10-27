@@ -18,6 +18,8 @@ export type ClientCredentialsWorkloadTokenProviderOptions = {
   clientSecret: string
   /** Space-separated scopes to request; omitted, IAM issues the client's defaults. */
   scope?: string
+  /** Exact OAuth resource audience for CP-bound requests, never caller-supplied. */
+  audience?: string
   timeoutMs?: number
   now?: () => number
 }
@@ -48,6 +50,7 @@ export class ClientCredentialsWorkloadTokenProvider implements WorkloadTokenProv
   private readonly clientId: string
   private readonly clientSecret: string
   private readonly scope?: string
+  private readonly audience?: string
   private readonly timeoutMs: number
   private readonly now: () => number
   private cached: CachedToken | null = null
@@ -57,6 +60,7 @@ export class ClientCredentialsWorkloadTokenProvider implements WorkloadTokenProv
     this.clientId = options.clientId
     this.clientSecret = options.clientSecret
     this.scope = options.scope
+    this.audience = options.audience
     this.timeoutMs = options.timeoutMs ?? 3000
     this.now = options.now ?? Date.now
   }
@@ -74,6 +78,7 @@ export class ClientCredentialsWorkloadTokenProvider implements WorkloadTokenProv
         client_id: this.clientId,
         client_secret: this.clientSecret,
         ...(this.scope ? { scope: this.scope } : {}),
+        ...(this.audience ? { audience: this.audience } : {}),
       }),
       signal: AbortSignal.timeout(this.timeoutMs),
     })
