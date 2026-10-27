@@ -52,6 +52,18 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   }
   const organisation = organisations[0]
 
+  // A canonical link does not override the locally suspended/retired buyer
+  // relationship. Never return active membership or role data for it.
+  if (
+    organisation.status !== "ACTIVE" ||
+    organisation.canonical_organisation_id !== canonicalOrganisationId
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.FORBIDDEN,
+      "the buyer organisation is not active",
+    )
+  }
+
   const tenantVerifier = getWorkloadTenantVerifier()
   if (tenantVerifier) {
     try {
