@@ -90,11 +90,14 @@ describe("DEV-07 legacy buyer context fails closed", () => {
   })
 
   it("exposes only known roles bound to the exact membership", async () => {
-    const context = await contextFor([member()], [
-      { id: "role-1", membership_id: "mem-1", role: "BUYER" },
-      { id: "role-2", membership_id: "mem-1", role: "SUPERADMIN" },
-      { id: "role-3", membership_id: "other", role: "APPROVER" },
-    ])
+    const context = await contextFor(
+      [member()],
+      [
+        { id: "role-1", membership_id: "mem-1", role: "BUYER" },
+        { id: "role-2", membership_id: "mem-1", role: "SUPERADMIN" },
+        { id: "role-3", membership_id: "other", role: "APPROVER" },
+      ],
+    )
     expect(context?.roles).toEqual(["BUYER"])
   })
 
