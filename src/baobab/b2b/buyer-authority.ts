@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import type { ApprovedBuyerAssurancePolicy } from "../auth/buyer-assurance-policy"
 import type B2BModuleService from "../../modules/b2b/service"
 import {
   evaluateAssurance,
@@ -38,7 +39,7 @@ import { B2B_ROLES, type B2BRole } from "./types"
  *      its own workload token, for a registered BFF client.
  *   2. Trade verifies the human IAM token itself, and requires its azp to be
  *      that same BFF client and its issuer the same issuer.
- *   3. The interim assurance verifier (CAA-03) accepts the token's acr for
+ *   3. The approved assurance verifier (CAA-03) accepts the token's evidence for
  *      the operation's canonical profile, or the operation is not activated.
  *   4. The Control Plane resolves the exact (issuer, subject) to an ACTIVE
  *      canonical human Principal.
@@ -130,7 +131,7 @@ export type BuyerAuthorityDependencies = {
     verify(token: string): Promise<VerifiedBuyerToken>
     verifyBffCaller(token: string): Promise<VerifiedBffCaller>
   }
-  assurance: InterimAssurancePolicy | null
+  assurance: InterimAssurancePolicy | ApprovedBuyerAssurancePolicy | null
   principals: BuyerPrincipalResolver
   estates: EstateBindingResolver | null
   tenants: WorkloadTenantVerifier | null
@@ -228,7 +229,7 @@ async function evaluate(
   }
 
   // 3. Assurance for this operation's canonical profile.
-  const assurance = evaluateAssurance(deps.assurance, OPERATION, token)
+  const assurance = evaluateAssurance(deps.assurance, OPERATION, token, startedAt)
   if (!assurance.ok) throw deny(assurance.reason)
 
   // 4. The canonical Principal.
@@ -386,6 +387,7 @@ async function evaluate(
   }
   const expiries = [
     startedAt + CONTEXT_LIFETIME_MS,
+    ...(assurance.expiresAt !== undefined ? [assurance.expiresAt] : []),
     token.expiresAt.getTime(),
     caller.expiresAt.getTime(),
     principal.evidenceExpiresAt.getTime(),

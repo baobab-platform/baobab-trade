@@ -1,12 +1,14 @@
 import type { VerifiedBuyerToken } from "./buyer-access-token"
+import type { ApprovedBuyerAssurancePolicy } from "./buyer-assurance-policy"
 
 /**
  * ADR-SHARED-042 CAA-03 (Platform Owner ruling of 22 October 2026; Shared
  * identity/v1 assurance-policy.schema.json): what verified IAM authentication
  * evidence each buyer operation needs.
  *
- * Until the Shared policy and IAM's issuer-backed values are qualified, Trade
- * enforces the ruling's strict interim verifier:
+ * A deployment can load the full pinned Shared policy through
+ * buyer-assurance-policy.ts. Without that explicit approved document, Trade
+ * supports only the ruling's strict interim verifier:
  * - one trusted issuer;
  * - a security-approved, exact acr allowlist (BAOBAB_BUYER_ACCEPTED_ACR) with
  *   its approval reference;
@@ -46,7 +48,7 @@ export type InterimAssurancePolicy = {
 }
 
 export type AssuranceOutcome =
-  | { ok: true; policyRevision: string }
+  | { ok: true; policyRevision: string; expiresAt?: number }
   | { ok: false; reason: "ASSURANCE_INSUFFICIENT" | "OPERATION_NOT_ACTIVATED" }
 
 /** The policy revision a decision records (trade/v2 policy_revision). */
@@ -88,11 +90,52 @@ export const interimAssurancePolicy = (config: {
 }
 
 export const evaluateAssurance = (
-  policy: InterimAssurancePolicy | null,
+  policy: InterimAssurancePolicy | ApprovedBuyerAssurancePolicy | null,
   operation: BuyerOperation,
-  token: Pick<VerifiedBuyerToken, "issuer" | "acr">,
+  token: Pick<VerifiedBuyerToken, "issuer" | "acr"> &
+    Partial<Pick<VerifiedBuyerToken, "amr" | "authTime">>,
+  now: number = Date.now(),
 ): AssuranceOutcome => {
   if (!policy) return { ok: false, reason: "OPERATION_NOT_ACTIVATED" }
+  if ("kind" in policy) {
+    if (
+      !Number.isFinite(now) ||
+      now < policy.effectiveFrom ||
+      now >= policy.effectiveUntil ||
+      token.issuer !== policy.issuer
+    ) {
+      return { ok: false, reason: "OPERATION_NOT_ACTIVATED" }
+    }
+    const profile = policy.profiles[CANONICAL_OPERATION_PROFILES[operation]]
+    if (!profile) return { ok: false, reason: "OPERATION_NOT_ACTIVATED" }
+    let expiry = policy.effectiveUntil
+    if (
+      !token.acr ||
+      !profile.accepted_acr_values.includes(token.acr) ||
+      profile.required_methods?.some((method) => !token.amr?.includes(method))
+    ) {
+      return { ok: false, reason: "ASSURANCE_INSUFFICIENT" }
+    }
+    if (profile.max_authentication_age_seconds !== undefined) {
+      const authenticated = token.authTime?.getTime()
+      const age = profile.max_authentication_age_seconds * 1000
+      if (
+        authenticated === undefined ||
+        !Number.isFinite(authenticated) ||
+        !Number.isSafeInteger(age) ||
+        authenticated > now ||
+        now - authenticated > age
+      ) {
+        return { ok: false, reason: "ASSURANCE_INSUFFICIENT" }
+      }
+      expiry = Math.min(expiry, authenticated + age)
+    }
+    return {
+      ok: true,
+      policyRevision: policy.policyRevision,
+      ...(Number.isFinite(expiry) ? { expiresAt: expiry } : {}),
+    }
+  }
   if (CANONICAL_OPERATION_PROFILES[operation] !== "BUYER_SESSION") {
     return { ok: false, reason: "OPERATION_NOT_ACTIVATED" }
   }

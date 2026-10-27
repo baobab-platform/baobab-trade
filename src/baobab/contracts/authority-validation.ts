@@ -126,3 +126,7 @@ export const buyerOperationDecisionSchema = validator(
   "trade/v2/buyer-execution-context.schema.json",
   "BuyerOperationDecision",
 )
+export const buyerAssurancePolicySchema = validator(
+  "identity/v1/assurance-policy.schema.json",
+  "BuyerAssurancePolicy",
+)

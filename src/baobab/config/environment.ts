@@ -34,6 +34,7 @@ export type BaobabTradeEnvironment = {
   // every buyer operation is OPERATION_NOT_ACTIVATED; there is no default.
   buyerAcceptedAcr: string[]
   buyerAssuranceApprovalReference?: string
+  buyerAssurancePolicyJson?: string
   // CAA-04: this Trade instance and its deployment boundary, as CP's estate
   // client binding names them. Neither is ever taken from a request.
   tradeEngineInstanceId?: string
@@ -83,6 +84,7 @@ export const getBaobabTradeEnvironment = (): BaobabTradeEnvironment => ({
     .map((value) => value.trim())
     .filter(Boolean),
   buyerAssuranceApprovalReference: process.env.BAOBAB_BUYER_ASSURANCE_APPROVAL_REFERENCE,
+  buyerAssurancePolicyJson: process.env.BAOBAB_BUYER_ASSURANCE_POLICY_JSON,
   tradeEngineInstanceId: process.env.BAOBAB_TRADE_ENGINE_INSTANCE_ID,
   deploymentEnvironment: process.env.BAOBAB_ENVIRONMENT,
   logLevel: process.env.LOG_LEVEL || "info",
