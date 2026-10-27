@@ -34,6 +34,7 @@ export async function resolveBuyerContext(
   b2b: B2BModuleService,
   organisationId: string,
   customerId: string,
+  now: () => number = Date.now,
 ): Promise<BuyerContext | null> {
   const memberships: MembershipRecord[] = await b2b.listBuyerMemberships({
     organisation_id: organisationId,
@@ -51,7 +52,7 @@ export async function resolveBuyerContext(
     !membership.principal_id ||
     !membership.customer_id ||
     (membership.status === "ACTIVE" &&
-      !inEffect(membership.effective_from, membership.effective_until, Date.now()))
+      !inEffect(membership.effective_from, membership.effective_until, now()))
   ) {
     return null
   }
