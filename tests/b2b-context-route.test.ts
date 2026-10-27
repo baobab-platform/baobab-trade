@@ -72,7 +72,17 @@ const buildRequest = (
 })
 
 const buildResponse = () => {
-  const res: { statusCode?: number; body?: unknown; status: (code: number) => typeof res } = {
+  const res: {
+    statusCode?: number
+    body?: unknown
+    headers: Record<string, string>
+    setHeader: (name: string, value: string) => void
+    status: (code: number) => typeof res
+  } = {
+    headers: {},
+    setHeader(name: string, value: string) {
+      res.headers[name.toLowerCase()] = value
+    },
     status(code: number) {
       res.statusCode = code
       return res
@@ -191,6 +201,7 @@ describe("GET /store/b2b/context (Gate ZB-03.7 real-token verification)", () => 
     await GET(req as never, res as never)
 
     expect(res.statusCode).toBe(200)
+    expect(res.headers["cache-control"]).toBe("private, no-store")
     expect(res.body).toEqual({
       organisation: { id: "org-1", canonical_organisation_id: "canon-org-1", status: "ACTIVE" },
       membership: { id: "mem-1", status: "ACTIVE" },
