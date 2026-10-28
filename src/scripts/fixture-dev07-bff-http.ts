@@ -3,8 +3,8 @@
  * The actual HTTP handler must still verify current IAM and CP on every call.
  */
 import assert from "node:assert/strict"
-import { lstatSync, readFileSync } from "node:fs"
-import type { ExecArgs } from "@medusajs/framework/types"
+import { lstatSync, readFileSync, writeFileSync } from "node:fs"
+import type { ExecArgs, IApiKeyModuleService } from "@medusajs/framework/types"
 import type B2BModuleService from "../modules/b2b/service"
 
 type OwnerFixture = {
@@ -61,6 +61,14 @@ export default async function ({ container }: ExecArgs) {
   const phase = process.env.BAOBAB_DEV07_NATIVE_PHASE
   assert.ok(["prepare", "suspend", "resume", "cleanup"].includes(phase ?? ""))
   const b2b = container.resolve<B2BModuleService>("b2b")
+  const apiKeys = container.resolve<IApiKeyModuleService>("api_key")
+  const keyTitle = `DEV07 BFF HTTP ${f.run_id}`
+  const keys = await apiKeys.listApiKeys({ title: keyTitle, type: "publishable" })
+  for (const key of keys) {
+    assert.equal(key.title, keyTitle)
+    assert.equal(key.type, "publishable")
+    assert.equal(key.created_by, `dev07:${f.run_id}`)
+  }
   const orgId = `buyerorg_${f.run_id}`
   const memberId = `buyermem_${f.run_id}`
   const roleId = `b2brole_${f.run_id}`
@@ -82,6 +90,7 @@ export default async function ({ container }: ExecArgs) {
     assert.equal(role.role, "BUYER")
   }
   if (phase === "prepare") {
+    assert.equal(keys.length, 0)
     assert.ok(orgs.length === 0 && members.length === 0 && roles.length === 0)
     await b2b.createB2BOrganisations({
       id: orgId,
@@ -99,7 +108,22 @@ export default async function ({ container }: ExecArgs) {
       status: "ACTIVE",
     })
     await b2b.createBuyerRoles({ id: roleId, membership_id: memberId, role: "BUYER" })
+    // The Store router requires a real native publishable key even for this
+    // custom IAM route. It carries no buyer or canonical estate authority.
+    const key = await apiKeys.createApiKeys({
+      title: keyTitle,
+      type: "publishable",
+      created_by: `dev07:${f.run_id}`,
+    })
+    assert.ok(/^pk_[A-Za-z0-9_-]{16,512}$/.test(key.token))
+    writeFileSync(
+      "/run/dev07-bff-native/store-key.json",
+      JSON.stringify({ key_id: key.id, publishable_key: key.token }),
+      { flag: "wx", mode: 0o600 },
+    )
   } else if (phase === "cleanup") {
+    for (const key of keys) await apiKeys.deleteApiKeys(key.id)
+    assert.equal((await apiKeys.listApiKeys({ title: keyTitle, type: "publishable" })).length, 0)
     if (roles.length) await b2b.softDeleteBuyerRoles(roleId)
     if (members.length) await b2b.softDeleteBuyerMemberships(memberId)
     if (orgs.length) await b2b.softDeleteB2BOrganisations(orgId)
