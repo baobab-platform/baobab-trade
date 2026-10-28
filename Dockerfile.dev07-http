@@ -1,0 +1,22 @@
+# Disposable full Medusa HTTP source tool, never the production Trade runtime image.
+FROM node:24.21.0-alpine3.24@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+WORKDIR /app
+# Keep the source tool unprivileged while matching the disposable run owner.
+# Codespaces/Actions may remap the remote UID; hard-coded node:1000 cannot
+# write Medusa's runtime caches and must not own a private OAuth packet.
+ARG BAOBAB_DEV07_UID=1000
+ARG BAOBAB_DEV07_GID=1000
+RUN apk add --no-cache git && git config --system --add safe.directory /app
+COPY package*.json ./
+RUN npm ci --include=dev
+COPY . .
+RUN npm run build
+RUN chown -R ${BAOBAB_DEV07_UID}:${BAOBAB_DEV07_GID} /app
+ENV NODE_ENV=test
+# Numeric run identities have no guaranteed passwd home; keep npm/Medusa
+# caches beneath the owned working directory rather than /root or /home/node.
+ENV HOME=/app
+ENV npm_config_cache=/app/.npm-cache
+USER ${BAOBAB_DEV07_UID}:${BAOBAB_DEV07_GID}
+EXPOSE 9000
+CMD ["sh", "-c", "cd /app/.medusa/server && exec node /app/node_modules/@medusajs/cli/cli.js start"]
