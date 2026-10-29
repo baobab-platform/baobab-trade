@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest"
-import { validateOwnerFixture } from "../src/scripts/fixture-dev07-bff-http"
+import { describe, expect, it, vi } from "vitest"
+import type { IApiKeyModuleService } from "@medusajs/framework/types"
+import {
+  cleanupFixturePublishableKey,
+  validateOwnerFixture,
+} from "../src/scripts/fixture-dev07-bff-http"
 
 const now = Date.parse("2026-10-29T00:00:00Z")
 const fixture = {
@@ -44,5 +48,78 @@ describe("native BFF fixture boundary (synthetic source tests only)", () => {
     ])
       expect(() => validateOwnerFixture(fixture, { ...env, ...patch }, now)).toThrow()
     expect(() => validateOwnerFixture(fixture, env, NaN)).toThrow()
+  })
+})
+
+describe("native publishable fixture key cleanup", () => {
+  function service(change: Record<string, unknown> = {}, future = false) {
+    const events: string[] = []
+    let revoked = false
+    const key = {
+      id: "apk_fixture",
+      title: `DEV07 BFF HTTP ${fixture.run_id}`,
+      type: "publishable",
+      created_by: `dev07:${fixture.run_id}`,
+      ...change,
+    }
+    const api = {
+      retrieveApiKey: vi.fn(async () => {
+        events.push("read")
+        return {
+          ...key,
+          revoked_by: revoked ? `dev07:${fixture.run_id}` : null,
+          revoked_at: revoked ? new Date(Date.now() + (future ? 60000 : -100)) : null,
+        }
+      }),
+      revoke: vi.fn(async () => {
+        events.push("revoke")
+        revoked = true
+      }),
+      deleteApiKeys: vi.fn(async () => {
+        if (!revoked) throw new Error("native API refuses unrevoked key deletion")
+        events.push("delete")
+      }),
+    }
+    return { api, events, module: api as unknown as IApiKeyModuleService }
+  }
+
+  it("revokes and independently reads back before native deletion", async () => {
+    const s = service()
+    await cleanupFixturePublishableKey(s.module, "apk_fixture", fixture.run_id)
+    expect(s.api.revoke).toHaveBeenCalledWith("apk_fixture", {
+      revoked_by: `dev07:${fixture.run_id}`,
+      revoke_in: 0,
+    })
+    expect(s.events).toEqual(["read", "revoke", "read", "delete"])
+  })
+
+  it("cannot delete foreign, secret or future-revoked keys", async () => {
+    for (const patch of [
+      { created_by: "another-run" },
+      { title: "another fixture" },
+      { type: "secret" },
+      { id: "apk_foreign" },
+    ]) {
+      const s = service(patch)
+      await expect(
+        cleanupFixturePublishableKey(s.module, "apk_fixture", fixture.run_id),
+      ).rejects.toThrow()
+      expect(s.api.revoke).not.toHaveBeenCalled()
+      expect(s.api.deleteApiKeys).not.toHaveBeenCalled()
+    }
+    const s = service({}, true)
+    await expect(
+      cleanupFixturePublishableKey(s.module, "apk_fixture", fixture.run_id),
+    ).rejects.toThrow()
+    expect(s.api.deleteApiKeys).not.toHaveBeenCalled()
+  })
+
+  it("retains failure when revocation cannot be observed", async () => {
+    const s = service()
+    s.api.revoke.mockRejectedValueOnce(new Error("native revocation unavailable"))
+    await expect(
+      cleanupFixturePublishableKey(s.module, "apk_fixture", fixture.run_id),
+    ).rejects.toThrow()
+    expect(s.api.deleteApiKeys).not.toHaveBeenCalled()
   })
 })

@@ -53,6 +53,29 @@ export function validateOwnerFixture(
   return f
 }
 
+/** Revoke the exact run-owned key before native Medusa permits deletion. */
+export async function cleanupFixturePublishableKey(
+  apiKeys: IApiKeyModuleService,
+  keyId: string,
+  runId: string,
+): Promise<void> {
+  assert.ok(/^[0-9a-f]{32}$/.test(runId))
+  const actor = `dev07:${runId}`
+  const key = await apiKeys.retrieveApiKey(keyId)
+  assert.equal(key.id, keyId)
+  assert.equal(key.title, `DEV07 BFF HTTP ${runId}`)
+  assert.equal(key.type, "publishable")
+  assert.equal(key.created_by, actor)
+  await apiKeys.revoke(keyId, { revoked_by: actor, revoke_in: 0 })
+  const revoked = await apiKeys.retrieveApiKey(keyId)
+  assert.equal(revoked.id, keyId)
+  assert.equal(revoked.revoked_by, actor)
+  const revokedAt = revoked.revoked_at
+  const epoch = revokedAt instanceof Date ? revokedAt.getTime() : Date.parse(String(revokedAt))
+  assert.ok(Number.isFinite(epoch) && epoch <= Date.now())
+  await apiKeys.deleteApiKeys(keyId)
+}
+
 export default async function ({ container }: ExecArgs) {
   const stat = lstatSync(PATH)
   assert.ok(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o077) === 0)
@@ -122,7 +145,7 @@ export default async function ({ container }: ExecArgs) {
       { flag: "wx", mode: 0o600 },
     )
   } else if (phase === "cleanup") {
-    for (const key of keys) await apiKeys.deleteApiKeys(key.id)
+    for (const key of keys) await cleanupFixturePublishableKey(apiKeys, key.id, f.run_id)
     assert.equal((await apiKeys.listApiKeys({ title: keyTitle, type: "publishable" })).length, 0)
     if (roles.length) await b2b.softDeleteBuyerRoles(roleId)
     if (members.length) await b2b.softDeleteBuyerMemberships(memberId)
