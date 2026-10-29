@@ -71,8 +71,7 @@ export async function cleanupFixturePublishableKey(
   assert.equal(revoked.id, keyId)
   assert.equal(revoked.revoked_by, actor)
   const revokedAt = revoked.revoked_at
-  const epoch =
-    revokedAt instanceof Date ? revokedAt.getTime() : Date.parse(String(revokedAt))
+  const epoch = revokedAt instanceof Date ? revokedAt.getTime() : Date.parse(String(revokedAt))
   assert.ok(Number.isFinite(epoch) && epoch <= Date.now())
   await apiKeys.deleteApiKeys(keyId)
 }
