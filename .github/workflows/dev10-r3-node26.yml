@@ -60,7 +60,7 @@ jobs:
       - name: Native Medusa migration, build and critical denial tests
         env:
           BAOBAB_BINDING_LIFECYCLE_TEST_DB: baobab_trade_dev10
-          BAOBAB_NATIVE_COMMITMENT_TEST_DB: baobab_trade_dev10
+          BAOBAB_CLASSIFICATION_TEST_DB: baobab_trade_dev10
         run: |
           set -euo pipefail
           npm run migrate
