@@ -11,7 +11,8 @@ jobs:
   prettier:
     if: >-
       github.event.pull_request.head.repo.full_name == 'baobab-platform/baobab-trade' &&
-      github.event.pull_request.head.ref == 'feat/trade-medusa-2212-validated-canary'
+      (github.event.pull_request.head.ref == 'feat/trade-medusa-2212-validated-canary' ||
+      github.event.pull_request.head.ref == 'feat/dev11-native-otel-outbox-20261102')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,5 +40,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- src docs
-          git commit -m 'style(medusa-2.21): canonical format of upgrade compatibility edits'
-          git push origin 'HEAD:refs/heads/feat/trade-medusa-2212-validated-canary'
+          git commit -m 'style(DEV-11): canonical formatting of telemetry and outbox source'
+          git push origin 'HEAD:refs/heads/feat/dev11-native-otel-outbox-20261102'
