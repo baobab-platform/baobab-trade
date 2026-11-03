@@ -1,20 +1,17 @@
-name: Format DEV-11 candidate source (temporary)
+name: Format Medusa 2.21 compatibility source (temporary)
 on:
   pull_request:
     paths:
       - src/**
-      - tests/event-outbox.test.ts
-      - docs/architecture/dev11-real-rabbitmq-otel-qualification.md
+      - docs/security/medusa-2-21-security-canary.md
       - .github/workflows/medusa-2212-formatter.yml
-
 permissions:
   contents: write
-
 jobs:
   prettier:
     if: >-
       github.event.pull_request.head.repo.full_name == 'baobab-platform/baobab-trade' &&
-      github.event.pull_request.head.ref == 'feat/dev11-native-otel-outbox-20261102'
+      github.event.pull_request.head.ref == 'feat/trade-medusa-2212-validated-canary'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -26,31 +23,21 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Canonically format only the six confirmed DEV-11 source files
+      - run: npm ci --ignore-scripts --no-fund
+      - name: Canonical formatting without changing dependencies or source semantics
         run: |
-          npx prettier --write -- \
-            docs/architecture/dev11-real-rabbitmq-otel-qualification.md \
-            src/baobab/events/outbox-record-adapter.ts \
-            src/baobab/events/outbox.ts \
-            src/baobab/observability/http-middleware.ts \
-            src/scripts/qualify-dev11-native-outbox.ts \
-            tests/event-outbox.test.ts
-      - name: Commit only reviewed formatting changes to the same candidate head
+          git fetch --no-tags origin main
+          mapfile -d '' files < <(git diff --name-only -z origin/main...HEAD -- '*.ts' '*.tsx' '*.js' '*.mjs' '*.json' '*.md')
+          if (( ${#files[@]} > 0 )); then
+            npx prettier --write "${files[@]}"
+          fi
+          npx prettier --write docs/governance/LA-05C3-native-checkout-runtime.md
+      - name: Commit only Prettier output
         run: |
-          set -euo pipefail
+          if git diff --quiet -- src docs; then exit 0; fi
           git diff --check
-          files=(
-            docs/architecture/dev11-real-rabbitmq-otel-qualification.md
-            src/baobab/events/outbox-record-adapter.ts
-            src/baobab/events/outbox.ts
-            src/baobab/observability/http-middleware.ts
-            src/scripts/qualify-dev11-native-outbox.ts
-            tests/event-outbox.test.ts
-          )
-          if git diff --quiet -- "${files[@]}"; then exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- "${files[@]}"
-          git commit -m 'style(DEV-11): preserve Prettier baseline for native Trade observability'
-          git push origin HEAD:refs/heads/feat/dev11-native-otel-outbox-20261102
+          git add -- src docs
+          git commit -m 'style(medusa-2.21): canonical format of upgrade compatibility edits'
+          git push origin 'HEAD:refs/heads/feat/trade-medusa-2212-validated-canary'
