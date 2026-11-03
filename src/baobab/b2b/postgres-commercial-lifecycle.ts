@@ -144,6 +144,27 @@ export class PostgresCommercialLifecycle {
   async execute(
     command: Command,
   ): Promise<{ outcome: "APPLIED" | "REPLAYED"; resource: CommercialResource }> {
+    // A trusted internal call still must not accept hidden actor, status,
+    // version or approval fields. Closed envelopes prevent accidental bypass
+    // when the command service is eventually wired into a BFF or native route.
+    if (
+      !command ||
+      typeof command !== "object" ||
+      Array.isArray(command) ||
+      Object.keys(command).some(
+        (key) =>
+          !["action", "scope", "idempotencyKey", "resourceId", "expectedVersion", "payload"].includes(
+            key,
+          ),
+      ) ||
+      (command.action === "RFQ_CREATE" &&
+        (command.resourceId !== undefined || command.expectedVersion !== undefined)) ||
+      (command.action !== "RFQ_CREATE" &&
+        command.action !== "QUOTATION_ISSUE" &&
+        command.payload !== undefined) ||
+      (command.action === "QUOTATION_ISSUE" && command.payload === undefined)
+    )
+      return refuseCommercial("INVALID_REQUEST")
     const scope = commercialContext(command.scope)
     if (
       !COMMANDS.has(command.action) ||
