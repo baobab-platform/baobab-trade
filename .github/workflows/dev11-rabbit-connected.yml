@@ -101,7 +101,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: baobab-platform/baobab-erp
-          ref: 741b165ca7075d7943c46d26b28facef0bdb8a95
+          ref: b103ebb5de2436dd698e1d015490f97d7707050c
           path: erp-source
           persist-credentials: false
       - name: Checkout independently owned trace-query observer
