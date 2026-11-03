@@ -324,7 +324,7 @@ export function commercialDigest(value: unknown): string {
     if (v === null || typeof v === "string" || typeof v === "boolean") return JSON.stringify(v)
     if (typeof v === "number" && Number.isSafeInteger(v)) return JSON.stringify(v)
     if (Array.isArray(v)) return "[" + v.map(canonical).join(",") + "]"
-    if (typeof v === "object" && v !== null)
+    if (typeof v === "object")
       return (
         "{" +
         Object.keys(v)
