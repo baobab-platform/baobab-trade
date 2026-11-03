@@ -94,10 +94,8 @@ export async function runCommercialLifecycleRegression(pool: Pool) {
   assert.equal(first.resource.status, "DRAFT")
   // The internal command boundary is closed even before HTTP wiring. A caller
   // cannot smuggle authority or status fields, or attach a second command body.
-  await assert.rejects(
-    service.execute({ ...create, actor: "ADMIN" }),
-    /INVALID_REQUEST/,
-  )
+  const injectedActor = { ...create, actor: "ADMIN" }
+  await assert.rejects(service.execute(injectedActor), /INVALID_REQUEST/)
   await assert.rejects(
     service.execute({ ...create, expectedVersion: 1, idempotencyKey: key() }),
     /INVALID_REQUEST/,
