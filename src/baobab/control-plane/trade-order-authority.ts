@@ -1,3 +1,4 @@
+import { outboundTraceparent } from "../observability/tracing"
 /**
  * ADR-SHARED-039 Trade-A TA-03: Trade's clients for the two CP operations an
  * order commitment needs.
@@ -179,6 +180,8 @@ export class HttpTradeOrderAuthorityClient implements TradeOrderAuthorityPort {
     token: string,
     correlationId: string,
   ): Promise<unknown> {
+    const parent = outboundTraceparent()
+    const traceHeaders = parent ? { traceparent: parent } : {}
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
       method: "POST",
       redirect: "error",
@@ -187,6 +190,7 @@ export class HttpTradeOrderAuthorityClient implements TradeOrderAuthorityPort {
         "content-type": "application/json",
         "x-correlation-id": correlationId,
         "cache-control": "no-store",
+        ...traceHeaders,
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(this.timeoutMs),

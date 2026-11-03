@@ -224,6 +224,8 @@ jobs:
 
       - name: Verify Gate 13 durable events and outbox
         run: npm run verify:event-outbox
+      - name: DEV-11 actual PostgreSQL retry/replay/failed-broker diagnostics (no simulated success)
+        run: npm run qualify:dev11-outbox-native
 
       - name: Bootstrap Thamani B2C Uganda and South Africa Market projections
         run: npm run bootstrap:thamani-market

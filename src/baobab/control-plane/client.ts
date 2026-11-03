@@ -1,3 +1,4 @@
+import { outgoingTraceHeaders } from "../observability/tracing"
 import {
   assertTradeEntitlement,
   fromContextResolutionResponse,
@@ -137,6 +138,7 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
         "x-correlation-id": correlationId,
+        ...outgoingTraceHeaders(),
       },
       body: JSON.stringify({ product_id: this.productId }),
       signal: AbortSignal.timeout(this.timeoutMs),
@@ -181,6 +183,7 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
       headers: {
         authorization: `Bearer ${accessToken}`,
         "x-correlation-id": correlationId,
+        ...outgoingTraceHeaders(),
       },
       signal: AbortSignal.timeout(this.timeoutMs),
     })
@@ -221,6 +224,7 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
         "x-correlation-id": correlationId,
+        ...outgoingTraceHeaders(),
       },
       body: JSON.stringify({
         ...(options.tenantId ? { tenant_id: options.tenantId } : {}),
@@ -268,6 +272,7 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
         "x-correlation-id": correlationId,
+        ...outgoingTraceHeaders(),
       },
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(this.timeoutMs),
@@ -311,6 +316,7 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
         "x-correlation-id": correlationId,
+        ...outgoingTraceHeaders(),
       },
       body: JSON.stringify({
         tenant_id: tenantId,

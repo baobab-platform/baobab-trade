@@ -3,6 +3,7 @@ import type EventOutboxModuleService from "../../modules/event-outbox/service"
 import type { BaobabCloudEvent } from "./event-contracts"
 import {
   canonicalEventFingerprint,
+  canonicalEventSemanticFingerprint,
   type OutboxRecord,
   type OutboxRepository,
   type OutboxStatus,
@@ -43,7 +44,7 @@ export class EventOutboxRecordAdapter implements OutboxRepository {
     return this.locking.execute(`event-outbox-idempotency:${idempotencyKey}`, async () => {
       const existing = await this.findByIdempotencyKey(idempotencyKey)
       if (existing) {
-        if (canonicalEventFingerprint(existing.envelope) !== canonicalEventFingerprint(event))
+        if (canonicalEventSemanticFingerprint(existing.envelope) !== canonicalEventSemanticFingerprint(event))
           throw new Error("Idempotency key collision: canonical event payload differs")
         return existing
       }
