@@ -68,6 +68,22 @@ def await_erp_record(erp_url, event, consumer, *, allow_crash=False):
     raise RuntimeError("DEV11_REAL_ERP_DURABLE_ADMISSION_MISSING")
 
 
+MAX_MANAGEMENT_STATS_BYTES = 64 * 1024
+
+
+def parse_management_stats(body: bytes) -> dict:
+    """Bounded full JSON response; the management record exceeds 2 KiB in practice."""
+    if len(body) > MAX_MANAGEMENT_STATS_BYTES:
+        raise RuntimeError("DEV11_BROKER_MANAGEMENT_STATS_OVERSIZED")
+    try:
+        result = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise RuntimeError("DEV11_BROKER_MANAGEMENT_STATS_MALFORMED") from None
+    if not isinstance(result, dict):
+        raise RuntimeError("DEV11_BROKER_MANAGEMENT_STATS_MALFORMED")
+    return result
+
+
 def wait_durable_ack(channel, consumer, *, minimum_ack):
     """Independently verify RabbitMQ's own manual ACK counter, not a guess
     from inbox persistence or the absence of READY messages. All inspection
@@ -88,7 +104,8 @@ def wait_durable_ack(channel, consumer, *, minimum_ack):
         if consumer.poll() is not None:
             raise RuntimeError("DEV11_NATIVE_ERP_CONSUMER_EXITED")
         with urlopen(request, timeout=5) as response:
-            stats = json.loads(response.read(2048))
+            payload = response.read(MAX_MANAGEMENT_STATS_BYTES + 1)
+        stats = parse_management_stats(payload)
         counters = stats.get("message_stats") or {}
         if (counters.get("ack", 0) >= minimum_ack
                 and stats.get("messages_ready") == 0
