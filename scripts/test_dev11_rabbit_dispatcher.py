@@ -11,6 +11,8 @@ import os
 import unittest
 from unittest.mock import patch
 
+from dev11_rabbit_connected import MAX_MANAGEMENT_STATS_BYTES, parse_management_stats
+
 from dev11_rabbit_dispatcher import (
     Claimed, SourceEnvelopeInvalid, claim_next, payload_for, TYPES,
 )
@@ -65,6 +67,22 @@ class NativeTradeRabbitOwnerTests(unittest.TestCase):
         with patch.dict(os.environ, {"BAOBAB_DEV11_RABBIT_CONNECTED_REQUIRED": "false"}):
             with self.assertRaisesRegex(ValueError, "TRADE_OUTBOX_LEASE_POLICY_UNAPPROVED"):
                 claim_next(None, lease_seconds=3)
+
+    def test_bounded_full_management_response_not_truncated(self):
+        stats = {
+            "messages_ready": 0,
+            "messages_unacknowledged": 0,
+            "message_stats": {"ack": 2},
+            "queue_metadata": "x" * 3000,
+        }
+        encoded = json.dumps(stats).encode()
+        self.assertGreater(len(encoded), 2048)
+        self.assertEqual(parse_management_stats(encoded), stats)
+        with self.assertRaisesRegex(RuntimeError, "STATS_MALFORMED"):
+            parse_management_stats(encoded[:2048])
+        with self.assertRaisesRegex(RuntimeError, "STATS_OVERSIZED"):
+            parse_management_stats(b"x" * (MAX_MANAGEMENT_STATS_BYTES + 1))
+
 
     def test_unbounded_lease_is_denied(self):
         with patch.dict(os.environ, {"BAOBAB_DEV11_RABBIT_CONNECTED_REQUIRED": "true"}):
