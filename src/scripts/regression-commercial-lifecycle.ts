@@ -92,6 +92,16 @@ export async function runCommercialLifecycleRegression(pool: Pool) {
   const first = await service.execute(create)
   assert.equal(first.outcome, "APPLIED")
   assert.equal(first.resource.status, "DRAFT")
+  // The internal command boundary is closed even before HTTP wiring. A caller
+  // cannot smuggle authority or status fields, or attach a second command body.
+  await assert.rejects(
+    service.execute({ ...create, actor: "ADMIN" }),
+    /INVALID_REQUEST/,
+  )
+  await assert.rejects(
+    service.execute({ ...create, expectedVersion: 1, idempotencyKey: key() }),
+    /INVALID_REQUEST/,
+  )
   const replay = await service.execute(create)
   assert.equal(replay.outcome, "REPLAYED")
   assert.deepEqual(replay.resource, first.resource)
@@ -107,6 +117,10 @@ export async function runCommercialLifecycleRegression(pool: Pool) {
     resourceId: rfq.rfq_id,
     expectedVersion: rfq.version,
   }
+  await assert.rejects(
+    service.execute({ ...submit, payload: { override: "APPROVED" }, idempotencyKey: key() }),
+    /INVALID_REQUEST/,
+  )
   const race = await Promise.allSettled([
     service.execute(submit),
     service.execute({ ...submit, idempotencyKey: key() }),
