@@ -44,7 +44,10 @@ export class EventOutboxRecordAdapter implements OutboxRepository {
     return this.locking.execute(`event-outbox-idempotency:${idempotencyKey}`, async () => {
       const existing = await this.findByIdempotencyKey(idempotencyKey)
       if (existing) {
-        if (canonicalEventSemanticFingerprint(existing.envelope) !== canonicalEventSemanticFingerprint(event))
+        if (
+          canonicalEventSemanticFingerprint(existing.envelope) !==
+          canonicalEventSemanticFingerprint(event)
+        )
           throw new Error("Idempotency key collision: canonical event payload differs")
         return existing
       }

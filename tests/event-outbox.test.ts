@@ -165,7 +165,8 @@ describe("DEV-11 persisted event and native replay correlation", () => {
       type: "com.baobab-platform.trade.order.placed.v1",
       subject: "commerce-order/dev11-legacy",
       time: "2026-09-08T00:00:00.000Z",
-      dataschema: "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
+      dataschema:
+        "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
       correlationid: context.correlationId,
       idempotencykey: "dev11-legacy",
       data: { order_reference: "dev11-legacy", currency: "UGX", total_minor: 100 },
@@ -174,27 +175,24 @@ describe("DEV-11 persisted event and native replay correlation", () => {
     expect(canonicalEventFingerprint(legacy)).toMatch(/^[0-9a-f]{64}$/)
   })
 
-
   it("attaches one W3C trace to the event at original business creation", () => {
     const logged = console.info
     console.info = () => undefined
     try {
       let emitted: BaobabCloudEvent | undefined
-      enterHttpTrace(
-        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-        () => {
-          emitted = createTenantTradeEvent(context, {
-            id: "22222222-2222-4222-8222-222222222222",
-            type: "com.baobab-platform.trade.order.placed.v1",
-            subject: "commerce-order/gate13-order",
-            time: "2026-09-08T00:00:00.000Z",
-            dataschema: "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
-            correlationid: context.correlationId,
-            idempotencykey: "gate13:order:accepted",
-            data: { order_reference: "gate13-order", currency: "UGX", total_minor: 1250000 },
-          })
-        },
-      )
+      enterHttpTrace("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", () => {
+        emitted = createTenantTradeEvent(context, {
+          id: "22222222-2222-4222-8222-222222222222",
+          type: "com.baobab-platform.trade.order.placed.v1",
+          subject: "commerce-order/gate13-order",
+          time: "2026-09-08T00:00:00.000Z",
+          dataschema:
+            "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
+          correlationid: context.correlationId,
+          idempotencykey: "gate13:order:accepted",
+          data: { order_reference: "gate13-order", currency: "UGX", total_minor: 1250000 },
+        })
+      })
       expect(emitted?.traceparent).toMatch(/^00-4bf92f3577b34da6a3ce929d0e0e4736-[0-9a-f]{16}-01$/)
       expect(emitted?.correlationid).toBe(context.correlationId)
     } finally {
@@ -208,17 +206,22 @@ describe("DEV-11 persisted event and native replay correlation", () => {
     try {
       const repository = new MemoryOutbox()
       const original = await new TransactionalOutbox(repository).enqueue(event)
-      const retried = { ...event, traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-1111111111111111-01" }
+      const retried = {
+        ...event,
+        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-1111111111111111-01",
+      }
       // Distinct transport W3C must not create a second business effect,
       // but the first immutable stored canonical envelope digest is unchanged.
       expect((await new TransactionalOutbox(repository).enqueue(event)).id).toBe(original.id)
       expect(canonicalEventFingerprint(retried)).not.toBe(canonicalEventFingerprint(event))
       expect((await new TransactionalOutbox(repository).enqueue(retried)).id).toBe(original.id)
       expect(repository.records).toHaveLength(1)
-      await expect(new TransactionalOutbox(repository).enqueue({
-        ...event,
-        data: { ...event.data, total_minor: 999 },
-      })).rejects.toThrow(/collision/)
+      await expect(
+        new TransactionalOutbox(repository).enqueue({
+          ...event,
+          data: { ...event.data, total_minor: 999 },
+        }),
+      ).rejects.toThrow(/collision/)
       // The persisted canonical message stays unchanged after replay.
       expect(repository.records[0].envelope.traceparent).toBe(event.traceparent)
     } finally {

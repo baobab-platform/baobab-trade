@@ -95,7 +95,10 @@ export class TransactionalOutbox {
     if (!event.idempotencykey) throw new Error("Durable events require an idempotency key")
     const existing = await this.repository.findByIdempotencyKey(event.idempotencykey)
     if (existing) {
-      if (canonicalEventSemanticFingerprint(existing.envelope) !== canonicalEventSemanticFingerprint(event))
+      if (
+        canonicalEventSemanticFingerprint(existing.envelope) !==
+        canonicalEventSemanticFingerprint(event)
+      )
         throw new Error("Idempotency key collision: canonical event payload differs")
       return existing
     }

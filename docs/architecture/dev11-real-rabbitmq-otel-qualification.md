@@ -9,12 +9,13 @@ independently observed. No staging/production approval or PR merges.
 The **Trade-owned** Medusa event-outbox module remains the authority for
 `event_outbox` persistence, original event/semantic digest, idempotency and
 the per-record lease. The new separately executable Trade-owned
-`scripts/dev11_rabbit_dispatcher.py` *only* dispatches rows already committed
+`scripts/dev11_rabbit_dispatcher.py` _only_ dispatches rows already committed
 by that Medusa module. Its Python 3.14 packaging is explicit and isolated from
 the Node24 Medusa compatibility/dependency lock. No order creation, tenant
 grant, or iDempiere database mutation originates from this worker.
 
 The publisher:
+
 1. Selects registered canonical fact types, claims a due PostgreSQL row with
    `FOR UPDATE SKIP LOCKED`, lease and attempt fence.
 2. Validates the immutable event identity before signing its complete original
@@ -88,7 +89,7 @@ remains distinct: it proves durable retry/dead-letter for a deliberately
 unavailable publisher, not RabbitMQ delivery.
 
 **The complete L4-OPS-01 vertical is still incomplete:** a real authenticated
-BFF→IAM→CP authorised commitment must create the *same* native Trade
+BFF→IAM→CP authorised commitment must create the _same_ native Trade
 business fact and outbox event; real ERP inbound and a running iDempiere 13
 must exercise current actor/market/mandate checks, native POReference adoption,
 a genuine engine effect, second-company isolation, and crash/replay

@@ -50,13 +50,18 @@ export default async function ({ container }: ExecArgs): Promise<void> {
       type: "com.baobab-platform.trade.order.placed.v1",
       subject: "commerce-order/dev11-test",
       time: new Date().toISOString(),
-      dataschema: "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
+      dataschema:
+        "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
       correlationid: correlation,
       causationid: randomUUID(),
       idempotencykey: "dev11-native-pg:" + eventId,
       traceparent: sourceTrace,
-      data: { canonical_entity_id: "canonical:order:dev11-test", commerce_reference: "dev11-test",
-              projection_kind: "ORDER", projection_status: "PENDING" },
+      data: {
+        canonical_entity_id: "canonical:order:dev11-test",
+        commerce_reference: "dev11-test",
+        projection_kind: "ORDER",
+        projection_status: "PENDING",
+      },
     },
   )
   ensure(isValidCloudEvent(event), "DEV11_EVENT_CONTRACT_INVALID")
@@ -68,8 +73,10 @@ export default async function ({ container }: ExecArgs): Promise<void> {
   const created = await outbox.enqueue(event)
   try {
     const persisted = await repository.findByIdempotencyKey(idempotencyKey)
-    ensure(persisted?.eventId === eventId && persisted.envelope.traceparent === sourceTrace,
-      "DEV11_POSTGRES_TRACE_PROVENANCE_MISSING")
+    ensure(
+      persisted?.eventId === eventId && persisted.envelope.traceparent === sourceTrace,
+      "DEV11_POSTGRES_TRACE_PROVENANCE_MISSING",
+    )
     const replay = await outbox.enqueue(event)
     ensure(replay.id === created.id, "DEV11_EXACT_REPLAY_NOT_IDEMPOTENT")
 
@@ -107,16 +114,20 @@ export default async function ({ container }: ExecArgs): Promise<void> {
         if (limit < 1) return []
         const row = await repository.findByIdempotencyKey(idempotencyKey)
         if (!row) return []
-        const due = ((row.status === "PENDING" || row.status === "RETRY") &&
-          row.nextAttemptAt <= now) || (row.status === "PUBLISHING" &&
-          row.leaseExpiresAt !== undefined && row.leaseExpiresAt <= now)
+        const due =
+          ((row.status === "PENDING" || row.status === "RETRY") && row.nextAttemptAt <= now) ||
+          (row.status === "PUBLISHING" &&
+            row.leaseExpiresAt !== undefined &&
+            row.leaseExpiresAt <= now)
         return due ? [row] : []
       },
       claim: (id, now, attempt, expiry) => {
         ensure(id === created.id, "DEV11_FOREIGN_OUTBOX_CLAIM_REFUSED")
         return repository.claim(id, now, attempt, expiry)
       },
-      markPublished: () => { throw new Error("DEV11_NO_REAL_BROKER_SUCCESS") },
+      markPublished: () => {
+        throw new Error("DEV11_NO_REAL_BROKER_SUCCESS")
+      },
       markRetry: (id, when, cause) => {
         ensure(id === created.id, "DEV11_FOREIGN_RETRY_REFUSED")
         return repository.markRetry(id, when, cause)
@@ -135,25 +146,33 @@ export default async function ({ container }: ExecArgs): Promise<void> {
     const start = new Date(Date.now() + 30_000)
     const first = await dispatcher.dispatchDue(start)
     const retried = await repository.findByIdempotencyKey(idempotencyKey)
-    ensure(first.some((row) => row.id === created.id && row.status === "RETRY") &&
-      retried?.status === "RETRY" && retried.attemptCount === 1,
-      "DEV11_POSTGRES_RETRY_NOT_DURABLE")
+    ensure(
+      first.some((row) => row.id === created.id && row.status === "RETRY") &&
+        retried?.status === "RETRY" &&
+        retried.attemptCount === 1,
+      "DEV11_POSTGRES_RETRY_NOT_DURABLE",
+    )
 
     const second = await dispatcher.dispatchDue(new Date(start.getTime() + 2_000))
     const terminal = await repository.findByIdempotencyKey(idempotencyKey)
-    ensure(second.some((row) => row.id === created.id && row.status === "DEAD_LETTER") &&
-      terminal?.status === "DEAD_LETTER" && terminal.attemptCount === 2 &&
-      terminal.envelope.traceparent === sourceTrace &&
-      reconcileOutboxRecord(terminal).status === "ACTION_REQUIRED" &&
-      publisherCalls === 2,
-      "DEV11_FAILURE_DIAGNOSIS_NOT_DURABLE")
+    ensure(
+      second.some((row) => row.id === created.id && row.status === "DEAD_LETTER") &&
+        terminal?.status === "DEAD_LETTER" &&
+        terminal.attemptCount === 2 &&
+        terminal.envelope.traceparent === sourceTrace &&
+        reconcileOutboxRecord(terminal).status === "ACTION_REQUIRED" &&
+        publisherCalls === 2,
+      "DEV11_FAILURE_DIAGNOSIS_NOT_DURABLE",
+    )
 
     // Receipt deliberately records failure-mode assertions, never a delivery.
-    container.resolve("logger").info(
-      "DEV11_REAL_POSTGRES_OUTBOX_REPLAY_RETRY_DEAD_LETTER_PASS; " +
-      "BROKER_SUCCESS_NOT_OBSERVED; CONSUMER_EFFECT_NOT_OBSERVED; " +
-      "PROTECTED_ACCEPTANCE_FALSE",
-    )
+    container
+      .resolve("logger")
+      .info(
+        "DEV11_REAL_POSTGRES_OUTBOX_REPLAY_RETRY_DEAD_LETTER_PASS; " +
+          "BROKER_SUCCESS_NOT_OBSERVED; CONSUMER_EFFECT_NOT_OBSERVED; " +
+          "PROTECTED_ACCEPTANCE_FALSE",
+      )
   } finally {
     // Disposable development database; no domain business record is modified.
     await service.deleteEventOutboxes([created.id])

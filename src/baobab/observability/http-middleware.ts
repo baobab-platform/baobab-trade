@@ -1,8 +1,4 @@
-import type {
-  MedusaNextFunction,
-  MedusaRequest,
-  MedusaResponse,
-} from "@medusajs/framework/http"
+import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { enterHttpTrace } from "./tracing"
 
 /** Actual Medusa HTTP middleware, not a duplicated test HTTP server.
