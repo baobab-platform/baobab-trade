@@ -81,7 +81,7 @@ def _normalised_envelope(envelope: Any, event_id: str, tenant_id: str,
     if (not isinstance(data.get("legal_entity_id"), str)
             or not isinstance(data.get("currency"), str)
             or not isinstance(envelope.get("traceparent"), str)
-            or not re.fullmatch(r"00-[0-9a-f]{32}-[0-9a-f]{16}-0[1-9a-f]", envelope["traceparent"])):
+            or not re.fullmatch(r"00-(?!0{32})[0-9a-f]{32}-(?!0{16})[0-9a-f]{16}-0[01]", envelope["traceparent"])):
         _refuse("EVENT_BUSINESS_CONTEXT_NOT_PROVEN")
     return order_id
 
