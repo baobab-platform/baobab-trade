@@ -180,6 +180,34 @@ repository formatting check and the complete Medusa build including the
 standalone authority/schema asset check. These Node 24 source/build checks
 do not replace the final-head PostgreSQL 17 CI or connected acceptance.
 
+### Lease expiry across native source reads
+
+The composition now revalidates the original context, consequential-operation,
+buyer and seller receipt leases after acquiring the spend/policy locks and
+again after asynchronous final native valuation/payload/currency readback.
+An expired proof throws before outbox persistence, even if a different receipt
+has a later expiry. The native owner also rechecks the fresh IAM/CP readback
+lease after all ledger/idempotency work and its final transaction-XID read,
+immediately before returning control to the Order Module for commit. It does
+not extend a lease or turn a stale observation into a new authority decision;
+an earlier original lease still takes precedence over a newer readback.
+
+Owner-boundary unit negatives cover expiry during source reads, final ledger
+work and the last XID query, expiry while waiting for the spend lock, and each
+original lease expiring before outbox publication. They assert refusal and
+exception propagation through the owner. Their native/ledger ports are mocks:
+the existing PostgreSQL 17 runtime proofs establish real owner rollback, while
+live IAM/CP readback and a genuine non-draft buyer transaction remain pending.
+This bounds acceptance of an observed lease; it does not establish synchronous
+distributed revocation or a transaction across IAM, CP and Medusa.
+
+The follow-up local source validation passes 1,026 tests across 123 files,
+strict type checking, zero-warning lint and repository formatting. A shared
+explicitly synthetic fixture keeps the composition and owner-boundary unit
+facts consistent without introducing a second authority or native provider.
+The complete Medusa build and standalone authority/schema asset verification
+also pass; final-head native runtime CI remains required.
+
 Pending acceptance therefore includes a concrete governed native cart
 reader, a real live IAM/CP readback provider, a first genuine **non-draft**
 buyer-commit Medusa order under its seller and Decision 9 fences, complete

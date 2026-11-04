@@ -8,7 +8,10 @@ import {
 /** Pure refusal contract only. This fixture does not simulate issuer/CP success. */
 const NOW = Date.parse("2026-11-04T19:00:15.000Z")
 const original = {
+  context: { expires_at: new Date(NOW + 10_000).toISOString() },
+  operationDecision: { expiresAt: new Date(NOW + 10_000).toISOString() },
   receipt: {
+    expires_at: new Date(NOW + 10_000).toISOString(),
     tenant_id: "tn_testonly01",
     actor_principal_id: "principal_01",
     canonical_organisation_id: "organisation_01",
@@ -26,6 +29,7 @@ const original = {
     spend_hold_revision: 2,
   },
   seller: {
+    lease_expires_at: new Date(NOW + 10_000).toISOString(),
     binding_id: "f3c0e94d-47a5-4f80-8bc6-965ca3f5e3ab",
     binding_version: 2,
     mandate_id: "9dba8f7d-3a11-4ee2-924f-b37a84bf7151",

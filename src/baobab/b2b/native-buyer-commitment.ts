@@ -275,6 +275,9 @@ export async function commitAuthorizedNativeBuyerOrder(
   if (!UUID.test(eventId)) return { outcome: "REFUSED", reason: "NATIVE_EVENT_ID_INVALID" }
 
   const result = await deps.spend.commitWithMutation(command, async (db) => {
+    // Waiting for the reservation/policy locks may exhaust a shorter context
+    // or operation lease even while the buyer receipt itself remains valid.
+    requireCommitment(p, request, (deps.now ?? Date.now)())
     // The receipt insert, Medusa native write, outbox and its consumption are
     // deliberately performed in the *existing* spend COMMIT transaction.
     await db.query(
@@ -295,6 +298,10 @@ export async function commitAuthorizedNativeBuyerOrder(
       throw new Error("NATIVE_FINAL_VALUATION_CHANGED")
     const data = await deps.native.readErpConsequence(db, request.nativeOrderId)
     const currencyExponent = await deps.native.readCurrencyExponent(db, request.nativeOrderId)
+    // Native pricing and source readback are asynchronous. A pre-write ALLOW
+    // must not survive its lease merely because those reads started in time.
+    // Throw through the owning transaction; never renew the original proof.
+    requireCommitment(p, request, (deps.now ?? Date.now)())
     // Fail closed on the complete pinned ERP v1 semantic envelope *before*
     // persisting the outbox. This is a shape check, not native-source proof;
     // the Medusa owner must still independently reread the genuine order.

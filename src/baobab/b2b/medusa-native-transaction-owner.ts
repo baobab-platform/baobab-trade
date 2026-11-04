@@ -250,6 +250,7 @@ export async function commitMedusaNativeBuyerOrder(
               }
               const db = medusaNativeQuery(trx)
               const xid = await currentXid(db)
+              let checkedAuthority: NativeCommitAuthorityReadback | undefined
               const outcome = await deps.spend.commitWithOwnerTransaction(
                 command,
                 db,
@@ -263,6 +264,7 @@ export async function commitMedusaNativeBuyerOrder(
                     current,
                     (deps.now ?? Date.now)(),
                   )
+                  checkedAuthority = current
                   const scope = { manager, db, xid }
                   live.set(bounded, scope)
                   try {
@@ -275,6 +277,17 @@ export async function commitMedusaNativeBuyerOrder(
               )
               if ((await currentXid(db)) !== xid) {
                 throw new Error("MEDUSA_ORDER_TRANSACTION_CHANGED")
+              }
+              // The fresh readback can have a shorter lease than the original
+              // buyer/seller receipt. Include source reads and final ledger /
+              // idempotency work in that deadline before the owner may commit.
+              // Replays do not mutate and never enter the authority callback.
+              if (checkedAuthority && currentAuthority) {
+                requireCurrentNativeCommitAuthority(
+                  currentAuthority,
+                  checkedAuthority,
+                  (deps.now ?? Date.now)(),
+                )
               }
               // Never convert a native owner exception into a normal return
               // inside the transaction; only the outer catch may return REFUSED.

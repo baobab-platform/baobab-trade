@@ -53,6 +53,12 @@ export function requireCurrentNativeCommitAuthority(
   const b = original.receipt
   const s = original.seller
   const times = [Date.parse(actual?.checkedAt), Date.parse(actual?.expiresAt)]
+  const originalExpiries = [
+    Date.parse(b.expires_at),
+    Date.parse(s.lease_expires_at),
+    Date.parse(original.context.expires_at),
+    Date.parse(original.operationDecision.expiresAt),
+  ]
   if (
     !actual ||
     actual.outcome !== "ALLOW" ||
@@ -60,6 +66,8 @@ export function requireCurrentNativeCommitAuthority(
     actual.membershipStatus !== "ACTIVE" ||
     actual.sellerMandateStatus !== "ACTIVE" ||
     !Number.isFinite(now) ||
+    // A fresh readback cannot extend an earlier context or receipt lease.
+    !originalExpiries.every((expiry) => Number.isFinite(expiry) && now < expiry) ||
     !times.every(Number.isFinite) ||
     times[0] > now ||
     now >= times[1] ||
