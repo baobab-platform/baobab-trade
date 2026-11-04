@@ -311,10 +311,12 @@ export async function commitAuthorizedNativeBuyerOrder(
       !Number.isSafeInteger(currencyExponent) ||
       currencyExponent < 0 ||
       currencyExponent > 9 ||
-      exactMoneyMinor(data.totals.grand_total.amount, currencyExponent) !== BigInt(b.amount_minor) ||
+      exactMoneyMinor(data.totals.grand_total.amount, currencyExponent) !==
+        BigInt(b.amount_minor) ||
       Object.values(data.totals).some((money) => money.currency !== b.currency) ||
       data.lines.some(
-        (line) => line.unit_price.currency !== b.currency || line.line_total.currency !== b.currency,
+        (line) =>
+          line.unit_price.currency !== b.currency || line.line_total.currency !== b.currency,
       )
     )
       throw new Error("NATIVE_ERP_BUSINESS_FACTS_NOT_VERIFIED")

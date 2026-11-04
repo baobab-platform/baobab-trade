@@ -276,7 +276,10 @@ describe("CAA-06b proposed owner transaction composition (source-only, not activ
         const data = await original(db, id)
         return {
           ...data,
-          totals: { ...data.totals, grand_total: { amount: wrong.amount, currency: wrong.currency } },
+          totals: {
+            ...data.totals,
+            grand_total: { amount: wrong.amount, currency: wrong.currency },
+          },
         }
       }
       h.deps.spend.commitWithMutation = async (_command, mutation) => {
@@ -321,9 +324,9 @@ describe("CAA-06b proposed owner transaction composition (source-only, not activ
       reason: "TRANSACTION_CHANGED",
     })
     expect(h.queries.some((sql) => sql.includes("INSERT INTO event_outbox"))).toBe(false)
-    expect(h.queries.some((sql) => sql.includes("INSERT INTO trade_buyer_authority_consumption"))).toBe(
-      false,
-    )
+    expect(
+      h.queries.some((sql) => sql.includes("INSERT INTO trade_buyer_authority_consumption")),
+    ).toBe(false)
   })
 
   it("refuses if native final pricing diverges before publishing or consumption", async () => {

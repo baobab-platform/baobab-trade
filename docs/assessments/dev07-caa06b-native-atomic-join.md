@@ -82,6 +82,22 @@ persisted currency exponent. Unknown precision, nonzero fractional excess,
 foreign currency or mismatched total must abort the same spend transaction;
 currency precision is never guessed or supplied by a browser.
 
+### Required next engineering increment: genuine Medusa transaction ownership
+
+The protected same-XID check deliberately requires one PostgreSQL transaction
+for the native Medusa order and seller receipt, the Trade spend COMMIT and
+the canonical outbox. The current spend command owns an independent `pg`
+transaction, whereas Medusa's documented Order Module uses its
+`sharedContext.transactionManager` to compose module operations. Invoking
+a standalone order workflow/module write from the current callback would
+open an independently managed transaction and **must not** be counted as
+the native transaction-owner adapter. The next implementation must bind
+the Medusa native order write and the ledger/outbox operations to **the
+same actual engine-owned transaction manager and connection**, enforce
+the existing SQL XID/read-back, and prove native rollback and replay
+under current IAM/CP authorisation. It must not switch the gate from
+SHADOW to ENFORCED to obtain a synthetic success.
+
 ## Explicitly incomplete / not qualified
 
 This PR **does not include a real Medusa 2.21 NativeMedusaTransactionOwner**,
