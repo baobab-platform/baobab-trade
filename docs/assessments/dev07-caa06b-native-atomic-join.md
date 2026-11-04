@@ -1,6 +1,6 @@
 # DEV-07 / DEV-11 — CAA-06b native buyer commitment and ERP origin gate
 
-**Status: SOURCE IMPLEMENTATION ONLY — NOT CONNECTED-QUALIFIED — DO NOT MERGE / ACTIVATE**
+**Status: NATIVE OWNER ADAPTER + DISPOSABLE TESTS IMPLEMENTED — CONNECTED ACCEPTANCE NOT QUALIFIED — DO NOT MERGE / ACTIVATE**
 
 **Governing**: EA v2.3 / EA-DEV DEV-07, DEV-09, DEV-11 and DEV-14;
 ADR-SHARED-039 (seller authority and TA-07 native fence);
@@ -100,11 +100,23 @@ SHADOW to ENFORCED to obtain a synthetic success.
 
 ## Explicitly incomplete / not qualified
 
-This PR **does not include a real Medusa 2.21 NativeMedusaTransactionOwner**,
-and does not activate a checkout route. A Medusa workflow that opens another
-database transaction cannot be used to satisfy the interface: that would
-invalidate the native-XID proof even if the broker subsequently succeeds.
-No hand-written synthetic order is an acceptable substitute.
+This PR now contains a pinned Medusa 2.21.2 `Order Module`
+transaction-owner adapter (`medusa-native-transaction-owner.ts`) and a
+disposable Medusa runtime qualification, but **the positive same-XID native
+buyer commitment is not yet independently qualified**. The adapter requires
+two real source-owned providers: `NativeMedusaOrderSource` must build
+`createOrders` input from a governed cart and re-read **all final obligations**
+from one native snapshot, and `recheckAuthorityNow` must actually perform
+current IAM/CP/Trade buyer and seller readback inside the spend transaction.
+Neither can be substituted with the source-only synthetic unit fixtures.
+
+The pinned `OrderModuleService.baseRepository_.transaction` and
+`createOrders(..., {transactionManager})` compatibility seam was inspected
+against the actual Medusa v2.21.2 source. It fails closed if absent; actual
+runtime use still requires the named CI receipt. The native writer refuses a
+separately committed Medusa order through its PostgreSQL MVCC XID guard.
+No hand-written synthetic order is an acceptable substitute. A separate
+checkout route was **not** activated.
 
 The authoritative buyer order-operation decision must be issued after the
 current IAM/CP and Trade policy readback. A buyer-context.resolve ALLOW is
@@ -118,6 +130,43 @@ ERP commerce-order-consequence schema and actual Medusa order/line records.
 The #188 dispatcher and #125 ERP consumer must receive the exact persisted
 event ID and verify the native iDempiere order and genuine accounting/inventory
 consequences, not merely inbox admission.
+
+### 4 November implementation follow-through — Medusa-owned transaction
+
+The Decision 5 spend ledger can now execute in an **already active native
+transaction** via `commitWithOwnerTransaction`. It never opens, commits,
+releases or rolls back the Order Module's connection. A source-failure or
+revocation exception propagates through the native transaction callback so
+the owner must rollback all local effects. Replays are read-only and do not
+re-invoke the writer. The PostgreSQL 17 regression adds native-connection
+visibility, same-XID ledger/command/probe, rollback, idempotent replay and
+**two-owner concurrent double-spend refusal** cases.
+
+The new `regression:medusa-native-owner` runs `medusa exec` against the
+**real pinned Order Module and disposable PostgreSQL 17**. It requires a
+native draft order and its line records to share the manager XID, a vetoed
+native order to roll back, an independent readback after commit, and native
+cleanup. It emits an original `dev07-native-medusa-owner` artifact that
+explicitly records `iam_cp_operation_authority_proven=false` and
+`buyer_spend_and_native_order_same_xid_proven=false`. A passing test cannot
+be reinterpreted as an ENFORCED B2B order or native outbox qualification.
+
+`requireCurrentNativeCommitAuthority` additionally checks a fresh,
+bounded, operation-specific IAM/CP/Trade readback under the spend lock and
+refuses changed Principal/membership, seller mandate/binding, Market,
+version, valuation, reservation, expiry or non-source-backed evidence.
+Its source tests are **negative policy regressions only**; the actual
+issuer/CP-backed readback is still a required connected dependency.
+The final native snapshot is evaluated once per owning transaction and
+shared by the valuation and ERP payload checks.
+
+Pending acceptance therefore includes a concrete governed native cart
+reader, a real live IAM/CP readback provider, a first genuine **non-draft**
+buyer-commit Medusa order under its seller and Decision 9 fences, complete
+source-row MVCC joins, deliberate crash and revocation windows, the same
+canonical event through RabbitMQ and iDempiere, exported lineage, original
+evidence custody and independent teardown. **Do not activate ENFORCED
+without the real connected permission and complete operator review.**
 
 ### Mandatory connected acceptance
 
