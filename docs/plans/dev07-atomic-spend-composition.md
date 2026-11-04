@@ -29,3 +29,22 @@ that the probe mutation, reservation status, ledger and command record came from
 one transaction. The probe is explicitly a test table, not an order, authority
 receipt or provider acceptance result. Existing native fence and TA-08 regressions
 remain mandatory and their historical acceptance scope is unchanged.
+
+## Medusa-owned transaction entry (DEV-07 CAA-06b)
+
+`commitWithOwnerTransaction(command, owner, mutation)` reuses the identical
+Decision 5 ledger, policy lock order, receipt and idempotency implementation,
+but **never** starts, commits, rolls back or releases `owner`. It is reserved
+for a real Medusa Order Module transaction manager; the caller is responsible
+for unconditional rollback on *every* exception. All refusals propagate out of
+the owner callback. A native owner that supplies an autocommit SQL connection
+fails the before/after PostgreSQL transaction-XID check. An idempotent replay
+performs no native write. This is not a new messaging framework or standalone
+checkout route.
+
+The unchanged PostgreSQL 17 CI regression now proves that a second connection
+cannot observe the uncommitted native-owner probe, that owner rollback removes
+its ledger/command/probe writes, that callback failure propagates, that the
+final owner commit shares the probe/ledger/command MVCC XID and that replay
+does not execute the mutation. These remain isolated capacity/transaction
+primitives, not the actual Medusa 2.21 Order Module or IAM/CP acceptance.

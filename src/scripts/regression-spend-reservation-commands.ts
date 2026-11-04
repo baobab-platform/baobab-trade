@@ -615,6 +615,111 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
     "same-transaction mutation and spend; callback/deferred refusal rolls back; replay writes once",
   )
 
+  // The native Order Module owns the transaction. The spend command must
+  // join its connection without issuing BEGIN/COMMIT or swallowing failures.
+  const ownedOrg = await organisation("owned")
+  const ownedMember = await membership(ownedOrg, "owned")
+  const ownedBudget = await budget(ownedOrg, "MEMBERSHIP", ownedMember, 80_000n, "owned")
+  const ownedSubmission = submission(ownedOrg, ownedMember, 12_345n, "owned")
+  const ownedReservation = applied(await commands.submit(ownedSubmission))
+  const ownedCommand = commitOf(ownedOrg, ownedReservation.reservationId, ownedSubmission, {
+    commitmentReference: `order_owner_${run}`,
+  })
+  const outside = await pool.connect()
+  const ownerDb = await pool.connect()
+  let ownerAttempts = 0
+  const ownerWrite = async (db: Pick<PgClient, "query">) => {
+    ownerAttempts += 1
+    await db.query(
+      `INSERT INTO dev07_atomic_spend_probe (id,transaction_id,unique_value)
+       VALUES ($1,pg_current_xact_id()::text,$1)`,
+      [ownedCommand.commitmentReference],
+    )
+  }
+  try {
+    await ownerDb.query("BEGIN")
+    assert.equal(
+      (await commands.commitWithOwnerTransaction(ownedCommand, ownerDb, ownerWrite)).outcome,
+      "APPLIED",
+    )
+    // Only the transaction owner can see uncommitted business writes.
+    assert.equal(
+      (await ownerDb.query("SELECT 1 FROM dev07_atomic_spend_probe WHERE id=$1", [
+        ownedCommand.commitmentReference,
+      ])).rowCount,
+      1,
+    )
+    assert.equal(
+      (await outside.query("SELECT 1 FROM dev07_atomic_spend_probe WHERE id=$1", [
+        ownedCommand.commitmentReference,
+      ])).rowCount,
+      0,
+    )
+    await ownerDb.query("ROLLBACK")
+    assert.equal(
+      (await sql("SELECT status FROM b2b_spend_reservation WHERE id=$1", [
+        ownedReservation.reservationId,
+      ])).rows[0].status,
+      "ACTIVE",
+    )
+    assert.equal(
+      await count('SELECT 1 FROM "b2b_spend_command" WHERE "idempotency_key"=$1', [
+        ownedCommand.idempotencyKey,
+      ]),
+      0,
+    )
+    // Throwing from the mutation is a real refusal. The owner, not the
+    // spend primitive, rolls back its native transaction.
+    await ownerDb.query("BEGIN")
+    await assert.rejects(
+      commands.commitWithOwnerTransaction(ownedCommand, ownerDb, async (db) => {
+        await ownerWrite(db)
+        throw new Error("native order veto: must rollback owner")
+      }),
+      /native order veto/,
+    )
+    await ownerDb.query("ROLLBACK")
+    assert.deepEqual(await balance(ownedBudget), [0n, 12_345n])
+    await ownerDb.query("BEGIN")
+    assert.equal(
+      (await commands.commitWithOwnerTransaction(ownedCommand, ownerDb, ownerWrite)).outcome,
+      "APPLIED",
+    )
+    await ownerDb.query("COMMIT")
+    const xids = await sql(
+      `SELECT p.transaction_id, p.xmin::text AS mutation,
+         r.xmin::text AS reservation, c.xmin::text AS command, l.xmin::text AS ledger
+       FROM dev07_atomic_spend_probe p
+       JOIN b2b_spend_reservation r ON r.id=$2
+       JOIN b2b_spend_command c ON c.idempotency_key=$3
+       JOIN b2b_spend_ledger_entry l ON l.reservation_id=r.id AND l.entry_kind='COMMIT'
+       WHERE p.id=$1`,
+      [
+        ownedCommand.commitmentReference,
+        ownedReservation.reservationId,
+        ownedCommand.idempotencyKey,
+      ],
+    )
+    assert.equal(xids.rowCount, 1)
+    assert.ok(
+      [xids.rows[0].mutation, xids.rows[0].reservation, xids.rows[0].command, xids.rows[0].ledger]
+        .every((xid) => xid === xids.rows[0].transaction_id),
+    )
+    await ownerDb.query("BEGIN")
+    assert.equal(
+      (await commands.commitWithOwnerTransaction(ownedCommand, ownerDb, ownerWrite)).outcome,
+      "REPLAYED",
+    )
+    await ownerDb.query("COMMIT")
+    assert.equal(ownerAttempts, 3, "replay must not enter the native writer")
+    pass("external Medusa-owned transaction: visibility, rollback, same XID and replay")
+  } finally {
+    // No transaction from the owner may survive an exception in CI.
+    await ownerDb.query("ROLLBACK").catch(() => undefined)
+    ownerDb.release()
+    outside.release()
+  }
+
   return passed
 }
 

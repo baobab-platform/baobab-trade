@@ -244,9 +244,32 @@ export class PostgresSpendReservationCommands {
     return this.commitCapacity(command, mutation)
   }
 
+  /**
+   * CAA-06b: compose a Medusa-native transaction's EXISTING connection with
+   * Decision 5 capacity, origin, outbox and receipt writes. This method never
+   * opens, commits, releases or rolls back the connection. The native owner
+   * must supply a real, live transaction manager; it MUST roll the *whole*
+   * transaction back on any thrown refusal, SQL error or deferred constraint.
+   *
+   * In contrast to the legacy command API, errors propagate instead of
+   * becoming a success-shaped business result inside an open transaction.
+   * Idempotent replay is read-only and never re-enters the native writer.
+   */
+  commitWithOwnerTransaction(
+    command: CommitCommand,
+    owner: PgClient,
+    mutation: (db: Pick<PgClient, "query">) => Promise<void>,
+  ): Promise<SpendCommandResult> {
+    if (typeof mutation !== "function" || typeof owner?.query !== "function") {
+      throw new TypeError("a native transaction and database mutation are required")
+    }
+    return this.commitCapacity(command, mutation, owner)
+  }
+
   private commitCapacity(
     command: CommitCommand,
     mutation?: (db: Pick<PgClient, "query">) => Promise<void>,
+    owner?: PgClient,
   ): Promise<SpendCommandResult> {
     assertReservationCommand(command)
     if (
@@ -318,7 +341,7 @@ export class PostgresSpendReservationCommands {
         status: "COMMITTED" as const,
         holdRevision: reservation.hold_revision,
       }
-    })
+    }, owner)
   }
 
   /** Release every unused hold on rejection or cancellation. */
@@ -679,20 +702,32 @@ export class PostgresSpendReservationCommands {
       holdRevision: number
       approvalRevalidationRequired?: boolean
     }>,
+    owner?: PgClient,
   ): Promise<SpendCommandResult> {
     const key = (request as { idempotencyKey: string }).idempotencyKey
     const actor = (request as { actorPrincipalId: string }).actorPrincipalId
     const digest = requestDigest(kind, request)
     let db: PgClient
-    try {
-      db = await this.pool.connect()
-    } catch {
-      return { outcome: "REFUSED", reason: "SOURCE_UNAVAILABLE" }
+    if (owner) {
+      db = owner
+    } else {
+      try {
+        db = await this.pool.connect()
+      } catch {
+        return { outcome: "REFUSED", reason: "SOURCE_UNAVAILABLE" }
+      }
     }
     try {
-      await db.query("BEGIN")
+      if (!owner) await db.query("BEGIN")
       await db.query("SET LOCAL lock_timeout = '3s'")
       await db.query("SET LOCAL statement_timeout = '5s'")
+      // A transaction manager handed in by Medusa MUST remain on the very
+      // same PostgreSQL XID for all ledger and native writes. An implicit
+      // autocommit connection changes XID and is refused rather than silently
+      // claiming a joined transaction.
+      const ownerXid = owner
+        ? String((await db.query("SELECT pg_current_xact_id()::text AS xid")).rows[0]?.xid)
+        : null
       await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
         `spend-command/${key}`,
       ])
@@ -702,7 +737,7 @@ export class PostgresSpendReservationCommands {
         [key],
       )
       if (prior.rows[0]) {
-        await db.query("ROLLBACK")
+        if (!owner) await db.query("ROLLBACK")
         const row = prior.rows[0]
         if (
           row.command_kind !== kind ||
@@ -729,9 +764,21 @@ export class PostgresSpendReservationCommands {
           actor,
         ],
       )
-      await db.query("COMMIT")
+      if (owner) {
+        const afterXid = String(
+          (await db.query("SELECT pg_current_xact_id()::text AS xid")).rows[0]?.xid,
+        )
+        if (!ownerXid || ownerXid === "undefined" || afterXid !== ownerXid) {
+          throw new Error("MEDUSA_NATIVE_TRANSACTION_CONNECTION_CHANGED")
+        }
+      } else {
+        await db.query("COMMIT")
+      }
       return { outcome: "APPLIED", ...result }
     } catch (error) {
+      // Throw *inside* the owner's transaction callback: converting a refusal
+      // into a return value here would let Medusa commit a partial order.
+      if (owner) throw error
       await db.query("ROLLBACK").catch(() => undefined)
       if (error instanceof Refused) {
         return error.detail
@@ -741,7 +788,7 @@ export class PostgresSpendReservationCommands {
       if (error instanceof Conflict) return { outcome: "CONFLICT" }
       return { outcome: "REFUSED", reason: refusalFor(error) }
     } finally {
-      db.release()
+      if (!owner) db.release()
     }
   }
 }
