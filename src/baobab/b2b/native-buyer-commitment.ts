@@ -305,5 +305,13 @@ export async function commitAuthorizedNativeBuyerOrder(
   })
   if (result.outcome === "APPLIED") return { outcome: "COMMITTED", orderId: request.nativeOrderId, eventId }
   if (result.outcome === "REPLAYED") return { outcome: "REPLAYED", orderId: request.nativeOrderId, eventId: null }
-  return { outcome: "REFUSED", reason: result.outcome === "CONFLICT" ? "IDEMPOTENCY_CONFLICT" : result.reason }
+  return {
+    outcome: "REFUSED",
+    reason:
+      result.outcome === "CONFLICT"
+        ? "IDEMPOTENCY_CONFLICT"
+        : result.outcome === "REFUSED"
+          ? result.reason
+          : "UNEXPECTED_SPEND_RESULT",
+  }
 }
