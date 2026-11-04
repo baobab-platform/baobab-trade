@@ -116,7 +116,10 @@ export type NativeCommitDependencies = {
   /** Server-side authoritative IAM/CP/Trade policy resolution, never request data. */
   authorizeNow(): Promise<AuthorizedCommitment>
   spend: {
-    commitWithMutation(command: CommitCommand, mutation: (db: Query) => Promise<void>): Promise<SpendCommandResult>
+    commitWithMutation(
+      command: CommitCommand,
+      mutation: (db: Query) => Promise<void>,
+    ): Promise<SpendCommandResult>
   }
   native: NativeMedusaTransactionOwner
   now?: () => number
@@ -144,15 +147,19 @@ const idempotency = /^[A-Za-z0-9._:-]{16,128}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function requireCommitment(
-  p: AuthorizedCommitment, request: NativeCommitRequest, now: number,
+  p: AuthorizedCommitment,
+  request: NativeCommitRequest,
+  now: number,
 ): { receipt: BuyerReceipt; seller: OrderAuthorityReceipt; valuation: BuyerCommitmentValuation } {
   const { receipt: b, seller: s, context: c, valuation: v, operationDecision: d } = p
   // Schema conformance cannot replace a live authorisation readback, but
   // an unregistered or stale receipt must never reach native persistence.
   if (!buyerAuthorityReceiptSchema(b)) throw new Error("BUYER_RECEIPT_NOT_CANONICAL")
   if (
-    !c || c.decision.outcome !== "ALLOW" ||
-    !d || d.outcome !== "ALLOW" ||
+    !c ||
+    c.decision.outcome !== "ALLOW" ||
+    !d ||
+    d.outcome !== "ALLOW" ||
     d.decisionId !== b.decision_id ||
     d.operation !== b.operation ||
     d.principalId !== b.actor_principal_id ||
@@ -196,7 +203,8 @@ function requireCommitment(
     b.valuation_digest !== v.valuation_digest ||
     b.amount_minor !== v.buyer_commitment_amount_minor ||
     !SHA.test(v.valuation_digest)
-  ) throw new Error("BUYER_COMMITMENT_CHANGED_OR_UNAUTHORISED")
+  )
+    throw new Error("BUYER_COMMITMENT_CHANGED_OR_UNAUTHORISED")
   return { receipt: b, seller: s, valuation: v }
 }
 
@@ -226,7 +234,8 @@ export async function commitAuthorizedNativeBuyerOrder(
     b.spend_reservation_id.length < 8 ||
     !Number.isSafeInteger(b.spend_hold_revision) ||
     !UUID.test(b.receipt_id)
-  ) return { outcome: "REFUSED", reason: "NATIVE_COMMITMENT_INVALID" }
+  )
+    return { outcome: "REFUSED", reason: "NATIVE_COMMITMENT_INVALID" }
 
   const command: CommitCommand = {
     idempotencyKey: request.idempotencyKey,
@@ -259,21 +268,27 @@ export async function commitAuthorizedNativeBuyerOrder(
       final.resource_version !== b.resource_version ||
       final.resource_id !== b.resource_id ||
       final.currency !== b.currency
-    ) throw new Error("NATIVE_FINAL_VALUATION_CHANGED")
+    )
+      throw new Error("NATIVE_FINAL_VALUATION_CHANGED")
     const data = await deps.native.readErpConsequence(db, request.nativeOrderId)
     if (
       data.commerce_order_id !== request.nativeOrderId ||
       data.legal_entity_id !== s.responsible_legal_entity_id ||
       data.currency !== b.currency ||
-      !Number.isSafeInteger(data.order_version) || data.order_version < 1 ||
-      !data.customer_id || !data.lines?.length || !data.totals?.grand_total
-    ) throw new Error("NATIVE_ERP_BUSINESS_FACTS_NOT_VERIFIED")
+      !Number.isSafeInteger(data.order_version) ||
+      data.order_version < 1 ||
+      !data.customer_id ||
+      !data.lines?.length ||
+      !data.totals?.grand_total
+    )
+      throw new Error("NATIVE_ERP_BUSINESS_FACTS_NOT_VERIFIED")
     const event = createTenantTradeEvent(request.tenant, {
       id: eventId,
       type: "com.baobab-platform.trade.order.placed.v1",
       subject: "commerce-order/" + request.nativeOrderId,
       time: new Date().toISOString(),
-      dataschema: "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
+      dataschema:
+        "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
       correlationid: request.correlationId,
       causationid: b.receipt_id,
       idempotencykey: request.idempotencyKey,
@@ -288,9 +303,16 @@ export async function commitAuthorizedNativeBuyerOrder(
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,'PENDING',0,clock_timestamp())`,
       [
         "evtout_" + randomUUID().replaceAll("-", ""),
-        event.id, event.type, event.subject, b.tenant_id,
-        s.responsible_legal_entity_id, event.correlationid, event.causationid,
-        event.idempotencykey, canonicalEventFingerprint(event), JSON.stringify(event),
+        event.id,
+        event.type,
+        event.subject,
+        b.tenant_id,
+        s.responsible_legal_entity_id,
+        event.correlationid,
+        event.causationid,
+        event.idempotencykey,
+        canonicalEventFingerprint(event),
+        JSON.stringify(event),
       ],
     )
     // SQL guard verifies current membership, matching seller receipt,
@@ -299,12 +321,20 @@ export async function commitAuthorizedNativeBuyerOrder(
       `INSERT INTO trade_buyer_authority_consumption
         (receipt_id,seller_receipt_id,spend_reservation_id,operation_reference,order_id,event_id)
        VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6)`,
-      [b.receipt_id, s.receipt_id, b.spend_reservation_id,
-        b.operation_reference, request.nativeOrderId, event.id],
+      [
+        b.receipt_id,
+        s.receipt_id,
+        b.spend_reservation_id,
+        b.operation_reference,
+        request.nativeOrderId,
+        event.id,
+      ],
     )
   })
-  if (result.outcome === "APPLIED") return { outcome: "COMMITTED", orderId: request.nativeOrderId, eventId }
-  if (result.outcome === "REPLAYED") return { outcome: "REPLAYED", orderId: request.nativeOrderId, eventId: null }
+  if (result.outcome === "APPLIED")
+    return { outcome: "COMMITTED", orderId: request.nativeOrderId, eventId }
+  if (result.outcome === "REPLAYED")
+    return { outcome: "REPLAYED", orderId: request.nativeOrderId, eventId: null }
   return {
     outcome: "REFUSED",
     reason:
