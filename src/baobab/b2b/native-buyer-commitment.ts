@@ -168,6 +168,13 @@ function requireCommitment(
     !(now < Date.parse(c.expires_at)) ||
     !(now < Date.parse(s.lease_expires_at)) ||
     b.context_id !== c.context_id ||
+    c.operation !== b.operation ||
+    c.decision_id !== b.decision_id ||
+    c.policy_revision !== b.policy_revision ||
+    (c.market_id !== undefined && c.market_id !== b.market_id) ||
+    request.tenant.lifecycleStatus !== "active" ||
+    request.tenant.entitled !== true ||
+    request.tenant.productId !== "baobab-trade" ||
     b.actor_principal_id !== c.actor_principal_id ||
     b.tenant_id !== c.tenant_id ||
     b.tenant_id !== request.tenant.tenantId ||
