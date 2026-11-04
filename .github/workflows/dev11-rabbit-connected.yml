@@ -101,14 +101,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: baobab-platform/baobab-erp
-          ref: 261d99ab1665f65d4716542579723fbb8f02db7e
+          ref: 88c2cdcac6a3a2f2eaf0165e1bb5e284dbde6a0e
           path: erp-source
           persist-credentials: false
       - name: Checkout independently owned trace-query observer
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: baobab-platform/infrastructure
-          ref: 8baeaf60af627e9c2640bcceb08b1cadb631219f
+          ref: a4cc31b1806fce3d80814b82af4a1652aa11964d
           path: infrastructure-source
           persist-credentials: false
       - name: Start isolated real Jaeger v2 and OTLP Collector
