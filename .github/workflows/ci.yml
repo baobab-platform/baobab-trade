@@ -22,14 +22,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Check formatting
-        run: |
-          if ! npm run format:check; then
-            # Temporary PR-only diagnostic: show the exact pinned Prettier
-            # output without accepting unformatted source as a passing gate.
-            npm exec -- prettier --write src/scripts/regression-native-buyer-guard.ts
-            git diff -- src/scripts/regression-native-buyer-guard.ts
-            exit 1
-          fi
+        run: npm run format:check
       - name: Lint
         run: npm run lint
       - name: Type-check

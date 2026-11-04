@@ -28,7 +28,9 @@ function disposableDatabaseUrl(): string {
     !url ||
     new URL(url).pathname !== "/" + expected
   ) {
-    throw new Error("CAA-06b native guard drill requires its explicitly named disposable test database")
+    throw new Error(
+      "CAA-06b native guard drill requires its explicitly named disposable test database",
+    )
   }
   return url
 }
@@ -126,7 +128,8 @@ export async function runNativeBuyerGuardRegression(pool: Pool): Promise<Negativ
     await db.query("SET LOCAL lock_timeout = '3s'")
     await db.query("SET LOCAL statement_timeout = '5s'")
 
-    const insert = "INSERT INTO trade_buyer_authority_receipt (receipt_id,payload,evaluated_at,expires_at) VALUES ($1::uuid,$2::jsonb,$3::timestamptz,$4::timestamptz)"
+    const insert =
+      "INSERT INTO trade_buyer_authority_receipt (receipt_id,payload,evaluated_at,expires_at) VALUES ($1::uuid,$2::jsonb,$3::timestamptz,$4::timestamptz)"
     await mustRefuse(
       db,
       cases,
@@ -155,12 +158,7 @@ export async function runNativeBuyerGuardRegression(pool: Pool): Promise<Negativ
     )
     // This is only a syntactically valid payload. It is not a real issuer
     // receipt; all referenced authoritative records are deliberately absent.
-    await db.query(insert, [
-      receiptId,
-      JSON.stringify(payload),
-      evaluatedAt,
-      expiresAt,
-    ])
+    await db.query(insert, [receiptId, JSON.stringify(payload), evaluatedAt, expiresAt])
     await mustRefuse(
       db,
       cases,
