@@ -95,7 +95,9 @@
     "regression:trade-a-commit-fences": "medusa exec ./src/scripts/regression-trade-a-commit-fences.ts",
     "regression:dev07-b2b-slice": "medusa exec ./src/scripts/regression-dev07-b2b-slice.ts",
     "qualify:dev07-iam-cp": "medusa exec ./src/scripts/qualify-dev07-iam-cp.ts",
-    "regression:dev07-buyer-context": "medusa exec ./src/scripts/regression-dev07-buyer-context.ts"
+    "regression:dev07-buyer-context": "medusa exec ./src/scripts/regression-dev07-buyer-context.ts",
+    "regression:commercial-lifecycle": "medusa exec ./src/scripts/regression-commercial-lifecycle.ts",
+    "test:commercial-kernel": "node --experimental-transform-types --test scripts/check-commercial-lifecycle.mjs"
   },
   "dependencies": {
     "@medusajs/auth-oidc": "2.21.2",
