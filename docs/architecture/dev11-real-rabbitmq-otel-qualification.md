@@ -129,7 +129,7 @@ the ACTIVE scoped buyer Organisation/membership classification, and actual
 `b2b_spend_ledger_entry` COMMIT rows for the same order, with active committed
 reservations and exact membership/Organisation. The outbox, commitment, deferred
 fence verdict and spend conversion must carry the same originating PostgreSQL
-insert transaction ID, read *before* the dispatcher updates the outbox. An
+insert transaction ID, read _before_ the dispatcher updates the outbox. An
 envelope ID, trace, CP-like string or HMAC signature is never an alternative.
 
 That condition **cannot pass under the accepted Trade SQL**: the active
@@ -155,7 +155,7 @@ server-issued final valuation, current human IAM/CP buyer operation ALLOW,
 non-self-approved approvals, current membership revision, one immutable buyer
 receipt and same-transaction seller/buyer receipt consumption and ledger
 conversion. The Medusa order and its canonical `trade.order.placed` outbox
-must be created in that *same* database transaction. Retain negative tests
+must be created in that _same_ database transaction. Retain negative tests
 for wrong audience, market/Site, changed quotation, price/tax/freight,
 revocation, duplicate order, stale hold, insufficient budget, seller withdrawal,
 broker ambiguity and ERP-native posting veto.
