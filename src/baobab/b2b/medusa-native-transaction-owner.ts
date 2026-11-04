@@ -82,6 +82,32 @@ export function medusaNativeQuery(
   }
 }
 
+/**
+ * Expose the pinned native Order Module transaction for the disposable
+ * PostgreSQL 17 smoke, without opening a second node-postgres transaction.
+ * Production composition uses the same manager and SQL bridge below.
+ */
+export async function withNativeMedusaOrderTransaction<T>(
+  service: IOrderModuleService,
+  callback: (scope: {
+    manager: NativeManager
+    db: PgClient
+    xid: string
+  }) => Promise<T>,
+): Promise<T> {
+  return nativeRepository(service).transaction(async (manager) => {
+    const transaction = manager?.getTransactionContext?.()
+    if (!transaction || typeof transaction.raw !== "function") {
+      throw new Error("MEDUSA_ORDER_TRANSACTION_CONTEXT_UNAVAILABLE")
+    }
+    const db = medusaNativeQuery(transaction)
+    const xid = await currentXid(db)
+    const result = await callback({ manager, db, xid })
+    if (await currentXid(db) !== xid) throw new Error("MEDUSA_ORDER_TRANSACTION_CHANGED")
+    return result
+  })
+}
+
 type NativeOrderInput = OrderTypes.CreateOrderDTO & { id: string }
 type NativeFacts = {
   valuation: FinalNativeValuationFacts
