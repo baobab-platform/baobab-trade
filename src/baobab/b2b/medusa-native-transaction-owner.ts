@@ -116,7 +116,14 @@ export async function withNativeMedusaOrderTransaction<T>(
   })
 }
 
-type NativeOrderInput = OrderTypes.CreateOrderDTO & { id: string }
+/** Medusa's public CreateOrderDTO omits the internal persistence id/draft
+ * fields. This deliberately narrow 2.21 native-owner extension requires
+ * both explicit non-draft persistence and the exact preallocated order ID. */
+type NativeOrderInput = OrderTypes.CreateOrderDTO & {
+  id: string
+  is_draft_order: false
+  status: "pending"
+}
 type NativeFacts = {
   valuation: FinalNativeValuationFacts
   erp: NativeErpOrderConsequence
