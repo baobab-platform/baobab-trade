@@ -113,8 +113,8 @@ function canonicalResourceId(value: unknown): value is string {
   return (
     characters.length <= 128 &&
     characters.every((character) => {
-      const code = character.codePointAt(0)!
-      return code < 0xd800 || code > 0xdfff
+      const code = character.codePointAt(0)
+      return code !== undefined && (code < 0xd800 || code > 0xdfff)
     })
   )
 }
