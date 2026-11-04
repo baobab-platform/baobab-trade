@@ -1,0 +1,94 @@
+name: DEV-07 native Order Module transaction proof
+
+on:
+  pull_request:
+    paths:
+      - "src/baobab/b2b/**"
+      - "src/modules/b2b/**"
+      - "src/modules/legal-seller-checkout/**"
+      - "src/scripts/regression-spend-reservation-commands.ts"
+      - "src/scripts/regression-native-buyer-guard.ts"
+      - "src/scripts/regression-medusa-native-order-owner.ts"
+      - ".github/workflows/dev07-native-owner.yml"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-owner-local:
+    name: Medusa 2.21 and PostgreSQL 17 native owner — local proof only
+    runs-on: ubuntu-26.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: baobab_trade
+          POSTGRES_PASSWORD: baobab_trade
+          POSTGRES_DB: baobab_trade_dev07_native
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U baobab_trade -d baobab_trade_dev07_native"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://baobab_trade:baobab_trade@localhost:5432/baobab_trade_dev07_native
+      BAOBAB_SPEND_LEDGER_TEST_DB: baobab_trade_dev07_native
+      BAOBAB_DEV07_TEST_DB: baobab_trade_dev07_native
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: dev07-native-owner-disposable-jwt
+      COOKIE_SECRET: dev07-native-owner-disposable-cookie
+      BAOBAB_WEBHOOK_SIGNING_SECRET: dev07-native-owner-disposable-signature
+    steps:
+      - name: Checkout exact tested source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Record exact source identity for independent evidence
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          git rev-parse HEAD > /tmp/dev07-source-sha
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install immutable dependencies
+        run: npm ci
+      - name: Verify native PostgreSQL 17 engine
+        run: |
+          node -e 'const v = require("child_process").execFileSync("pg_isready", ["-h","localhost","-p","5432"],{encoding:"utf8"});if(!v.includes("accepting"))process.exit(1)'
+      - name: Apply actual Medusa 2.21 migrations
+        run: npm run migrate
+      - name: Real native spend owner transaction, rollback, concurrency, replay
+        run: npm run regression:spend-reservation-commands
+      - name: Real native CAA-06b buyer-origin security negatives
+        run: npm run regression:native-buyer-guard
+      - name: Actual Medusa Order Module native create/rollback/readback
+        run: npm run regression:medusa-native-owner
+      - name: Retain original local-engine evidence (never full buyer acceptance)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dev07-native-owner-local-originals
+          path: |
+            artifacts/dev07-native-buyer-guard/receipt.json
+            artifacts/dev07-native-medusa-owner/receipt.json
+          if-no-files-found: warn
+          retention-days: 30
