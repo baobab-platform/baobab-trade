@@ -10,15 +10,15 @@ receipt and valuation and ERP commerce-order-consequence v1.
 
 ## Reconciliation before implementation
 
-| Ownership | Implemented and retained | Missing qualification |
-| --- | --- | --- |
-| IAM / CP | Principal resolution, estate binding, seller decision and inert authority candidates | Fresh consequential buyer-operation ALLOW on the exact purchase, approved scope/mandate, revocation readback |
-| Trade | Native TA-07 seller receipt consumption and order fence | Buyer receipt at the native COMMIT point |
-| Trade | Native CAA-06 spend reservation, holds, ledger | COMMIT in same PostgreSQL XID as native Medusa order |
-| Trade #189 | Shared parity-tested whole-obligation integer valuation | Independent re-read of final native pricing, tax, freight and duty |
-| Trade #188 | PostgreSQL outbox, RabbitMQ, event replay, real OTLP | Canonical event originating in the authorised order transaction |
-| ERP #125 | RabbitMQ consumer, PostgreSQL inbox, CP authority, native iDempiere document and replay | Exact Trade event ID and native origin, followed by verified downstream business effect |
-| Infrastructure #69/#72 | IAM/CP/W3C qualification and separated evidence custody | One independently witnessed buyer → Medusa → broker → ERP origin/consequence join |
+| Ownership              | Implemented and retained                                                                | Missing qualification                                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| IAM / CP               | Principal resolution, estate binding, seller decision and inert authority candidates    | Fresh consequential buyer-operation ALLOW on the exact purchase, approved scope/mandate, revocation readback |
+| Trade                  | Native TA-07 seller receipt consumption and order fence                                 | Buyer receipt at the native COMMIT point                                                                     |
+| Trade                  | Native CAA-06 spend reservation, holds, ledger                                          | COMMIT in same PostgreSQL XID as native Medusa order                                                         |
+| Trade #189             | Shared parity-tested whole-obligation integer valuation                                 | Independent re-read of final native pricing, tax, freight and duty                                           |
+| Trade #188             | PostgreSQL outbox, RabbitMQ, event replay, real OTLP                                    | Canonical event originating in the authorised order transaction                                              |
+| ERP #125               | RabbitMQ consumer, PostgreSQL inbox, CP authority, native iDempiere document and replay | Exact Trade event ID and native origin, followed by verified downstream business effect                      |
+| Infrastructure #69/#72 | IAM/CP/W3C qualification and separated evidence custody                                 | One independently witnessed buyer → Medusa → broker → ERP origin/consequence join                            |
 
 A valid JSON envelope, broker confirmation, synthetic ERP order, green component test
 or SHADOW CAA-06 decision is **not** an accepted source-to-business-consequence proof.
