@@ -112,3 +112,58 @@ reconciliation. Only after that can Infrastructure's independent seven-run
 evidence join be reconciled with Nabhold/ZuriBeans/Thamani
 Playwright/a11y/visual/performance and immutable teardown. No synthetic
 order event or broker ACK is a native iDempiere posting.
+
+## 4 November 2026 — native business origin gate (source qualification)
+
+A real exported W3C trace and a confirmed RabbitMQ delivery are **necessary but
+insufficient** to claim a buyer-authorised Trade order. A separate,
+read-only Python 3.14 verifier now lives at
+`scripts/dev11_native_business_origin.py`.
+
+Before any dispatch, it reads a single repeatable-read PostgreSQL 17 snapshot
+and requires the existing owner-created native Medusa `order` row, a matching
+`trade_order_commitment` seller receipt consumed inside the native commit
+trigger, the uniquely associated `trade_commit_fence_decision` with
+`commerce_model=B2B`, `outcome=ALLOWED`, `enforcement_mode=ENFORCED`,
+the ACTIVE scoped buyer Organisation/membership classification, and actual
+`b2b_spend_ledger_entry` COMMIT rows for the same order, with active committed
+reservations and exact membership/Organisation. The outbox, commitment, deferred
+fence verdict and spend conversion must carry the same originating PostgreSQL
+insert transaction ID, read *before* the dispatcher updates the outbox. An
+envelope ID, trace, CP-like string or HMAC signature is never an alternative.
+
+That condition **cannot pass under the accepted Trade SQL**: the active
+CAA-06b implementation has not yet replaced the explicit
+`BUYER_AUTHORITY_ABSENT` outcome for every B2B order; its enforcement
+remains `SHADOW`. This is an intentional acceptance blocker, not a test to
+skip or loosen. No new API, worker ability, credential, role, or activation
+was granted by the verifier.
+
+The real RabbitMQ workflow runs the verifier after its actual migrated
+Medusa outbox fixture is created, and **before** publishing it.
+`--expect-synthetic-refusal` demands the precise
+`NATIVE_ORDER_ABSENT` refusal from a real PostgreSQL readback; missing
+migrations, empty fixture, network outage and any purported native success
+all fail the test. Unit regressions additionally deny foreign event identity,
+changed idempotency, forged trace context, `SHADOW`/absent buyer authority and
+missing tables. Its sanitized `native-origin.json` receipt expressly sets
+`current_iam_cp_authority_qualified=false`,
+`native_erp_business_effect_qualified=false`, `l4_ops_01=BLOCKED`.
+
+Future CAA-06b work MUST replace the native deferred B2B refusal only after a
+server-issued final valuation, current human IAM/CP buyer operation ALLOW,
+non-self-approved approvals, current membership revision, one immutable buyer
+receipt and same-transaction seller/buyer receipt consumption and ledger
+conversion. The Medusa order and its canonical `trade.order.placed` outbox
+must be created in that *same* database transaction. Retain negative tests
+for wrong audience, market/Site, changed quotation, price/tax/freight,
+revocation, duplicate order, stale hold, insufficient budget, seller withdrawal,
+broker ambiguity and ERP-native posting veto.
+
+The read-only source checker is not itself current IAM/CP approval. Even a
+future `NATIVE_ORIGIN_SQL_READBACK_ONLY` positive must be joined by an
+independently issued current CP/IAM readback, the **same** event/trace in the
+real ERP #125 iDempiere13 business-effect run, and an Infrastructure #72
+independent source/trace/replay/teardown join before L4-OPS-01 is accepted.
+A later outbox publish changes its `xmin`; preserve the pre-dispatch original
+source receipt and source-specific digest in the private run custody.
