@@ -57,6 +57,19 @@ export type BuyerReceipt = {
 
 export type AuthorizedCommitment = {
   context: TradeBuyerExecutionContext
+  /** A second, current permission decision for this CONSEQUENTIAL operation;
+   * buyer-context.resolve ALLOW is only discovery and is never enough. */
+  operationDecision: {
+    outcome: "ALLOW"
+    decisionId: string
+    operation: BuyerReceipt["operation"]
+    principalId: string
+    transactionDigest: string
+    amountMinor: number
+    resourceVersion: number
+    evaluatedAt: string
+    expiresAt: string
+  }
   /** Made server-side only after a fresh Trade operation ALLOW and IAM/CP readback. */
   receipt: BuyerReceipt
   /** The same seller PEP decision and durable receipt, not a client assertion. */
@@ -133,12 +146,20 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 function requireCommitment(
   p: AuthorizedCommitment, request: NativeCommitRequest, now: number,
 ): { receipt: BuyerReceipt; seller: OrderAuthorityReceipt; valuation: BuyerCommitmentValuation } {
-  const { receipt: b, seller: s, context: c, valuation: v } = p
+  const { receipt: b, seller: s, context: c, valuation: v, operationDecision: d } = p
   // Schema conformance cannot replace a live authorisation readback, but
   // an unregistered or stale receipt must never reach native persistence.
   if (!buyerAuthorityReceiptSchema(b)) throw new Error("BUYER_RECEIPT_NOT_CANONICAL")
   if (
     !c || c.decision.outcome !== "ALLOW" ||
+    !d || d.outcome !== "ALLOW" ||
+    d.decisionId !== b.decision_id ||
+    d.operation !== b.operation ||
+    d.principalId !== b.actor_principal_id ||
+    d.transactionDigest !== b.transaction_digest ||
+    d.amountMinor !== b.amount_minor ||
+    d.resourceVersion !== b.resource_version ||
+    !(Date.parse(d.evaluatedAt) <= now && now < Date.parse(d.expiresAt)) ||
     !UUID.test(request.correlationId) ||
     !NATIVE_ID.test(request.nativeOrderId) ||
     !idempotency.test(request.idempotencyKey) ||
