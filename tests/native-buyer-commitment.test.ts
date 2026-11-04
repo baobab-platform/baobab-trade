@@ -179,6 +179,7 @@ function harness(changed?: (p: AuthorizedCommitment) => void) {
     native: {
       writeOrder: writer,
       readFinalValuation: async () => valuationFacts,
+      readCurrencyExponent: async () => 0, // UGX synthetic fixture; real owner must reread native currency.
       readErpConsequence: async () => ({
         legal_entity_id: "SYNTHETIC-LE-01",
         commerce_order_id: request.nativeOrderId,
@@ -258,6 +259,42 @@ describe("CAA-06b proposed owner transaction composition (source-only, not activ
       const h = harness(mutate)
       expect((await commitAuthorizedNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
       expect(h.commitWithMutation).not.toHaveBeenCalled()
+    }
+  })
+
+  it("refuses ERP totals that differ from the exact native buyer obligation", async () => {
+    for (const wrong of [
+      { amount: "1250001", currency: "UGX", exponent: 0 },
+      { amount: "1250000.1", currency: "UGX", exponent: 0 },
+      { amount: "1250000", currency: "ZAR", exponent: 0 },
+      { amount: "1250000", currency: "UGX", exponent: Number.NaN },
+    ]) {
+      const h = harness()
+      const original = h.deps.native.readErpConsequence
+      h.deps.native.readCurrencyExponent = async () => wrong.exponent
+      h.deps.native.readErpConsequence = async (db, id) => {
+        const data = await original(db, id)
+        return {
+          ...data,
+          totals: { ...data.totals, grand_total: { amount: wrong.amount, currency: wrong.currency } },
+        }
+      }
+      h.deps.spend.commitWithMutation = async (_command, mutation) => {
+        await expect(
+          mutation({
+            query: async (sql) => {
+              h.queries.push(sql)
+              return { rows: [], rowCount: 1 }
+            },
+          }),
+        ).rejects.toThrow("NATIVE_ERP_BUSINESS_FACTS_NOT_VERIFIED")
+        return { outcome: "REFUSED", reason: "TRANSACTION_CHANGED" }
+      }
+      expect((await commitAuthorizedNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
+      expect(h.queries.some((sql) => sql.includes("INSERT INTO event_outbox"))).toBe(false)
+      expect(
+        h.queries.some((sql) => sql.includes("INSERT INTO trade_buyer_authority_consumption")),
+      ).toBe(false)
     }
   })
 

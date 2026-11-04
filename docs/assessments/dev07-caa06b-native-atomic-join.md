@@ -75,7 +75,12 @@ closure and AJV Draft 2020-12, not a locally invented business payload.
 canonical outbox insert. Source negatives cover an unreviewed ERP field and
 assert no event or buyer-consumption insert occurs. This is additional
 contract defence, not proof that the still-missing Medusa transaction-owner
-adapter read authentic final native prices, lines or consequences.
+adapter read authentic final native prices, lines or consequences. A second
+fail-closed invariant compares ERP `grand_total` against the FULL authorised
+buyer obligation using exact BigInt decimal scaling and the native owner's
+persisted currency exponent. Unknown precision, nonzero fractional excess,
+foreign currency or mismatched total must abort the same spend transaction;
+currency precision is never guessed or supplied by a browser.
 
 ## Explicitly incomplete / not qualified
 

@@ -113,6 +113,9 @@ export type NativeMedusaTransactionOwner = {
   readFinalValuation(db: Query, orderId: string): Promise<FinalNativeValuationFacts>
   /** Build ERP consequence from persisted native Medusa order + line records. */
   readErpConsequence(db: Query, orderId: string): Promise<NativeErpOrderConsequence>
+  /** Trusted, persisted native currency precision for this *same* order.
+   * Never infer fractional digits from a browser currency string or float. */
+  readCurrencyExponent(db: Query, orderId: string): Promise<number>
 }
 
 export type NativeCommitDependencies = {
@@ -148,6 +151,23 @@ const SHA = /^sha256:[0-9a-f]{64}$/
 const NATIVE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{1,199}$/
 const idempotency = /^[A-Za-z0-9._:-]{16,128}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+/**
+ * Exact decimal conversion, without Number/parseFloat arithmetic.
+ * More fractional digits than the native currency uses are acceptable ONLY
+ * if all excess digits are zero. A missing native exponent is never guessed.
+ */
+function exactMoneyMinor(amount: string, exponent: number): bigint | null {
+  if (!Number.isSafeInteger(exponent) || exponent < 0 || exponent > 9) return null
+  if (!/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(amount)) return null
+  const [units, fractional = ""] = amount.split(".")
+  if (fractional.length > exponent && /[1-9]/.test(fractional.slice(exponent))) return null
+  const negative = units.startsWith("-")
+  const whole = negative ? units.slice(1) : units
+  const decimal = fractional.slice(0, exponent).padEnd(exponent, "0")
+  const minor = BigInt(whole) * 10n ** BigInt(exponent) + BigInt(decimal || "0")
+  return negative ? -minor : minor
+}
 
 function requireCommitment(
   p: AuthorizedCommitment,
@@ -274,6 +294,7 @@ export async function commitAuthorizedNativeBuyerOrder(
     )
       throw new Error("NATIVE_FINAL_VALUATION_CHANGED")
     const data = await deps.native.readErpConsequence(db, request.nativeOrderId)
+    const currencyExponent = await deps.native.readCurrencyExponent(db, request.nativeOrderId)
     // Fail closed on the complete pinned ERP v1 semantic envelope *before*
     // persisting the outbox. This is a shape check, not native-source proof;
     // the Medusa owner must still independently reread the genuine order.
@@ -286,7 +307,15 @@ export async function commitAuthorizedNativeBuyerOrder(
       data.order_version < 1 ||
       !data.customer_id ||
       !data.lines?.length ||
-      !data.totals?.grand_total
+      !data.totals?.grand_total ||
+      !Number.isSafeInteger(currencyExponent) ||
+      currencyExponent < 0 ||
+      currencyExponent > 9 ||
+      exactMoneyMinor(data.totals.grand_total.amount, currencyExponent) !== BigInt(b.amount_minor) ||
+      Object.values(data.totals).some((money) => money.currency !== b.currency) ||
+      data.lines.some(
+        (line) => line.unit_price.currency !== b.currency || line.line_total.currency !== b.currency,
+      )
     )
       throw new Error("NATIVE_ERP_BUSINESS_FACTS_NOT_VERIFIED")
     const event = createTenantTradeEvent(request.tenant, {
