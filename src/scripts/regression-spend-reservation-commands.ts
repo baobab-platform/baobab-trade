@@ -733,15 +733,15 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   // Two native owners cannot consume the same purchase concurrently, even
   // with two distinct command keys. The loser must abort its *own* connection
   // after the first transaction commits, never manufacture a replay receipt.
-  const raceOrg = await organisation("ownerrace")
-  const raceMember = await membership(raceOrg, "race")
-  await budget(raceOrg, "MEMBERSHIP", raceMember, 50_000n, "race")
-  const raceSubmission = submission(raceOrg, raceMember, 15_000n, "ownerrace")
+  const nativeRaceOrg = await organisation("ownerrace")
+  const raceMember = await membership(nativeRaceOrg, "race")
+  await budget(nativeRaceOrg, "MEMBERSHIP", raceMember, 50_000n, "race")
+  const raceSubmission = submission(nativeRaceOrg, raceMember, 15_000n, "ownerrace")
   const raceReservation = applied(await commands.submit(raceSubmission))
-  const winnerCommand = commitOf(raceOrg, raceReservation.reservationId, raceSubmission, {
+  const winnerCommand = commitOf(nativeRaceOrg, raceReservation.reservationId, raceSubmission, {
     commitmentReference: `order_race_${run}`,
   })
-  const loserCommand = commitOf(raceOrg, raceReservation.reservationId, raceSubmission, {
+  const loserCommand = commitOf(nativeRaceOrg, raceReservation.reservationId, raceSubmission, {
     commitmentReference: `order_race_other_${run}`,
   })
   const firstOwner = await pool.connect()
