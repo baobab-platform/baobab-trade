@@ -43,6 +43,9 @@ describe("CAA-06b native Medusa transaction boundary", () => {
         spend: {} as never,
         source: {} as never,
         authorizeNow: authorise,
+        recheckAuthorityNow: async () => {
+          throw new Error("must not reach IAM/CP for an unavailable native owner")
+        },
       },
       {
         nativeOrderId: "order_native_synthetic",
@@ -71,6 +74,9 @@ describe("CAA-06b native Medusa transaction boundary", () => {
           authorizeNow: vi.fn(async () => {
             throw new Error("must not run")
           }),
+          recheckAuthorityNow: async () => {
+            throw new Error("must not reach IAM/CP for an unavailable native owner")
+          },
         },
         {
           nativeOrderId: "order_native_synthetic",
