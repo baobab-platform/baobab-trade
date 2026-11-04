@@ -151,6 +151,17 @@ jobs:
           path: artifacts/dev07-native-buyer-guard/receipt.json
           if-no-files-found: error
           retention-days: 30
+      - name: DEV-07 actual Medusa 2.21 Order Module owner transaction on PostgreSQL 17
+        env:
+          BAOBAB_DEV07_TEST_DB: baobab_trade_test
+        run: npm run regression:medusa-native-owner
+      - name: Retain original real Medusa owner rollback and same-XID evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dev07-native-medusa-owner
+          path: artifacts/dev07-native-medusa-owner/receipt.json
+          if-no-files-found: error
+          retention-days: 30
       - name: DEV-07 RFQ and quotation kernel
         run: npm run test:commercial-kernel
       - name: DEV-07 native RFQ and quotation transaction regression
