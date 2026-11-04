@@ -126,6 +126,11 @@ export const buyerOperationDecisionSchema = validator(
   "trade/v2/buyer-execution-context.schema.json",
   "BuyerOperationDecision",
 )
+// Decision 7's canonical valuation is a fact shape, never buyer permission.
+export const buyerCommitmentValuationSchema = validator(
+  "trade/v2/buyer-commitment-valuation.schema.json",
+  "BuyerCommitmentValuation",
+)
 export const buyerAssurancePolicySchema = validator(
   "identity/v1/assurance-policy.schema.json",
   "BuyerAssurancePolicy",

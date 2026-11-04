@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
+import { buyerCommitmentValuationSchema } from "../contracts/authority-validation"
 
 /**
  * ADR-SHARED-042 Decision 7 — buyer obligation, not payment tender.
@@ -73,11 +74,18 @@ const PRINTABLE = /^[\x21-\x7e]{1,200}$/
 const KINDS = new Set<string>(COMPONENT_KINDS)
 const DISCOUNTS = new Set<string>(["ITEM_DISCOUNT", "ORDER_DISCOUNT"])
 const TOP_FIELDS = new Set([
-  "resource_id", "resource_version", "transaction_digest",
-  "currency", "basis", "components",
+  "resource_id",
+  "resource_version",
+  "transaction_digest",
+  "currency",
+  "basis",
+  "components",
 ])
 const COMPONENT_FIELDS = new Set([
-  "component_kind", "amount_minor", "determination", "source_reference",
+  "component_kind",
+  "amount_minor",
+  "determination",
+  "source_reference",
 ])
 
 function refuse(code: ValuationRefusalCode): never {
@@ -95,6 +103,20 @@ function closed(value: unknown, allowed: Set<string>): value is Record<string, u
 
 function cmp(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
+}
+
+function canonicalResourceId(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 256) return false
+  // JSON Schema counts Unicode characters, not UTF-16 code units. Reject
+  // lone surrogates: Shared's UTF-8 reference cannot encode them faithfully.
+  const characters = [...value]
+  return (
+    characters.length <= 128 &&
+    characters.every((character) => {
+      const code = character.codePointAt(0)!
+      return code < 0xd800 || code > 0xdfff
+    })
+  )
 }
 
 /** JSON canonical keys sorted recursively; never use locale-dependent order. */
@@ -129,8 +151,7 @@ export function valuationDigest(
   const components = [...facts.components]
     .sort(
       (a, b) =>
-        cmp(a.component_kind, b.component_kind) ||
-        cmp(a.source_reference, b.source_reference),
+        cmp(a.component_kind, b.component_kind) || cmp(a.source_reference, b.source_reference),
     )
     .map((c) => ({
       component_kind: c.component_kind,
@@ -166,9 +187,7 @@ export function buildFinalBuyerCommitmentValuation(
   if (
     !closed(candidate, TOP_FIELDS) ||
     Object.keys(candidate).length !== TOP_FIELDS.size ||
-    typeof candidate.resource_id !== "string" ||
-    candidate.resource_id.length < 1 ||
-    candidate.resource_id.length > 128 ||
+    !canonicalResourceId(candidate.resource_id) ||
     !Number.isSafeInteger(candidate.resource_version) ||
     (candidate.resource_version as number) < 1 ||
     typeof candidate.transaction_digest !== "string" ||
@@ -180,7 +199,9 @@ export function buildFinalBuyerCommitmentValuation(
     candidate.components.length < 1 ||
     candidate.components.length > 500 ||
     !(now instanceof Date) ||
-    !Number.isFinite(now.getTime())
+    !Number.isFinite(now.getTime()) ||
+    now.getUTCFullYear() < 1 ||
+    now.getUTCFullYear() > 9999
   ) {
     return refuse("VALUATION_INVALID")
   }
@@ -212,8 +233,9 @@ export function buildFinalBuyerCommitmentValuation(
     seen.add(pair)
     if (item.component_kind === "MERCHANDISE") hasMerchandise = true
     sum += BigInt(item.amount_minor as number)
-    if (sum > BigInt(Number.MAX_SAFE_INTEGER) || sum < BigInt(Number.MIN_SAFE_INTEGER))
-      return refuse("VALUATION_UNSAFE_AMOUNT")
+    // Accumulate the COMPLETE obligation in BigInt. A valid final amount
+    // must not be refused merely because discounts occur after charges and
+    // an intermediate subtotal exceeds Number's safe range.
     components.push({
       component_kind: item.component_kind as ComponentKind,
       amount_minor: item.amount_minor as number,
@@ -223,12 +245,10 @@ export function buildFinalBuyerCommitmentValuation(
   }
 
   if (!hasMerchandise) return refuse("VALUATION_MERCHANDISE_REQUIRED")
-  if (sum <= 0n || sum > BigInt(Number.MAX_SAFE_INTEGER))
-    return refuse("VALUATION_UNSAFE_AMOUNT")
+  if (sum <= 0n || sum > BigInt(Number.MAX_SAFE_INTEGER)) return refuse("VALUATION_UNSAFE_AMOUNT")
   const ordered = components.sort(
     (a, b) =>
-      cmp(a.component_kind, b.component_kind) ||
-      cmp(a.source_reference, b.source_reference),
+      cmp(a.component_kind, b.component_kind) || cmp(a.source_reference, b.source_reference),
   )
   const facts: FinalNativeValuationFacts = {
     resource_id: candidate.resource_id as string,
@@ -239,11 +259,13 @@ export function buildFinalBuyerCommitmentValuation(
     components: ordered,
   }
   const total = Number(sum)
-  return {
+  const result: BuyerCommitmentValuation = {
     valuation_id: randomUUID(),
     ...facts,
     buyer_commitment_amount_minor: total,
     valued_at: now.toISOString(),
     valuation_digest: valuationDigest({ ...facts, buyer_commitment_amount_minor: total }),
   }
+  if (!buyerCommitmentValuationSchema(result)) return refuse("VALUATION_INVALID")
+  return result
 }
