@@ -70,7 +70,11 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
         )
         assert.equal(row.rowCount, 1)
         assert.equal(row.rows[0].xid, nativeXid32(xid), "Order escaped Medusa's owner transaction")
-        assert.equal(row.rows[0].is_draft_order, true, "Medusa must persist the synthetic draft flag")
+        assert.equal(
+          row.rows[0].is_draft_order,
+          true,
+          "Medusa must persist the synthetic draft flag",
+        )
         throw new Error(ROLLBACK)
       }),
       new RegExp(ROLLBACK),

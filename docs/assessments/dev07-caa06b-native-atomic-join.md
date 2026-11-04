@@ -39,7 +39,7 @@ or SHADOW CAA-06 decision is **not** an accepted source-to-business-consequence 
    profile/classification/seller/tenant checks and **remains SHADOW**.
 5. **Composition seam**: the server-only native commit function obtains a
    fresh operation-specific ALLOW, checks context/seller/receipt/valuation,
-   composes with PostgresSpendReservationCommands.commitWithMutation and
+   composes through PostgresSpendReservationCommands.commitWithOwnerTransaction and
    requires the native Medusa owner to write and reread actual order state on
    the SAME PostgreSQL connection before inserting the outbox/consumption.
 6. **Source tests**: refuse discovery-only permission, mismatched seller,
@@ -74,29 +74,28 @@ closure and AJV Draft 2020-12, not a locally invented business payload.
 `readErpConsequence` result **inside** the spend transaction, before the
 canonical outbox insert. Source negatives cover an unreviewed ERP field and
 assert no event or buyer-consumption insert occurs. This is additional
-contract defence, not proof that the still-missing Medusa transaction-owner
-adapter read authentic final native prices, lines or consequences. A second
+contract defence, not proof that the native owner's still-missing governed
+cart reader read authentic final native prices, lines or consequences. A second
 fail-closed invariant compares ERP `grand_total` against the FULL authorised
 buyer obligation using exact BigInt decimal scaling and the native owner's
 persisted currency exponent. Unknown precision, nonzero fractional excess,
 foreign currency or mismatched total must abort the same spend transaction;
 currency precision is never guessed or supplied by a browser.
 
-### Required next engineering increment: genuine Medusa transaction ownership
+### Implemented transaction ownership and remaining source adapters
 
 The protected same-XID check deliberately requires one PostgreSQL transaction
 for the native Medusa order and seller receipt, the Trade spend COMMIT and
-the canonical outbox. The current spend command owns an independent `pg`
-transaction, whereas Medusa's documented Order Module uses its
-`sharedContext.transactionManager` to compose module operations. Invoking
-a standalone order workflow/module write from the current callback would
-open an independently managed transaction and **must not** be counted as
-the native transaction-owner adapter. The next implementation must bind
-the Medusa native order write and the ledger/outbox operations to **the
-same actual engine-owned transaction manager and connection**, enforce
-the existing SQL XID/read-back, and prove native rollback and replay
-under current IAM/CP authorisation. It must not switch the gate from
-SHADOW to ENFORCED to obtain a synthetic success.
+the canonical outbox. The ordinary spend command owns an independent `pg`
+transaction; the new `commitWithOwnerTransaction` entry instead joins the
+Order Module's `sharedContext.transactionManager` through the pinned native
+owner adapter. A standalone workflow/module write that opens a second
+transaction still **must not** be counted as native ownership. The real
+Order Module draft-order proof establishes manager compatibility, native
+rollback and readback; it does not yet establish a governed non-draft buyer
+commitment. The remaining source adapters must derive the governed cart's
+complete final obligation and obtain live consequential IAM/CP readback.
+The gate remains SHADOW pending their connected qualification.
 
 ## Explicitly incomplete / not qualified
 
@@ -159,6 +158,27 @@ Its source tests are **negative policy regressions only**; the actual
 issuer/CP-backed readback is still a required connected dependency.
 The final native snapshot is evaluated once per owning transaction and
 shared by the valuation and ERP payload checks.
+
+### CI and application-boundary reconciliation
+
+The full repository suite also inventories direct native order writers.
+Its exact allowlist now identifies this single CAA-06b transaction owner,
+while an independent importer check requires it to remain unreachable from
+application routes, loaders, subscribers and jobs. Only the disposable
+native-owner regression currently imports it. Adding a writer or wiring the
+owner into an application path fails that inventory and requires a new
+review; passing it does not grant connected acceptance.
+
+The authority readback's evidence references are read-only inputs. Their
+TypeScript type accepts immutable negative-test vectors without casting
+away immutability or changing any runtime authority predicate. Three native
+owner/regression files were formatted with the repository's pinned formatter.
+The initial full-suite run exposed the inventory mismatch after formatting
+and type checking passed. After correction, the full local suite passes
+1,012 tests across 123 files, strict type checking, zero-warning lint, the
+repository formatting check and the complete Medusa build including the
+standalone authority/schema asset check. These Node 24 source/build checks
+do not replace the final-head PostgreSQL 17 CI or connected acceptance.
 
 Pending acceptance therefore includes a concrete governed native cart
 reader, a real live IAM/CP readback provider, a first genuine **non-draft**

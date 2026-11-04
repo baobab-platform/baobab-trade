@@ -747,21 +747,27 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   const firstOwner = await pool.connect()
   const secondOwner = await pool.connect()
   let signalStarted = () => {}
-  const firstStarted = new Promise<void>((resolve) => { signalStarted = resolve })
+  const firstStarted = new Promise<void>((resolve) => {
+    signalStarted = resolve
+  })
   let raceWrites = 0
   try {
     await firstOwner.query("BEGIN")
     const winning = (async () => {
-      const result = await commands.commitWithOwnerTransaction(winnerCommand, firstOwner, async (db) => {
-        raceWrites += 1
-        signalStarted()
-        await sleep(100)
-        await db.query(
-          `INSERT INTO dev07_atomic_spend_probe (id,transaction_id,unique_value)
+      const result = await commands.commitWithOwnerTransaction(
+        winnerCommand,
+        firstOwner,
+        async (db) => {
+          raceWrites += 1
+          signalStarted()
+          await sleep(100)
+          await db.query(
+            `INSERT INTO dev07_atomic_spend_probe (id,transaction_id,unique_value)
            VALUES ($1,pg_current_xact_id()::text,$1)`,
-          [winnerCommand.commitmentReference],
-        )
-      })
+            [winnerCommand.commitmentReference],
+          )
+        },
+      )
       await firstOwner.query("COMMIT")
       return result
     })()

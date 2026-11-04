@@ -36,8 +36,8 @@ export type NativeCommitAuthorityReadback = {
   sellerLegalEntityId: string
   checkedAt: string
   expiresAt: string
-  /** Independent IAM/CP and Trade evidence, never a client assertion. */
-  evidenceReferences: string[]
+  /** Independent read-only IAM/CP and Trade evidence, never a client assertion. */
+  evidenceReferences: readonly string[]
 }
 
 /**

@@ -156,9 +156,7 @@ export type MedusaNativeOwnerDependencies = {
    * Must issue a new actual IAM/CP/Trade readback UNDER the spend row lock,
    * before native order creation. No stale cached buyer-context ALLOW.
    */
-  recheckAuthorityNow(
-    original: AuthorizedCommitment,
-  ): Promise<NativeCommitAuthorityReadback>
+  recheckAuthorityNow(original: AuthorizedCommitment): Promise<NativeCommitAuthorityReadback>
   /** Independent native database reader, never caller-submitted money. */
   source: NativeMedusaOrderSource
   now?: () => number
