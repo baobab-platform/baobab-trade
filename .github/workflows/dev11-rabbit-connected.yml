@@ -12,6 +12,7 @@ on:
       - scripts/dev11_erp_crash_consumer.py
       - scripts/dev11_broker_crash_publisher.py
       - scripts/test_dev11_rabbit_dispatcher.py
+      - scripts/dev11_native_business_origin.py
       - scripts/dev11-rabbit-requirements.txt
       - src/scripts/prepare-dev11-rabbit-event.ts
       - src/baobab/events/**
@@ -173,6 +174,11 @@ jobs:
           test "$(psql "$DATABASE_URL" -tAc "SHOW server_version_num" | cut -c 1-2)" = "17"
       - name: Prepare canonical event with the actual Medusa module and native locking
         run: npm run qualify:dev11-rabbit-prepare
+      - name: Independently refuse synthetic outbox as native B2B buyer order
+        run: |
+          python -B scripts/dev11_native_business_origin.py \
+            --expect-synthetic-refusal \
+            --output artifacts/dev11-rabbit/native-origin.json
       - name: Real RabbitMQ publisher confirmation, durable ERP inbox and replay/forgery negatives
         run: python -B scripts/dev11_rabbit_connected.py
       - name: Independently query actual native Trade, publisher and ERP spans
@@ -213,5 +219,6 @@ jobs:
             artifacts/dev11-rabbit/connected.json
             artifacts/dev11-rabbit/independent-exported.json
             artifacts/dev11-rabbit/source-pins.json
+            artifacts/dev11-rabbit/native-origin.json
           if-no-files-found: warn
           retention-days: 14
