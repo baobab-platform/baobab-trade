@@ -167,3 +167,21 @@ real ERP #125 iDempiere13 business-effect run, and an Infrastructure #72
 independent source/trace/replay/teardown join before L4-OPS-01 is accepted.
 A later outbox publish changes its `xmin`; preserve the pre-dispatch original
 source receipt and source-specific digest in the private run custody.
+
+### Synthetic selector correction following run 41841700520
+
+The native-origin step at source `007eab655adf102c8dc3ee063d86431fc53efe85`
+failed with `NATIVE_ORIGIN_DATABASE_UNAVAILABLE` before it could inspect the
+synthetic order. The selector embedded a literal `%` in its SQL `LIKE` pattern
+while also supplying psycopg parameters. Psycopg interpreted that percent as an
+invalid placeholder; reproducing the driver parser locally confirmed the error
+without a database. The full prefix pattern is now a bound value, following
+[psycopg's parameter rules](https://www.psycopg.org/psycopg3/docs/basic/params.html).
+
+The regression executes the CLI selector through psycopg's actual parameter
+parser; the mock supplies only subsequent rows. Separate regressions retain
+failures for missing schema, unavailable readback and an unqualified B2B fence.
+Only `NATIVE_ORDER_ABSENT` satisfies the synthetic negative. These are source
+regressions; the new Python 3.14/PostgreSQL 17 Actions run must independently
+observe that refusal before any RabbitMQ dispatch. No native buyer order,
+current IAM/CP authority or L4-OPS-01 acceptance is inferred from this fix.

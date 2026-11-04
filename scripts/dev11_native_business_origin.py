@@ -218,11 +218,14 @@ def main() -> int:
         with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True,
                              row_factory=dict_row, connect_timeout=5) as db:
             if args.expect_synthetic_refusal:
+                # Bind the complete LIKE pattern: a literal percent in a query
+                # with parameters is parsed by psycopg before PostgreSQL sees
+                # it. The wildcard is data, not a driver placeholder.
                 event_ids = db.execute(
                     """SELECT event_id FROM event_outbox
-                       WHERE idempotency_key LIKE 'dev11-rabbit-connected:%'
+                       WHERE idempotency_key LIKE %s
                          AND event_type=%s AND deleted_at IS NULL""",
-                    (EVENT_TYPE,),
+                    ("dev11-rabbit-connected:%", EVENT_TYPE),
                 ).fetchall()
                 if len(event_ids) != 1:
                     raise SystemExit("NATIVE_ORIGIN_SYNTHETIC_FIXTURE_NOT_UNIQUE")

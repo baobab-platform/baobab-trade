@@ -5,11 +5,17 @@ runs the unmodified checker against the genuine migrated PostgreSQL 17 schema
 and requires the synthetic Medusa outbox event to be refused there as well.
 """
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timezone
+from io import StringIO
+from unittest.mock import MagicMock, patch
+
+from psycopg._queries import PostgresQuery
+from psycopg.adapt import Transformer
 
 from dev11_native_business_origin import (
-    EVENT_SOURCE, EVENT_TYPE, OriginRefusal, _normalised_envelope,
-    _read_native_origin, assess_native_origin,
+    EVENT_SOURCE, EVENT_TYPE, OriginObservation, OriginRefusal, _normalised_envelope,
+    _read_native_origin, assess_native_origin, main,
 )
 
 
@@ -119,6 +125,52 @@ class NativeOriginRefusalTests(unittest.TestCase):
         for event in ("", "contains space", "../../sensitive"):
             with self.subTest(event=event):
                 self.assertFalse(assess_native_origin(ReadOnlyTxn([]), event).qualified)
+
+    def test_synthetic_selector_passes_actual_psycopg_parameter_parser(self):
+        # This is an offline driver regression, not a PostgreSQL acceptance
+        # claim. Running the real parser catches the former literal '%' bug
+        # that a permissive database mock would silently accept.
+        db = MagicMock()
+        db.__enter__.return_value = db
+
+        def parsed_query(statement, params):
+            query = PostgresQuery(Transformer())
+            query.convert(statement, params)
+            self.assertEqual(params, ("dev11-rabbit-connected:%", EVENT_TYPE))
+            return Rows([{"event_id": self.event_id}])
+
+        db.execute.side_effect = parsed_query
+        with patch("sys.argv", ["native-origin", "--expect-synthetic-refusal"]), \
+                patch.dict("os.environ", {
+                    "NODE_ENV": "test", "BAOBAB_ENVIRONMENT": "integration",
+                    "DATABASE_URL": "postgresql://unused-offline-regression",
+                }), \
+                patch("dev11_native_business_origin.psycopg.connect", return_value=db), \
+                patch("dev11_native_business_origin.assess_native_origin", return_value=
+                      OriginObservation(False, "NATIVE_ORDER_ABSENT")) as assess, \
+                redirect_stdout(StringIO()):
+            self.assertEqual(main(), 0)
+        assess.assert_called_once_with(db, self.event_id)
+
+    def test_synthetic_mode_does_not_accept_schema_outage_or_other_refusal(self):
+        db = MagicMock()
+        db.__enter__.return_value = db
+        db.execute.return_value = Rows([{"event_id": self.event_id}])
+        for code in ("NATIVE_SCHEMA_OR_FENCE_NOT_INSTALLED",
+                     "NATIVE_ORIGIN_READBACK_UNAVAILABLE",
+                     "NATIVE_B2B_ENFORCEMENT_NOT_QUALIFIED"):
+            with self.subTest(code=code), \
+                    patch("sys.argv", ["native-origin", "--expect-synthetic-refusal"]), \
+                    patch.dict("os.environ", {
+                        "NODE_ENV": "test", "BAOBAB_ENVIRONMENT": "integration",
+                        "DATABASE_URL": "postgresql://unused-offline-regression",
+                    }), \
+                    patch("dev11_native_business_origin.psycopg.connect", return_value=db), \
+                    patch("dev11_native_business_origin.assess_native_origin",
+                          return_value=OriginObservation(False, code)), \
+                    self.assertRaisesRegex(SystemExit,
+                        "NATIVE_ORIGIN_SYNTHETIC_NEGATIVE_NOT_OBSERVED:" + code):
+                main()
 
 
 if __name__ == "__main__":
