@@ -164,7 +164,8 @@ export class Migration20261104190000 extends Migration {
     `)
     // Preserve original B2C and classification conditions; extend only
     // B2B admission to same-XID receipt consumption. Gate remains SHADOW.
-    this.addSql(`CREATE OR REPLACE FUNCTION trade_order_commitment_classification() RETURNS trigger LANGUAGE plpgsql AS $$
+    this
+      .addSql(`CREATE OR REPLACE FUNCTION trade_order_commitment_classification() RETURNS trigger LANGUAGE plpgsql AS $$
     DECLARE c trade_native_commitment_classification%ROWTYPE; r trade_order_authority_receipt%ROWTYPE;
             latest trade_commerce_profile_observation%ROWTYPE; gate trade_commit_fence_enforcement%ROWTYPE;
             reason text;
@@ -246,6 +247,8 @@ export class Migration20261104190000 extends Migration {
 
   async down(): Promise<void> {
     // An automatic rollback must not erase evidence or reopen order authority.
-    this.addSql("DO $$ BEGIN RAISE EXCEPTION 'CAA-06b rollback requires reviewed history preservation'; END $$;")
+    this.addSql(
+      "DO $$ BEGIN RAISE EXCEPTION 'CAA-06b rollback requires reviewed history preservation'; END $$;",
+    )
   }
 }
