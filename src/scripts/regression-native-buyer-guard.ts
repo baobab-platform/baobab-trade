@@ -135,14 +135,19 @@ export async function runNativeBuyerGuardRegression(pool: Pool): Promise<Negativ
       [randomUUID(), "{}", evaluatedAt, expiresAt],
       /incomplete or expired buyer authority/,
     )
+    const expiredId = randomUUID()
     await mustRefuse(
       db,
       cases,
       "expired-buyer-evidence",
       insert,
       [
-        randomUUID(),
-        JSON.stringify({ ...payload, receipt_id: randomUUID() }),
+        expiredId,
+        JSON.stringify({
+          ...payload,
+          receipt_id: expiredId,
+          expires_at: evaluatedAt,
+        }),
         evaluatedAt,
         evaluatedAt,
       ],
@@ -176,7 +181,7 @@ export async function runNativeBuyerGuardRegression(pool: Pool): Promise<Negativ
       db,
       cases,
       "immutable-buyer-receipt-truncate",
-      "TRUNCATE trade_buyer_authority_receipt",
+      "TRUNCATE trade_buyer_authority_receipt, trade_buyer_authority_consumption",
       [],
       /authority and consumption history are immutable/,
     )
