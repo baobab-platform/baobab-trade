@@ -84,20 +84,21 @@ class NativeOriginRefusalTests(unittest.TestCase):
 
     def test_original_synthetic_event_can_never_be_qualified(self):
         # Existing table schema + committed event, but no Medusa native order.
-        stub = ReadOnlyTxn([[], [], [self.event], []])
+        stub = ReadOnlyTxn([[], [], [], [self.event], []])
         result = assess_native_origin(stub, self.event_id)
         self.assertFalse(result.qualified)
         self.assertEqual(result.code, "NATIVE_ORDER_ABSENT")
         self.assertFalse(result.native_order_readback)
 
     def test_missing_migration_is_not_a_success(self):
-        stub = ReadOnlyTxn([[], [("public.trade_order_commitment",)]])
+        stub = ReadOnlyTxn([[], [], [("public.trade_order_commitment",)]])
         result = assess_native_origin(stub, self.event_id)
         self.assertEqual(result.code, "NATIVE_SCHEMA_OR_FENCE_NOT_INSTALLED")
         self.assertFalse(result.qualified)
 
     def test_legacy_shadow_can_never_be_positive_even_with_order_and_receipt(self):
-        with self.assertRaisesRegex(OriginRefusal, "NATIVE_B2B_ENFORCEMENT_NOT_QUALIFIED"):\n            _read_native_origin(Source([
+        with self.assertRaisesRegex(OriginRefusal, "NATIVE_B2B_ENFORCEMENT_NOT_QUALIFIED"):
+            _read_native_origin(Source([
             [], [self.event],
             [{"id": self.order_id, "currency_code": "zar", "is_draft_order": False}],
             [{
@@ -113,7 +114,6 @@ class NativeOriginRefusalTests(unittest.TestCase):
                 "buyer_membership_id": "b2bmem_native",
             }],
         ]), self.event_id)
-        self.fail("SHADOW returned a positive: " + str(result))
 
     def test_missing_schema_and_database_fail_closed(self):
         for event in ("", "contains space", "../../sensitive"):
