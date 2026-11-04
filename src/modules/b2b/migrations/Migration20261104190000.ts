@@ -135,6 +135,90 @@ export class Migration20261104190000 extends Migration {
         ON trade_buyer_authority_consumption FOR EACH ROW
         EXECUTE FUNCTION trade_buyer_authority_consumption_guard();
     `)
+    // The existing deferred native fence remains the authority at COMMIT.
+    // Replace only its B2B absence rule; B2C and all classification checks stay.
+    // The mode remains SHADOW, never activated by this migration.
+    this.addSql(`CREATE OR REPLACE FUNCTION trade_order_commitment_classification() RETURNS trigger LANGUAGE plpgsql AS $
+    DECLARE c trade_native_commitment_classification%ROWTYPE; r trade_order_authority_receipt%ROWTYPE;
+            latest trade_commerce_profile_observation%ROWTYPE; gate trade_commit_fence_enforcement%ROWTYPE;
+            reason text;
+    BEGIN
+      -- FOR SHARE serializes the verdict with a gate change: an uncommitted
+      -- switch blocks this check until it commits, and this check holds off a
+      -- switch until the order's transaction ends. There is no window in which
+      -- an order commits under the mode it was not evaluated in.
+      SELECT * INTO gate FROM trade_commit_fence_enforcement WHERE singleton FOR SHARE;
+      IF gate.mode IS NULL THEN
+        RAISE EXCEPTION 'Decision 9 denied: the commit fence enforcement gate is missing';
+      END IF;
+
+      SELECT * INTO c FROM trade_native_commitment_classification
+        WHERE resource_type = NEW.subject_type AND resource_id = NEW.subject_id AND status = 'ACTIVE';
+      IF c.classification_id IS NULL THEN
+        reason := CASE WHEN EXISTS (SELECT 1 FROM trade_native_commitment_classification
+             WHERE resource_type = NEW.subject_type AND resource_id = NEW.subject_id)
+          THEN 'CLASSIFICATION_CHANGED' ELSE 'CLASSIFICATION_ABSENT' END;
+      END IF;
+
+      IF reason IS NULL THEN
+        SELECT * INTO r FROM trade_order_authority_receipt WHERE receipt_id = NEW.receipt_id;
+        IF r.receipt_id IS NULL OR r.tenant_id <> c.tenant_id OR r.binding_id <> c.seller_binding_id
+           OR r.binding_version <> c.seller_binding_version THEN
+          reason := 'CLASSIFICATION_CONFLICT';
+        END IF;
+      END IF;
+
+      IF reason IS NULL THEN
+        SELECT * INTO latest FROM trade_commerce_profile_observation
+          WHERE digital_estate_id = c.digital_estate_id AND engine_instance_id = c.trade_engine_instance_id
+            AND market_id = c.market_id
+          ORDER BY observed_at DESC, observation_id DESC LIMIT 1;
+        IF latest.observation_id IS NULL OR latest.outcome <> 'ATTESTED'
+           OR latest.commerce_profile_id <> c.commerce_profile_id
+           OR latest.profile_revision < c.profile_revision
+           OR latest.commerce_model <> c.commerce_model OR latest.tenant_id <> c.tenant_id
+           OR latest.expires_at <= clock_timestamp() THEN
+          reason := 'PROFILE_NOT_ACTIVE';
+        END IF;
+      END IF;
+
+      -- Until the CAA-06b composition consumes the buyer-authority receipt and
+      -- its spend reservation here, no B2B commitment passes.
+      IF reason IS NULL AND c.commerce_model = 'B2B' THEN
+        -- CAA-06b: the consumption guard already proved same-xid native order,
+        -- seller receipt, spend conversion and canonical outbox. At COMMIT
+        -- require the consumed buyer receipt to remain current and bound to
+        -- the very seller receipt/operation just evaluated. No B2C fallback.
+        IF NOT EXISTS (
+          SELECT 1 FROM trade_buyer_authority_consumption bc
+          JOIN trade_buyer_authority_receipt br ON br.receipt_id=bc.receipt_id
+          WHERE bc.seller_receipt_id=NEW.receipt_id AND bc.order_id=NEW.order_id
+            AND bc.operation_reference=r.operation_reference
+            AND br.expires_at > clock_timestamp()
+            AND br.payload->>'operation' = r.operation_class
+            AND br.payload->>'operation_reference' = r.operation_reference
+            AND br.payload->>'tenant_id' = c.tenant_id
+            AND br.payload->>'buyer_organisation_id' = c.buyer_organisation_id
+            AND br.payload->>'buyer_membership_id' = c.buyer_membership_id
+            AND br.payload->>'currency' = r.currency
+        ) THEN reason := 'BUYER_AUTHORITY_ABSENT'; END IF;
+      END IF;
+
+      INSERT INTO trade_commit_fence_decision (subject_type, subject_id, receipt_id, classification_id, commerce_model,
+          outcome, enforcement_mode, enforcement_revision)
+        VALUES (NEW.subject_type, NEW.subject_id, NEW.receipt_id, c.classification_id, c.commerce_model,
+          coalesce(reason, 'ALLOWED'), gate.mode, gate.revision);
+
+      IF reason IS NOT NULL AND gate.mode = 'ENFORCED' THEN
+        RAISE EXCEPTION 'Decision 8 denied (%): %', reason, CASE reason
+          WHEN 'CLASSIFICATION_ABSENT' THEN 'no native commitment without a known classification'
+          WHEN 'CLASSIFICATION_CHANGED' THEN 'the classification was retired; governed reconciliation and reauthorization are required'
+          WHEN 'CLASSIFICATION_CONFLICT' THEN 'the classification and the seller receipt disagree'
+          WHEN 'PROFILE_NOT_ACTIVE' THEN 'no current CP commerce profile attestation for the classification'
+          ELSE 'a B2B commitment requires the buyer-authority receipt and its spend reservation in this transaction' END;
+      END IF;
+      RETURN NULL;
+    END $;`)
   }
 
   async down(): Promise<void> {
