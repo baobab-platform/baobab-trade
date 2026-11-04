@@ -40,6 +40,16 @@ type OrderModuleTransactionRepository = {
   transaction<T>(callback: (manager: NativeManager) => Promise<T>): Promise<T>
 }
 
+/**
+ * PostgreSQL row xmin is 32-bit while pg_current_xact_id is the full 64-bit
+ * XID. Compare only the current XID's stored lower 32 bits, so the proof does
+ * not fail after a wraparound. Never coerce an absent or nonnumeric XID.
+ */
+export function nativeXid32(xid: string): string {
+  if (!/^[0-9]+$/.test(xid)) throw new Error("MEDUSA_NATIVE_TRANSACTION_XID_UNAVAILABLE")
+  return (BigInt(xid) % 4294967296n).toString()
+}
+
 function nativeRepository(service: IOrderModuleService): OrderModuleTransactionRepository {
   // Pinned Medusa compatibility seam. Keep undocumented property access here
   // rather than allowing arbitrary callers to pretend to own a transaction.
@@ -290,7 +300,7 @@ export async function commitMedusaNativeBuyerOrder(
             [orderId],
           )
           // A separately committed Medusa workflow is NEVER transaction owner.
-          if (result.rowCount !== 1 || result.rows[0].xid !== scope.xid) {
+          if (result.rowCount !== 1 || result.rows[0].xid !== nativeXid32(scope.xid)) {
             throw new Error("MEDUSA_ORDER_OUTSIDE_OWNER_TRANSACTION")
           }
         },
