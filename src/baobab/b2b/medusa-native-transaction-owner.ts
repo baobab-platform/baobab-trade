@@ -9,6 +9,10 @@ import {
   type NativeErpOrderConsequence,
 } from "./native-buyer-commitment"
 import type { FinalNativeValuationFacts } from "./buyer-commitment-valuation"
+import {
+  requireCurrentNativeCommitAuthority,
+  type NativeCommitAuthorityReadback,
+} from "./native-commit-authority-readback"
 
 /**
  * DEV-07 CAA-06b: pinned Medusa 2.21.2 Order Module native transaction owner.
@@ -137,6 +141,13 @@ export type MedusaNativeOwnerDependencies = {
   spend: PostgresSpendReservationCommands
   /** Fresh IAM+CP Principal, buyer operation and seller PEP readbacks. */
   authorizeNow(): Promise<AuthorizedCommitment>
+  /**
+   * Must issue a new actual IAM/CP/Trade readback UNDER the spend row lock,
+   * before native order creation. No stale cached buyer-context ALLOW.
+   */
+  recheckAuthorityNow(
+    original: AuthorizedCommitment,
+  ): Promise<NativeCommitAuthorityReadback>
   /** Independent native database reader, never caller-submitted money. */
   source: NativeMedusaOrderSource
   now?: () => number
@@ -209,6 +220,15 @@ export async function commitMedusaNativeBuyerOrder(
                 command,
                 db,
                 async (bounded) => {
+                  if (!currentAuthority || typeof deps.recheckAuthorityNow !== "function") {
+                    throw new Error("CURRENT_NATIVE_COMMIT_AUTHORITY_NOT_PROVEN")
+                  }
+                  const current = await deps.recheckAuthorityNow(currentAuthority)
+                  requireCurrentNativeCommitAuthority(
+                    currentAuthority,
+                    current,
+                    (deps.now ?? Date.now)(),
+                  )
                   const scope = { manager, db, xid }
                   live.set(bounded, scope)
                   try {
