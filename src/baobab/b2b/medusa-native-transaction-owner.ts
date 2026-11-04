@@ -191,6 +191,25 @@ export async function commitMedusaNativeBuyerOrder(
 
   let currentAuthority: AuthorizedCommitment | null = null
   const live = new WeakMap<object, TransactionScope>()
+  const finalSnapshots = new WeakMap<object, NativeFacts>()
+  const currentSnapshot = async (
+    db: Pick<PgClient, "query">,
+    nativeOrderId: string,
+  ): Promise<NativeFacts> => {
+    read(db)
+    const current = finalSnapshots.get(db)
+    if (current) return current
+    if (!currentAuthority) throw new Error("MEDUSA_CURRENT_AUTHORITY_MISSING")
+    // Read the final native-order lines and all obligation components ONCE
+    // inside the owning XID. A separately evaluated tax/freight read for the
+    // ERP payload must not silently differ from the buyer's price readback.
+    const snapshot = await deps.source.readFinal(db, nativeOrderId, currentAuthority)
+    if (!snapshot?.valuation || !snapshot.erp || !Number.isSafeInteger(snapshot.currencyExponent)) {
+      throw new Error("MEDUSA_FINAL_NATIVE_ORDER_SNAPSHOT_UNAVAILABLE")
+    }
+    finalSnapshots.set(db, snapshot)
+    return snapshot
+  }
   const read = (db: Pick<PgClient, "query">): TransactionScope => {
     const scope = live.get(db)
     if (!scope) throw new Error("MEDUSA_NATIVE_TRANSACTION_SCOPE_INVALID")
@@ -234,6 +253,7 @@ export async function commitMedusaNativeBuyerOrder(
                   try {
                     await mutation(bounded)
                   } finally {
+                    finalSnapshots.delete(bounded)
                     live.delete(bounded)
                   }
                 },
@@ -277,17 +297,17 @@ export async function commitMedusaNativeBuyerOrder(
         readFinalValuation: async (db, id) => {
           read(db)
           if (!currentAuthority) throw new Error("MEDUSA_CURRENT_AUTHORITY_MISSING")
-          return (await deps.source.readFinal(db, id, currentAuthority)).valuation
+          return (await currentSnapshot(db, id)).valuation
         },
         readErpConsequence: async (db, id) => {
           read(db)
           if (!currentAuthority) throw new Error("MEDUSA_CURRENT_AUTHORITY_MISSING")
-          return (await deps.source.readFinal(db, id, currentAuthority)).erp
+          return (await currentSnapshot(db, id)).erp
         },
         readCurrencyExponent: async (db, id) => {
           read(db)
           if (!currentAuthority) throw new Error("MEDUSA_CURRENT_AUTHORITY_MISSING")
-          return (await deps.source.readFinal(db, id, currentAuthority)).currencyExponent
+          return (await currentSnapshot(db, id)).currencyExponent
         },
       },
     },
