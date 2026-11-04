@@ -15,7 +15,10 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import type { ExecArgs, IOrderModuleService, OrderTypes } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
 import { Pool } from "pg"
-import { withNativeMedusaOrderTransaction } from "../baobab/b2b/medusa-native-transaction-owner"
+import {
+  nativeXid32,
+  withNativeMedusaOrderTransaction,
+} from "../baobab/b2b/medusa-native-transaction-owner"
 
 const ROLLBACK = "DEV07_NATIVE_OWNER_EXPECTED_ROLLBACK"
 
@@ -66,7 +69,7 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
           [rolledBackId],
         )
         assert.equal(row.rowCount, 1)
-        assert.equal(row.rows[0].xid, xid, "Order escaped Medusa's owner transaction")
+        assert.equal(row.rows[0].xid, nativeXid32(xid), "Order escaped Medusa's owner transaction")
         throw new Error(ROLLBACK)
       }),
       new RegExp(ROLLBACK),
@@ -90,7 +93,7 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
           [nativeId],
         )
         assert.equal(orderRow.rowCount, 1)
-        assert.equal(orderRow.rows[0].xid, xid)
+        assert.equal(orderRow.rows[0].xid, nativeXid32(xid))
         const items = await db.query(
           `SELECT oi.xmin::text AS item_xid, li.xmin::text AS line_xid
            FROM order_item oi JOIN order_line_item li ON li.id=oi.item_id
@@ -98,8 +101,8 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
           [nativeId],
         )
         assert.equal(items.rowCount, 1, "Real Medusa line item must be persisted")
-        assert.equal(items.rows[0].item_xid, xid)
-        assert.equal(items.rows[0].line_xid, xid)
+        assert.equal(items.rows[0].item_xid, nativeXid32(xid))
+        assert.equal(items.rows[0].line_xid, nativeXid32(xid))
         return { itemCount: items.rowCount, sameXid: true }
       },
     )
