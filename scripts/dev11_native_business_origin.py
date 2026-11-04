@@ -93,7 +93,7 @@ def _read_native_origin(db, event_id: str) -> OriginObservation:
     # A schema has no business meaning if these owning migrations are absent.
     missing = db.execute(
         "SELECT name FROM unnest(%s::text[]) AS name WHERE to_regclass(name) IS NULL",
-        (_TABLES,),
+        (list(_TABLES),),
     ).fetchall()
     if missing:
         _refuse("NATIVE_SCHEMA_OR_FENCE_NOT_INSTALLED")
