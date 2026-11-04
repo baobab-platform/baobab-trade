@@ -244,3 +244,28 @@ companions remain HELD until the final implementation head passes mandatory
 CI, outstanding review findings are resolved and the true connected
 eight-owner source-to-ERP consequence has independent evidence. A green
 source-only suite or locally toggled SHADOW mode never activates B2B checkout.
+
+## Trade #188 composition and exact-source JVM handoff
+
+The integration source contains both Trade #189 `2b4c7c9` and Trade #188
+`5565940` as actual Git parents. The existing confirmed RabbitMQ publisher,
+Medusa source exporter, canonical event contracts and native buyer composition
+now share one source tree. No parallel messaging framework is introduced.
+The broker component workflow consumes ERP mapping candidate `1db56a2` and
+Infrastructure `65931ab`, replacing its historical companion pins.
+
+`prepare-dev11-jvm-handoff.ts` is a clearly synthetic component source that
+uses the actual Medusa outbox, #189 integer valuation kernel and OTLP exporter.
+A private fixture-owner packet supplies only synthetic tenant/legal/product
+coordinates. It returns only IDs of already-persisted immutable events. The
+ERP integration must read those original rows and dispatch each same ID with
+#188's publisher; it must never reconstruct an event with a new ID.
+The optional publisher `--event-id` restricts selection to that existing row;
+it does not create a business fact or grant native authority.
+
+This source permits a real same-event outbox/broker/JVM qualification while
+retaining the separate `NATIVE_ORDER_ABSENT` refusal for its synthetic origin.
+It does not implement the missing governed native cart reader or live buyer
+operation provider, and cannot qualify the non-draft CAA-06b buyer positive or
+L4-OPS-01. The future genuine buyer event uses the same immutable handoff and
+publisher/consumer path without another transport implementation.

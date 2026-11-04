@@ -1,3 +1,4 @@
+import { outgoingTraceHeaders } from "../observability/tracing"
 import {
   createPublicKey,
   verify as verifySignature,
@@ -270,7 +271,7 @@ export class BuyerTokenVerifier {
     let response: Response
     try {
       response = await this.fetcher(url, {
-        headers: { accept: "application/json" },
+        headers: { accept: "application/json", ...outgoingTraceHeaders() },
         redirect: "error",
         signal: AbortSignal.timeout(this.timeoutMs),
       })
