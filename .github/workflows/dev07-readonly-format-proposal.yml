@@ -1,0 +1,22 @@
+# Temporary read-only CI diagnostic: emit the exact Prettier diff for the
+# new DEV-07 source. Delete when the diff has been applied to the source.
+name: DEV07 format proposal (read only)
+on:
+  push:
+    branches: [feat/dev07-caa06b-buyer-valuation-20261104]
+permissions:
+  contents: read
+jobs:
+  proposal:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Print formatter patch only; no pushes or privilege escalation
+        run: |
+          npx prettier --write src/baobab/b2b/native-buyer-commitment.ts src/modules/legal-seller-checkout/migrations/Migration20261104190000.ts tests/native-buyer-commitment.test.ts
+          git --no-pager diff -- src/baobab/b2b/native-buyer-commitment.ts src/modules/legal-seller-checkout/migrations/Migration20261104190000.ts tests/native-buyer-commitment.test.ts
