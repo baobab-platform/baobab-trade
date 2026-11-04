@@ -29,7 +29,12 @@ const valuationFacts = {
   currency: "UGX",
   basis: "FINAL_PRICED" as const,
   components: [
-    { component_kind: "MERCHANDISE" as const, amount_minor: 1250000, determination: "FINAL" as const, source_reference: "line_1" },
+    {
+      component_kind: "MERCHANDISE" as const,
+      amount_minor: 1250000,
+      determination: "FINAL" as const,
+      source_reference: "line_1",
+    },
   ],
 }
 const valuation = buildFinalBuyerCommitmentValuation(valuationFacts, NOW)
@@ -152,11 +157,20 @@ function harness(changed?: (p: AuthorizedCommitment) => void) {
       return { rows: [], rowCount: 1 }
     },
   }
-  const writer = vi.fn(async () => { queries.push("NATIVE_MEDUSA_ORDER_WRITE") })
-  const commitWithMutation = vi.fn(async (_command: unknown, mutation: (db: Pick<PgClient, "query">) => Promise<void>) => {
-    await mutation(db)
-    return { outcome: "APPLIED" as const, reservationId: p.receipt.spend_reservation_id, status: "COMMITTED" as const, holdRevision: 1 }
+  const writer = vi.fn(async () => {
+    queries.push("NATIVE_MEDUSA_ORDER_WRITE")
   })
+  const commitWithMutation = vi.fn(
+    async (_command: unknown, mutation: (db: Pick<PgClient, "query">) => Promise<void>) => {
+      await mutation(db)
+      return {
+        outcome: "APPLIED" as const,
+        reservationId: p.receipt.spend_reservation_id,
+        status: "COMMITTED" as const,
+        holdRevision: 1,
+      }
+    },
+  )
   const deps: NativeCommitDependencies = {
     authorizeNow: async () => p,
     spend: { commitWithMutation },
@@ -172,11 +186,15 @@ function harness(changed?: (p: AuthorizedCommitment) => void) {
         customer_id: "customer_synthetic01",
         placed_at: NOW.toISOString(),
         currency: "UGX",
-        lines: [{
-          line_id: "line_1", sku_id: "sku_1", quantity: { value: "1", unit: "EA" },
-          unit_price: { amount: "1250000", currency: "UGX" },
-          line_total: { amount: "1250000", currency: "UGX" },
-        }],
+        lines: [
+          {
+            line_id: "line_1",
+            sku_id: "sku_1",
+            quantity: { value: "1", unit: "EA" },
+            unit_price: { amount: "1250000", currency: "UGX" },
+            line_total: { amount: "1250000", currency: "UGX" },
+          },
+        ],
         totals: {
           subtotal: { amount: "1250000", currency: "UGX" },
           discount: { amount: "0", currency: "UGX" },
@@ -193,7 +211,9 @@ describe("CAA-06b proposed owner transaction composition (source-only, not activ
   it("creates the one canonical outbox and buyer consumption through the spend transaction", async () => {
     const h = harness()
     expect(await commitAuthorizedNativeBuyerOrder(h.deps, request)).toEqual({
-      outcome: "COMMITTED", orderId: request.nativeOrderId, eventId,
+      outcome: "COMMITTED",
+      orderId: request.nativeOrderId,
+      eventId,
     })
     expect(h.commitWithMutation).toHaveBeenCalledOnce()
     expect(h.writer).toHaveBeenCalledOnce()
@@ -205,19 +225,35 @@ describe("CAA-06b proposed owner transaction composition (source-only, not activ
   })
 
   it("does not accept discovery ALLOW as order permission without a fresh separate decision", async () => {
-    const h = harness((p) => { p.operationDecision.outcome = "ALLOW"; p.operationDecision.operation = "trade.order.create" })
+    const h = harness((p) => {
+      p.operationDecision.outcome = "ALLOW"
+      p.operationDecision.operation = "trade.order.create"
+    })
     expect((await commitAuthorizedNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
     expect(h.commitWithMutation).not.toHaveBeenCalled()
   })
 
   it("denies stale, mismatched and foreign buyer/seller proofs before touching spend", async () => {
     for (const mutate of [
-      (p: AuthorizedCommitment) => { p.receipt.amount_minor++ },
-      (p: AuthorizedCommitment) => { p.receipt.spend_hold_revision = 2; p.receipt.spend_reservation_id = "b2bres_other" },
-      (p: AuthorizedCommitment) => { p.receipt.seller_binding_reference.binding_version++ },
-      (p: AuthorizedCommitment) => { p.context.operation = "trade.buyer-context.resolve" },
-      (p: AuthorizedCommitment) => { p.receipt.expires_at = "2026-11-04T16:00:14Z" },
-      (p: AuthorizedCommitment) => { p.seller.operation_reference = "foreign/operation" },
+      (p: AuthorizedCommitment) => {
+        p.receipt.amount_minor++
+      },
+      (p: AuthorizedCommitment) => {
+        p.receipt.spend_hold_revision = 2
+        p.receipt.spend_reservation_id = "b2bres_other"
+      },
+      (p: AuthorizedCommitment) => {
+        p.receipt.seller_binding_reference.binding_version++
+      },
+      (p: AuthorizedCommitment) => {
+        p.context.operation = "trade.buyer-context.resolve"
+      },
+      (p: AuthorizedCommitment) => {
+        p.receipt.expires_at = "2026-11-04T16:00:14Z"
+      },
+      (p: AuthorizedCommitment) => {
+        p.seller.operation_reference = "foreign/operation"
+      },
     ]) {
       const h = harness(mutate)
       expect((await commitAuthorizedNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
@@ -235,14 +271,19 @@ describe("CAA-06b proposed owner transaction composition (source-only, not activ
     // mimics the *refusal*, not PostgreSQL transactional guarantees.
     h.deps.spend.commitWithMutation = async (command, mutation) => {
       expect(command.amountMinor).toBe(1250000n)
-      await expect(mutation({ query: async (sql) => {
-        h.queries.push(sql)
-        return { rows: [], rowCount: 1 }
-      } })).rejects.toThrow("NATIVE_FINAL_VALUATION_CHANGED")
+      await expect(
+        mutation({
+          query: async (sql) => {
+            h.queries.push(sql)
+            return { rows: [], rowCount: 1 }
+          },
+        }),
+      ).rejects.toThrow("NATIVE_FINAL_VALUATION_CHANGED")
       return { outcome: "REFUSED", reason: "TRANSACTION_CHANGED" }
     }
     expect(await commitAuthorizedNativeBuyerOrder(h.deps, request)).toEqual({
-      outcome: "REFUSED", reason: "TRANSACTION_CHANGED",
+      outcome: "REFUSED",
+      reason: "TRANSACTION_CHANGED",
     })
     expect(h.queries.some((q) => q.includes("INSERT INTO event_outbox"))).toBe(false)
   })
