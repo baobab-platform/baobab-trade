@@ -6,6 +6,21 @@ independently observed. No staging/production approval or PR merges.
 
 ## Ownership and native boundaries
 
+### 4 November 2026 — publisher crash recovery correction
+
+Run `41602184493` reached genuine confirmed publication and the simulated
+publisher process crash, then aborted with `KeyError: 0`. The Trade PostgreSQL
+connection returns named dictionary rows; the lease-expiry probe mistakenly
+used a positional index. `publisher_lease_expired` now reads the named result
+from PostgreSQL's own clock and requires boolean true. Absent rows and NULL
+leases cannot qualify recovery. Its unit regression covers all four outcomes;
+the unchanged real broker workflow must still prove reclaim, redelivery and
+deduplication at the new source. No test rewrites the lease timestamp.
+
+This corrects the component qualification runner, not the outstanding governed
+Medusa buyer order or native iDempiere business consequence. L4-OPS-01 stays
+BLOCKED. Do not interpret a source-test pass as observed broker recovery.
+
 The **Trade-owned** Medusa event-outbox module remains the authority for
 `event_outbox` persistence, original event/semantic digest, idempotency and
 the per-record lease. The new separately executable Trade-owned

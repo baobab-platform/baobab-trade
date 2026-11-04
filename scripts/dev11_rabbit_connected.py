@@ -35,6 +35,20 @@ def demand(ok, code):
         raise RuntimeError(code)
 
 
+def publisher_lease_expired(trade, outbox_id):
+    """Observe PostgreSQL's own clock using the connection's named-row shape.
+
+    The Trade connection uses dict_row throughout. A positional index aborted
+    the real crash scenario after broker confirmation, before reclaim/replay.
+    Missing rows and NULL leases cannot be positive expiration evidence.
+    """
+    row = trade.execute(
+        "SELECT lease_expires_at <= now() AS expired FROM event_outbox WHERE id=%s",
+        (outbox_id,),
+    ).fetchone()
+    return row is not None and row["expired"] is True
+
+
 def fetch_message(channel, queue=DEAD):
     for _ in range(60):
         method, properties, body = channel.basic_get(queue, auto_ack=False)
@@ -255,10 +269,7 @@ def main():
             wait_durable_ack(channel, consumer, minimum_ack=3)
             lease_expired = False
             for _ in range(45):
-                lease_expired = trade.execute(
-                    "SELECT lease_expires_at <= now() FROM event_outbox WHERE id=%s",
-                    (ambiguous["id"],),
-                ).fetchone()[0]
+                lease_expired = publisher_lease_expired(trade, ambiguous["id"])
                 if lease_expired:
                     break
                 time.sleep(.25)

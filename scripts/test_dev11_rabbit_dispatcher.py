@@ -10,8 +10,11 @@ import json
 import os
 import unittest
 from unittest.mock import patch
+from unittest.mock import Mock
 
-from dev11_rabbit_connected import MAX_MANAGEMENT_STATS_BYTES, parse_management_stats
+from dev11_rabbit_connected import (
+    MAX_MANAGEMENT_STATS_BYTES, parse_management_stats, publisher_lease_expired,
+)
 
 from dev11_rabbit_dispatcher import (
     Claimed, SourceEnvelopeInvalid, claim_next, payload_for, TYPES,
@@ -41,6 +44,15 @@ def test_claim():
 
 
 class NativeTradeRabbitOwnerTests(unittest.TestCase):
+    def test_crash_recovery_observes_named_pg_lease_result(self):
+        db = Mock()
+        for row, expected in (({"expired": True}, True), ({"expired": False}, False),
+                              ({"expired": None}, False), (None, False)):
+            with self.subTest(row=row):
+                db.execute.return_value.fetchone.return_value = row
+                self.assertIs(publisher_lease_expired(db, "evtout_unit_fixture"), expected)
+                self.assertEqual(db.execute.call_args.args[1], ("evtout_unit_fixture",))
+
     def test_only_order_placed_is_enabled_for_first_vertical(self):
         self.assertEqual(TYPES, frozenset({EVENT_TYPE}))
 
