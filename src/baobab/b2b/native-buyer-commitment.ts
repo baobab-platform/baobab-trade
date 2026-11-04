@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto"
-import { buyerAuthorityReceiptSchema } from "../contracts/authority-validation"
+import {
+  buyerAuthorityReceiptSchema,
+  erpOrderConsequenceSchema,
+} from "../contracts/authority-validation"
 import { createTenantTradeEvent, isValidCloudEvent } from "../events/event-contracts"
 import { canonicalEventFingerprint } from "../events/outbox"
 import type { BaobabTenantContext } from "../contracts/tenant-context"
@@ -271,7 +274,11 @@ export async function commitAuthorizedNativeBuyerOrder(
     )
       throw new Error("NATIVE_FINAL_VALUATION_CHANGED")
     const data = await deps.native.readErpConsequence(db, request.nativeOrderId)
+    // Fail closed on the complete pinned ERP v1 semantic envelope *before*
+    // persisting the outbox. This is a shape check, not native-source proof;
+    // the Medusa owner must still independently reread the genuine order.
     if (
+      !erpOrderConsequenceSchema(data) ||
       data.commerce_order_id !== request.nativeOrderId ||
       data.legal_entity_id !== s.responsible_legal_entity_id ||
       data.currency !== b.currency ||

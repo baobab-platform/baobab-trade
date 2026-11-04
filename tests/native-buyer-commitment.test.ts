@@ -261,6 +261,34 @@ describe("CAA-06b proposed owner transaction composition (source-only, not activ
     }
   })
 
+  it("rejects noncanonical ERP consequence facts inside the spend transaction", async () => {
+    const h = harness()
+    const original = h.deps.native.readErpConsequence
+    h.deps.native.readErpConsequence = async (db, orderId) => ({
+      ...(await original(db, orderId)),
+      unreviewed_native_field: "not in the pinned ERP contract",
+    })
+    h.deps.spend.commitWithMutation = async (_command, mutation) => {
+      await expect(
+        mutation({
+          query: async (sql) => {
+            h.queries.push(sql)
+            return { rows: [], rowCount: 1 }
+          },
+        }),
+      ).rejects.toThrow("NATIVE_ERP_BUSINESS_FACTS_NOT_VERIFIED")
+      return { outcome: "REFUSED", reason: "TRANSACTION_CHANGED" }
+    }
+    expect(await commitAuthorizedNativeBuyerOrder(h.deps, request)).toEqual({
+      outcome: "REFUSED",
+      reason: "TRANSACTION_CHANGED",
+    })
+    expect(h.queries.some((sql) => sql.includes("INSERT INTO event_outbox"))).toBe(false)
+    expect(h.queries.some((sql) => sql.includes("INSERT INTO trade_buyer_authority_consumption"))).toBe(
+      false,
+    )
+  })
+
   it("refuses if native final pricing diverges before publishing or consumption", async () => {
     const h = harness()
     h.deps.native.readFinalValuation = async () => ({

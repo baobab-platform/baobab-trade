@@ -64,6 +64,19 @@ a successful Medusa order, a CP-issued buyer receipt, an exported trace or
 a broker-to-ERP consequence. They provide an explicit regression guard
 while the real native Medusa transaction adapter is still unqualified.
 
+### Pinned ERP business-fact contract at the native commit boundary
+
+Trade now consumes the exact existing Shared pin's
+`contracts/erp/v1/commerce-order-consequence.schema.json` and its
+`domain.schema.json` dependency via the maintained `contracts:sync`
+closure and AJV Draft 2020-12, not a locally invented business payload.
+`commitAuthorizedNativeBuyerOrder` refuses a non-conforming
+`readErpConsequence` result **inside** the spend transaction, before the
+canonical outbox insert. Source negatives cover an unreviewed ERP field and
+assert no event or buyer-consumption insert occurs. This is additional
+contract defence, not proof that the still-missing Medusa transaction-owner
+adapter read authentic final native prices, lines or consequences.
+
 ## Explicitly incomplete / not qualified
 
 This PR **does not include a real Medusa 2.21 NativeMedusaTransactionOwner**,
