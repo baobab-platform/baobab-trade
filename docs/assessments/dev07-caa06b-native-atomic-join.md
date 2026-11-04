@@ -45,6 +45,25 @@ or SHADOW CAA-06 decision is **not** an accepted source-to-business-consequence 
 6. **Source tests**: refuse discovery-only permission, mismatched seller,
    stale buyer, changed final obligation and foreign scope before mutation.
 
+### PostgreSQL 17 independent source-owned refusal drill
+
+The core-module integration CI executes
+`src/scripts/regression-native-buyer-guard.ts` against the disposable PostgreSQL
+17 database after actual Medusa migrations. It verifies that the installed
+buyer-receipt, consumption, immutability and deferred-classification triggers
+are enabled, that the Decision 9 mode remains SHADOW, and that missing,
+expired and rewritten receipt evidence and a syntactically well-formed but
+unattributed consumption all refuse without a durable business effect.
+Every synthetic record is rolled back, including on failure.
+
+The original owner artifact
+`dev07-native-buyer-origin-negatives/receipt.json` deliberately declares
+`native_order_created=false`, `buyer_IAM_CP_authorized=false` and
+`l4_ops_01=BLOCKED`. These are **actual PostgreSQL security negatives**, not
+a successful Medusa order, a CP-issued buyer receipt, an exported trace or
+a broker-to-ERP consequence. They provide an explicit regression guard
+while the real native Medusa transaction adapter is still unqualified.
+
 ## Explicitly incomplete / not qualified
 
 This PR **does not include a real Medusa 2.21 NativeMedusaTransactionOwner**,
