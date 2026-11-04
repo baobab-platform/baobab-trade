@@ -126,6 +126,12 @@ export const buyerOperationDecisionSchema = validator(
   "trade/v2/buyer-execution-context.schema.json",
   "BuyerOperationDecision",
 )
+// CAA-06b: validation is necessary but never sufficient for a current
+// IAM/CP-authorised native buyer commitment. The database consumes it once.
+export const buyerAuthorityReceiptSchema = validator(
+  "trade/v2/buyer-authority-receipt.schema.json",
+  "BuyerAuthorityReceipt",
+)
 // Decision 7's canonical valuation is a fact shape, never buyer permission.
 export const buyerCommitmentValuationSchema = validator(
   "trade/v2/buyer-commitment-valuation.schema.json",
