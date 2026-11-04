@@ -186,6 +186,11 @@ def _read_native_origin(db, event_id: str) -> OriginObservation:
 
 
 def assess_native_origin(db, event_id: str) -> OriginObservation:
+    # Refuse malformed event identities without opening any database statement.
+    # This is both a security boundary and the source of the strict negative
+    # regression: a bad identifier can never appear as a DB/provider outage.
+    if not isinstance(event_id, str) or not _ID.fullmatch(event_id):
+        return OriginObservation(False, "EVENT_ID_INVALID")
     try:
         # Fail safe if the source/schema/database cannot be independently read.
         with db.transaction():
