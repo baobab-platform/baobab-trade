@@ -720,6 +720,80 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
     outside.release()
   }
 
+  // Two native owners cannot consume the same purchase concurrently, even
+  // with two distinct command keys. The loser must abort its *own* connection
+  // after the first transaction commits, never manufacture a replay receipt.
+  const raceOrg = await organisation("ownerrace")
+  const raceMember = await membership(raceOrg, "race")
+  await budget(raceOrg, "MEMBERSHIP", raceMember, 50_000n, "race")
+  const raceSubmission = submission(raceOrg, raceMember, 15_000n, "ownerrace")
+  const raceReservation = applied(await commands.submit(raceSubmission))
+  const winnerCommand = commitOf(raceOrg, raceReservation.reservationId, raceSubmission, {
+    commitmentReference: `order_race_${run}`,
+  })
+  const loserCommand = commitOf(raceOrg, raceReservation.reservationId, raceSubmission, {
+    commitmentReference: `order_race_other_${run}`,
+  })
+  const firstOwner = await pool.connect()
+  const secondOwner = await pool.connect()
+  let signalStarted = () => {}
+  const firstStarted = new Promise<void>((resolve) => { signalStarted = resolve })
+  let raceWrites = 0
+  try {
+    await firstOwner.query("BEGIN")
+    const winning = (async () => {
+      const result = await commands.commitWithOwnerTransaction(winnerCommand, firstOwner, async (db) => {
+        raceWrites += 1
+        signalStarted()
+        await sleep(100)
+        await db.query(
+          `INSERT INTO dev07_atomic_spend_probe (id,transaction_id,unique_value)
+           VALUES ($1,pg_current_xact_id()::text,$1)`,
+          [winnerCommand.commitmentReference],
+        )
+      })
+      await firstOwner.query("COMMIT")
+      return result
+    })()
+    await firstStarted
+    await secondOwner.query("BEGIN")
+    const losing = (async () => {
+      try {
+        await commands.commitWithOwnerTransaction(loserCommand, secondOwner, async () => {
+          raceWrites += 1
+        })
+        throw new Error("double spend: a second owner unexpectedly committed")
+      } catch (error) {
+        if (!/CONTEXT_NOT_USABLE/.test(String(error))) throw error
+        await secondOwner.query("ROLLBACK")
+        return "REFUSED"
+      }
+    })()
+    const [won, lost] = await Promise.all([winning, losing])
+    assert.equal(won.outcome, "APPLIED")
+    assert.equal(lost, "REFUSED")
+    assert.equal(raceWrites, 1)
+    assert.equal(
+      await count(
+        `SELECT 1 FROM b2b_spend_ledger_entry WHERE reservation_id=$1 AND entry_kind='COMMIT'`,
+        [raceReservation.reservationId],
+      ),
+      1,
+    )
+    assert.equal(
+      await count('SELECT 1 FROM "b2b_spend_command" WHERE "idempotency_key"=$1', [
+        loserCommand.idempotencyKey,
+      ]),
+      0,
+    )
+    pass("two independent native owners: one wins; loser refuses without extra ledger or mutation")
+  } finally {
+    await firstOwner.query("ROLLBACK").catch(() => undefined)
+    await secondOwner.query("ROLLBACK").catch(() => undefined)
+    firstOwner.release()
+    secondOwner.release()
+  }
+
   return passed
 }
 
