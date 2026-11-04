@@ -3,9 +3,17 @@ import type { IOrderModuleService } from "@medusajs/framework/types"
 import {
   commitMedusaNativeBuyerOrder,
   medusaNativeQuery,
+  nativeXid32,
 } from "../src/baobab/b2b/medusa-native-transaction-owner"
 
 describe("CAA-06b native Medusa transaction boundary", () => {
+  it("compares a 64-bit transaction to 32-bit PostgreSQL row xmin without truncating the source", () => {
+    expect(nativeXid32("1")).toBe("1")
+    expect(nativeXid32("4294967297")).toBe("1")
+    expect(() => nativeXid32("")).toThrow("MEDUSA_NATIVE_TRANSACTION_XID_UNAVAILABLE")
+    expect(() => nativeXid32("not-a-number")).toThrow("MEDUSA_NATIVE_TRANSACTION_XID_UNAVAILABLE")
+  })
+
   it("binds repeated and out-of-order pg parameters to the same Knex transaction", async () => {
     const raw = vi.fn(async (statement: string, bindings: unknown[]) => ({
       rows: [{ statement, bindings }],
