@@ -92,7 +92,7 @@ def _read_native_origin(db, event_id: str) -> OriginObservation:
         _refuse("EVENT_ID_INVALID")
     # A schema has no business meaning if these owning migrations are absent.
     missing = db.execute(
-        "SELECT name FROM unnest(%s::text[]) AS name WHERE to_regclass(name) IS NULL",
+        "SELECT required.table_name FROM unnest(%s::text[]) AS required(table_name) WHERE to_regclass(required.table_name) IS NULL",
         (list(_TABLES),),
     ).fetchall()
     if missing:
