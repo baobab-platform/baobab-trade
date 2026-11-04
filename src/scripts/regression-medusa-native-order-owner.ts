@@ -65,11 +65,12 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
         } as never)
         assert.equal(result.id, rolledBackId, "Medusa must retain its native order ID")
         const row = await db.query(
-          'SELECT xmin::text AS xid FROM "order" WHERE id=$1 AND deleted_at IS NULL',
+          'SELECT xmin::text AS xid, is_draft_order FROM "order" WHERE id=$1 AND deleted_at IS NULL',
           [rolledBackId],
         )
         assert.equal(row.rowCount, 1)
         assert.equal(row.rows[0].xid, nativeXid32(xid), "Order escaped Medusa's owner transaction")
+        assert.equal(row.rows[0].is_draft_order, true, "Medusa must persist the synthetic draft flag")
         throw new Error(ROLLBACK)
       }),
       new RegExp(ROLLBACK),
@@ -89,11 +90,12 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
         } as never)
         assert.equal(order.id, nativeId)
         const orderRow = await db.query(
-          'SELECT xmin::text AS xid FROM "order" WHERE id=$1 AND deleted_at IS NULL',
+          'SELECT xmin::text AS xid, is_draft_order FROM "order" WHERE id=$1 AND deleted_at IS NULL',
           [nativeId],
         )
         assert.equal(orderRow.rowCount, 1)
         assert.equal(orderRow.rows[0].xid, nativeXid32(xid))
+        assert.equal(orderRow.rows[0].is_draft_order, true)
         const items = await db.query(
           `SELECT oi.xmin::text AS item_xid, li.xmin::text AS line_xid
            FROM order_item oi JOIN order_line_item li ON li.id=oi.item_id
@@ -108,7 +110,7 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
     )
     committedId = nativeId
     const independent = await pool.query(
-      'SELECT xmin::text AS xid FROM "order" WHERE id=$1 AND deleted_at IS NULL',
+      'SELECT xmin::text AS xid, is_draft_order FROM "order" WHERE id=$1 AND deleted_at IS NULL',
       [nativeId],
     )
     assert.equal(independent.rowCount, 1, "Owner transaction must genuinely COMMIT")
