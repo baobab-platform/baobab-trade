@@ -153,9 +153,14 @@ export class PostgresCommercialLifecycle {
       Array.isArray(command) ||
       Object.keys(command).some(
         (key) =>
-          !["action", "scope", "idempotencyKey", "resourceId", "expectedVersion", "payload"].includes(
-            key,
-          ),
+          ![
+            "action",
+            "scope",
+            "idempotencyKey",
+            "resourceId",
+            "expectedVersion",
+            "payload",
+          ].includes(key),
       ) ||
       (command.action === "RFQ_CREATE" &&
         (command.resourceId !== undefined || command.expectedVersion !== undefined)) ||

@@ -63,3 +63,11 @@ database disposal; the native owner report does not certify host teardown.
 The migration never deletes history on rollback. Disable the affected consumer
 and return to reviewed owner pins if it fails; preserve append-only receipts
 for diagnosis. No event here is emitted under an unregistered Shared event type.
+
+## 4 November 2026 maintenance
+
+Reused the existing native lifecycle implementation and corrected the exact
+Prettier-reported PostgreSQL service file from CI run 41563365799. All thirteen
+kernel regressions and the file's pinned formatter check pass locally. This
+formatting correction does not qualify current IAM/CP authority, PostgreSQL
+concurrency, quote acceptance, native commitment or provider execution.
