@@ -13,6 +13,7 @@ on:
       - scripts/dev11_broker_crash_publisher.py
       - scripts/test_dev11_rabbit_dispatcher.py
       - scripts/dev11_native_business_origin.py
+      - scripts/test_dev11_native_business_origin.py
       - scripts/dev11-rabbit-requirements.txt
       - src/scripts/prepare-dev11-rabbit-event.ts
       - src/baobab/events/**
@@ -158,10 +159,10 @@ jobs:
           npm ci
           python -m pip install -r scripts/dev11-rabbit-requirements.txt
           python -m pip install -e erp-source/modules
-      - name: Fixed native publisher ownership and lease-negative regression
+      - name: Fixed native publisher and order-origin negative regressions
         env:
           PYTHONPATH: scripts
-        run: python -m unittest discover -s scripts -p test_dev11_rabbit_dispatcher.py -v
+        run: python -m unittest discover -s scripts -p 'test_dev11_*.py' -v
       - name: Apply the real owner Medusa PostgreSQL migrations
         run: npm run migrate
       - name: Apply real ERP migrations in an independent PostgreSQL 17 instance
