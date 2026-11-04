@@ -29,9 +29,7 @@ describe("CAA-06b native Medusa transaction boundary", () => {
     expect(raw).toHaveBeenCalledOnce()
     await expect(db.query("SELECT $2", ["only-one"])).rejects.toThrow("MEDUSA_SQL_BINDING_INVALID")
     await expect(db.query("SELECT ?", ["unsafe"])).rejects.toThrow("MEDUSA_SQL_BINDING_UNSAFE")
-    await expect(db.query("SELECT 1", ["unused"])).rejects.toThrow(
-      "MEDUSA_SQL_BINDING_MISSING",
-    )
+    await expect(db.query("SELECT 1", ["unused"])).rejects.toThrow("MEDUSA_SQL_BINDING_MISSING")
     expect(() => db.release()).toThrow("MEDUSA_NATIVE_TRANSACTION_OWNED_BY_ORDER_MODULE")
   })
 
@@ -70,7 +68,9 @@ describe("CAA-06b native Medusa transaction boundary", () => {
           orderModule: nativeOrder,
           spend: {} as never,
           source: {} as never,
-          authorizeNow: vi.fn(async () => { throw new Error("must not run") }),
+          authorizeNow: vi.fn(async () => {
+            throw new Error("must not run")
+          }),
         },
         {
           nativeOrderId: "order_native_synthetic",

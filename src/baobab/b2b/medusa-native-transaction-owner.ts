@@ -66,9 +66,7 @@ function nativeRepository(service: IOrderModuleService): OrderModuleTransactionR
  * reordered arguments. This boundary only accepts the reviewed Trade SQL
  * used by the spend and event commands; no SQL with unbound native '?' input.
  */
-export function medusaNativeQuery(
-  transaction: NativeTransaction,
-): PgClient {
+export function medusaNativeQuery(transaction: NativeTransaction): PgClient {
   return {
     query: async (sql: string, values: readonly unknown[] = []) => {
       if (sql.includes("?")) throw new Error("MEDUSA_SQL_BINDING_UNSAFE")
@@ -103,11 +101,7 @@ export function medusaNativeQuery(
  */
 export async function withNativeMedusaOrderTransaction<T>(
   service: IOrderModuleService,
-  callback: (scope: {
-    manager: NativeManager
-    db: PgClient
-    xid: string
-  }) => Promise<T>,
+  callback: (scope: { manager: NativeManager; db: PgClient; xid: string }) => Promise<T>,
 ): Promise<T> {
   return nativeRepository(service).transaction(async (manager) => {
     const transaction = manager?.getTransactionContext?.()
@@ -117,7 +111,7 @@ export async function withNativeMedusaOrderTransaction<T>(
     const db = medusaNativeQuery(transaction)
     const xid = await currentXid(db)
     const result = await callback({ manager, db, xid })
-    if (await currentXid(db) !== xid) throw new Error("MEDUSA_ORDER_TRANSACTION_CHANGED")
+    if ((await currentXid(db)) !== xid) throw new Error("MEDUSA_ORDER_TRANSACTION_CHANGED")
     return result
   })
 }
@@ -268,7 +262,7 @@ export async function commitMedusaNativeBuyerOrder(
                   }
                 },
               )
-              if (await currentXid(db) !== xid) {
+              if ((await currentXid(db)) !== xid) {
                 throw new Error("MEDUSA_ORDER_TRANSACTION_CHANGED")
               }
               // Never convert a native owner exception into a normal return

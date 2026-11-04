@@ -644,22 +644,28 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
     )
     // Only the transaction owner can see uncommitted business writes.
     assert.equal(
-      (await ownerDb.query("SELECT 1 FROM dev07_atomic_spend_probe WHERE id=$1", [
-        ownedCommand.commitmentReference,
-      ])).rowCount,
+      (
+        await ownerDb.query("SELECT 1 FROM dev07_atomic_spend_probe WHERE id=$1", [
+          ownedCommand.commitmentReference,
+        ])
+      ).rowCount,
       1,
     )
     assert.equal(
-      (await outside.query("SELECT 1 FROM dev07_atomic_spend_probe WHERE id=$1", [
-        ownedCommand.commitmentReference,
-      ])).rowCount,
+      (
+        await outside.query("SELECT 1 FROM dev07_atomic_spend_probe WHERE id=$1", [
+          ownedCommand.commitmentReference,
+        ])
+      ).rowCount,
       0,
     )
     await ownerDb.query("ROLLBACK")
     assert.equal(
-      (await sql("SELECT status FROM b2b_spend_reservation WHERE id=$1", [
-        ownedReservation.reservationId,
-      ])).rows[0].status,
+      (
+        await sql("SELECT status FROM b2b_spend_reservation WHERE id=$1", [
+          ownedReservation.reservationId,
+        ])
+      ).rows[0].status,
       "ACTIVE",
     )
     assert.equal(
@@ -702,8 +708,12 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
     )
     assert.equal(xids.rowCount, 1)
     assert.ok(
-      [xids.rows[0].mutation, xids.rows[0].reservation, xids.rows[0].command, xids.rows[0].ledger]
-        .every((xid) => xid === xids.rows[0].transaction_id),
+      [
+        xids.rows[0].mutation,
+        xids.rows[0].reservation,
+        xids.rows[0].command,
+        xids.rows[0].ledger,
+      ].every((xid) => xid === xids.rows[0].transaction_id),
     )
     await ownerDb.query("BEGIN")
     assert.equal(

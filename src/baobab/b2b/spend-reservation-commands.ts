@@ -281,67 +281,76 @@ export class PostgresSpendReservationCommands {
       throw new TypeError("invalid commit command")
     }
     const request = mutation ? { ...command, execution: "ATOMIC_DATABASE_MUTATION" } : command
-    return this.run("COMMIT", request, command.organisationId, async (db) => {
-      const reservation = await this.lockReservation(
-        db,
-        command.organisationId,
-        command.reservationId,
-      )
-      if (reservation.status !== "ACTIVE" || reservation.expired) {
-        throw new Refused("CONTEXT_NOT_USABLE")
-      }
-      if (
-        reservation.transaction_digest !== command.transactionDigest ||
-        reservation.resource_version !== command.resourceVersion ||
-        reservation.amount_minor !== command.amountMinor ||
-        reservation.hold_revision !== command.holdRevision
-      ) {
-        throw new Refused("TRANSACTION_CHANGED")
-      }
-      const policies = await this.applicablePolicies(db, reservation)
-      const holds = await this.holds(db, reservation.id)
-      // Commit never moves a hold. Every applicable budget must hold the
-      // full amount now, and no held budget may be stale, retired or no
-      // longer applicable: only an explicit rollover (which advances the
-      // hold revision and so forces revalidation) may change that.
-      for (const policy of policies) {
-        const hold = currentHold(holds, policy)
-        if (!hold || hold.reserved_minor !== reservation.amount_minor) {
+    return this.run(
+      "COMMIT",
+      request,
+      command.organisationId,
+      async (db) => {
+        const reservation = await this.lockReservation(
+          db,
+          command.organisationId,
+          command.reservationId,
+        )
+        if (reservation.status !== "ACTIVE" || reservation.expired) {
+          throw new Refused("CONTEXT_NOT_USABLE")
+        }
+        if (
+          reservation.transaction_digest !== command.transactionDigest ||
+          reservation.resource_version !== command.resourceVersion ||
+          reservation.amount_minor !== command.amountMinor ||
+          reservation.hold_revision !== command.holdRevision
+        ) {
+          throw new Refused("TRANSACTION_CHANGED")
+        }
+        const policies = await this.applicablePolicies(db, reservation)
+        const holds = await this.holds(db, reservation.id)
+        // Commit never moves a hold. Every applicable budget must hold the
+        // full amount now, and no held budget may be stale, retired or no
+        // longer applicable: only an explicit rollover (which advances the
+        // hold revision and so forces revalidation) may change that.
+        for (const policy of policies) {
+          const hold = currentHold(holds, policy)
+          if (!hold || hold.reserved_minor !== reservation.amount_minor) {
+            throw new Refused("CONTEXT_NOT_USABLE", "ROLLOVER_REQUIRED")
+          }
+        }
+        if (
+          holds.some((h) => h.reserved_minor > 0n && !policies.some((p) => currentHold([h], p)))
+        ) {
           throw new Refused("CONTEXT_NOT_USABLE", "ROLLOVER_REQUIRED")
         }
-      }
-      if (holds.some((h) => h.reserved_minor > 0n && !policies.some((p) => currentHold([h], p)))) {
-        throw new Refused("CONTEXT_NOT_USABLE", "ROLLOVER_REQUIRED")
-      }
-      for (const policy of policies) {
-        await db.query(
-          `insert into "b2b_spend_ledger_entry" ("id", "entry_kind", "reservation_id", "budget_policy_id",
+        for (const policy of policies) {
+          await db.query(
+            `insert into "b2b_spend_ledger_entry" ("id", "entry_kind", "reservation_id", "budget_policy_id",
              "policy_revision", "amount_minor", "raw_amount_minor", "commitment_reference",
              "idempotency_key", "actor_principal_id")
            values ($1, 'COMMIT', $2, $3, $4, $5, '{}', $6, $7, $8)`,
-          [
-            `b2bled_${randomUUID().replaceAll("-", "")}`,
-            reservation.id,
-            policy.id,
-            policy.revision,
-            reservation.amount_minor.toString(),
-            command.commitmentReference,
-            entryKey("COMMIT", command.idempotencyKey, policy.id, "commit"),
-            command.actorPrincipalId,
-          ],
+            [
+              `b2bled_${randomUUID().replaceAll("-", "")}`,
+              reservation.id,
+              policy.id,
+              policy.revision,
+              reservation.amount_minor.toString(),
+              command.commitmentReference,
+              entryKey("COMMIT", command.idempotencyKey, policy.id, "commit"),
+              command.actorPrincipalId,
+            ],
+          )
+        }
+        await db.query(
+          `update "b2b_spend_reservation" set "status" = 'COMMITTED' where "id" = $1`,
+          [reservation.id],
         )
-      }
-      await db.query(`update "b2b_spend_reservation" set "status" = 'COMMITTED' where "id" = $1`, [
-        reservation.id,
-      ])
-      // Bound to the same connected transaction; do not expose release().
-      if (mutation) await mutation({ query: db.query.bind(db) })
-      return {
-        reservationId: reservation.id,
-        status: "COMMITTED" as const,
-        holdRevision: reservation.hold_revision,
-      }
-    }, owner)
+        // Bound to the same connected transaction; do not expose release().
+        if (mutation) await mutation({ query: db.query.bind(db) })
+        return {
+          reservationId: reservation.id,
+          status: "COMMITTED" as const,
+          holdRevision: reservation.hold_revision,
+        }
+      },
+      owner,
+    )
   }
 
   /** Release every unused hold on rejection or cancellation. */

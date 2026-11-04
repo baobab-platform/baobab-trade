@@ -36,7 +36,7 @@ remain mandatory and their historical acceptance scope is unchanged.
 Decision 5 ledger, policy lock order, receipt and idempotency implementation,
 but **never** starts, commits, rolls back or releases `owner`. It is reserved
 for a real Medusa Order Module transaction manager; the caller is responsible
-for unconditional rollback on *every* exception. All refusals propagate out of
+for unconditional rollback on _every_ exception. All refusals propagate out of
 the owner callback. A native owner that supplies an autocommit SQL connection
 fails the before/after PostgreSQL transaction-XID check. An idempotent replay
 performs no native write. This is not a new messaging framework or standalone
