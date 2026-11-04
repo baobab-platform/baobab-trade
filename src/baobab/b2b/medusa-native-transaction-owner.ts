@@ -225,6 +225,12 @@ export async function commitMedusaNativeBuyerOrder(
       authorizeNow: async () => {
         // One request owns one closure; authorisation is re-issued per attempt.
         currentAuthority = await deps.authorizeNow()
+        // The TA-07 native INSERT fence currently supports a cart commitment.
+        // Direct-order and draft-finalisation are different persistence paths;
+        // accepting them through this owner would bypass the matching receipt.
+        if (currentAuthority?.receipt?.operation !== "trade.order.commit") {
+          throw new Error("MEDUSA_ORDER_OPERATION_NOT_SUPPORTED_BY_NATIVE_FENCE")
+        }
         return currentAuthority
       },
       now: deps.now,
@@ -285,6 +291,9 @@ export async function commitMedusaNativeBuyerOrder(
           if (!authority) throw new Error("MEDUSA_CURRENT_AUTHORITY_MISSING")
           const input = await deps.source.orderInput(db, orderId, authority)
           if (input?.id !== orderId) throw new Error("MEDUSA_NATIVE_ORDER_ID_MISMATCH")
+          if (input.is_draft_order !== false || input.status !== "pending") {
+            throw new Error("MEDUSA_NATIVE_COMMIT_REQUIRES_NON_DRAFT_PENDING_ORDER")
+          }
           const order = await deps.orderModule.createOrders(input, {
             transactionManager: scope.manager,
           } as never)
