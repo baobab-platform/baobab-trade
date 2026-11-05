@@ -3,7 +3,7 @@ import { Migration } from "@medusajs/framework/mikro-orm/migrations"
 /** DEV-07 immutable, signed price and CP issuer evidence. */
 export class Migration20261105063000 extends Migration {
   async up(): Promise<void> {
-    this.addSql(\`
+    this.addSql(`
       CREATE TABLE trade_native_cart_charge_authority (
         tenant_id text NOT NULL,
         cart_id text NOT NULL,
@@ -39,17 +39,17 @@ export class Migration20261105063000 extends Migration {
           resource_version, charge_kind
         )
       );
-    \`)
-    this.addSql(\`
+    `)
+    this.addSql(`
       CREATE TRIGGER trade_native_cart_charge_authority_no_update
       BEFORE UPDATE OR DELETE ON trade_native_cart_charge_authority
       FOR EACH ROW EXECUTE FUNCTION trade_native_cart_charge_immutable();
-    \`)
-    this.addSql(\`
+    `)
+    this.addSql(`
       CREATE TRIGGER trade_native_cart_charge_authority_no_truncate
       BEFORE TRUNCATE ON trade_native_cart_charge_authority
       FOR EACH STATEMENT EXECUTE FUNCTION trade_native_cart_charge_immutable();
-    \`)
+    `)
   }
 
   async down(): Promise<void> {
