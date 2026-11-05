@@ -87,6 +87,12 @@ function canonical(value: unknown): string {
   }
   return JSON.stringify(value)
 }
+/** Canonical bytes signed by the external Ed25519 provider, independent of
+ * JSON object insertion order. No browser may supply this trusted value.
+ */
+export function signedChargeBytes(evidence: ChargeEvidence): Buffer {
+  return Buffer.from(canonical(evidence), "utf8")
+}
 function date(raw: string): number {
   const parsed = Date.parse(raw)
   assert(Number.isFinite(parsed) && parsed > 0)
@@ -146,7 +152,7 @@ export async function verifyGovernedChargeEvidence(
       kinds.add(line.kind)
     }
     assert(kinds.size === REQUIRED_CHARGES.length)
-    const payload = Buffer.from(canonical(e), "utf8")
+    const payload = signedChargeBytes(e)
     const signature = Buffer.from(signed.signature, "base64url")
     assert(signature.length === 64 && verify(null, payload, key, signature))
     // Only after the signature passes may an issuer trigger a CP authority call.
