@@ -17,6 +17,35 @@ type Query = Pick<PgClient, "query">
 export type NativeCartModule = {
   retrieveCart(id: string, config: { select: string[]; relations: string[] }, context: unknown): Promise<unknown>
 }
+export type NativePriceIssuerCheck = {
+  tenantId: string
+  cartId: string
+  marketId: string
+  sellerLegalEntityId: string
+  currency: string
+  issuerId: string
+  decisionId: string
+  policyReference: string
+  sourceDigest: string
+}
+export type NativePriceIssuerDecision = {
+  outcome: "AUTHORIZED" | "DENIED" | "UNAVAILABLE"
+  issuerId: string
+  decisionId: string
+  tenantId: string
+  marketId: string
+  sellerLegalEntityId: string
+  policyReference: string
+  sourceDigest: string
+  expiresAt: string
+}
+export type CurrentPriceIssuerAuthority =
+  (check: NativePriceIssuerCheck) => Promise<NativePriceIssuerDecision>
+
+/** Current CP price-issuer authority readback must be called on BOTH
+ * pre-order and pre-commit cart reads. A historical issuer receipt alone
+ * is insufficient after revocation. It never computes tax/freight/duty.
+ */
 export type NativeCartPriceScope = {
   db: Query
   transactionManager: unknown
@@ -27,6 +56,7 @@ export type NativeCartPriceScope = {
   sellerLegalEntityId: string
   /** Must be resolved from governed native currency metadata, not inferred. */
   currencyExponent: number
+  verifyCurrentIssuer: CurrentPriceIssuerAuthority
   now?: Date
 }
 export type NativeFinalCartPrice = {
@@ -164,6 +194,7 @@ function assertSameIds(actual: RecordValue[], native: RecordValue[], code: strin
 export function nativeMedusaCartPriceReadback(
   cartModule: NativeCartModule,
   currencyExponent: (db: Query, currency: string) => Promise<number>,
+  verifyCurrentIssuer: CurrentPriceIssuerAuthority,
 ) {
   return async (
     db: Query,
@@ -186,6 +217,7 @@ export function nativeMedusaCartPriceReadback(
       marketId: authority.receipt.market_id,
       sellerLegalEntityId: authority.receipt.seller_legal_entity_id,
       currencyExponent: await currencyExponent(db, authority.receipt.currency),
+      verifyCurrentIssuer,
     })
   }
 }
@@ -195,6 +227,7 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
   if (!Number.isSafeInteger(scope.currencyExponent) ||
       scope.currencyExponent < 0 || scope.currencyExponent > 9 ||
       !Number.isFinite(now.getTime()) ||
+      typeof scope.verifyCurrentIssuer !== "function" ||
       !scope.transactionManager || !scope.cartModule ||
       typeof scope.cartModule.retrieveCart !== "function") return refuse("READER_UNAVAILABLE")
   const locked = await lockNativeCart(scope.db, scope.cartId)
@@ -368,6 +401,31 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
       row.issuer_id, row.attestation_id, row.cp_decision_id,
       row.source_digest, row.policy_reference, row.cart_updated_at_exact,
       row.issuer_signature, row.signer_key_fingerprint])
+  }
+  // The original issuer decision must STILL be current, online and scoped
+  // to this exact immutable package before an order or spend is committed.
+  // This call is made on both transaction-bound source reads, not cached.
+  const first = evidence.rows[0]
+  const priceIssuerCheck: NativePriceIssuerCheck = {
+    tenantId: scope.tenantId, cartId: scope.cartId, marketId: scope.marketId,
+    sellerLegalEntityId: scope.sellerLegalEntityId, currency: locked.currency,
+    issuerId: String(first.issuer_id), decisionId: String(first.cp_decision_id),
+    sourceDigest: String(first.source_digest), policyReference: String(first.policy_reference),
+  }
+  let live: NativePriceIssuerDecision
+  try { live = await scope.verifyCurrentIssuer(priceIssuerCheck) }
+  catch { return refuse("ISSUER_CURRENT_AUTHORITY_UNAVAILABLE") }
+  if (live?.outcome !== "AUTHORIZED" ||
+      live.decisionId !== priceIssuerCheck.decisionId ||
+      live.issuerId !== priceIssuerCheck.issuerId ||
+      live.tenantId !== priceIssuerCheck.tenantId ||
+      live.marketId !== priceIssuerCheck.marketId ||
+      live.sellerLegalEntityId !== priceIssuerCheck.sellerLegalEntityId ||
+      live.policyReference !== priceIssuerCheck.policyReference ||
+      live.sourceDigest !== priceIssuerCheck.sourceDigest ||
+      !Number.isFinite(Date.parse(live.expiresAt)) ||
+      Date.parse(live.expiresAt) <= now.getTime()) {
+    return refuse("ISSUER_CURRENT_AUTHORITY_DENIED")
   }
   // One coherent signed price package and CP decision; mixing multiple
   // issuers' separate answers would bypass whole-cart governance.
