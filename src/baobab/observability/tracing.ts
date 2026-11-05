@@ -94,7 +94,53 @@ export const currentTraceparent = (): string | undefined => {
 
 /** Never invent an unexported per-call child span ID. The downstream native
  * server creates and exports its own span with this real recorded parent. */
-export const outboundTraceparent = (): string | undefined => currentTraceparent()
+export const outboundTraceparent = (): string | undefined => {
+  // Inside an actual native OTel child, emit its *real* SDK span context.
+  // Fall back only to the request-local, already-created server span.
+  const active = trace.getActiveSpan()?.spanContext()
+  if (active && active.traceId !== "00000000000000000000000000000000" &&
+      active.spanId !== "0000000000000000") {
+    const flags = active.traceFlags & 1 ? "01" : "00"
+    return ["00", active.traceId, active.spanId, flags].join("-")
+  }
+  return currentTraceparent()
+}
+
+/** Real CP-bound HTTPS operation: export a CLIENT span rather than mint a
+ * W3C child ID only in a request header. No authorization comes from tracing.
+ */
+export async function withTradeCpHttpSpan<T>(
+  action: (traceparent: string | undefined) => Promise<T>,
+): Promise<T> {
+  return nativeTracer.startActiveSpan("baobab.trade.cp.http",
+    { kind: SpanKind.CLIENT }, async (span) => {
+      try {
+        return await action(outboundTraceparent())
+      } catch (error) {
+        span.setStatus({ code: SpanStatusCode.ERROR })
+        throw error
+      } finally { span.end() }
+    })
+}
+
+/** The same XID outbox INSERT emits a named PRODUCER span carrying the
+ * original canonical event ID. It MUST NOT create a second event.
+ */
+export async function withTradeOutboxSpan<T>(
+  eventId: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  return nativeTracer.startActiveSpan("baobab.trade.outbox.insert",
+    { kind: SpanKind.PRODUCER }, async (span) => {
+      span.setAttribute("messaging.system", "postgresql")
+      span.setAttribute("messaging.message.id", eventId)
+      try { return await action() }
+      catch (error) {
+        span.setStatus({ code: SpanStatusCode.ERROR })
+        throw error
+      } finally { span.end() }
+    })
+}
 
 export async function withIncomingTradeTrace<T>(
   incoming: string | undefined,
