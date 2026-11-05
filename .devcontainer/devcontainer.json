@@ -7,10 +7,7 @@
   "postCreateCommand": "test \"$(node --version)\" = v26.13.0 && baobab-verify --contract && npm ci --ignore-scripts && npm run typecheck",
   "customizations": {
     "vscode": {
-      "extensions": [
-        "github.vscode-github-actions",
-        "redhat.vscode-yaml"
-      ]
+      "extensions": ["github.vscode-github-actions", "redhat.vscode-yaml"]
     }
   },
   "features": {
