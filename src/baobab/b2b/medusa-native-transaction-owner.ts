@@ -8,7 +8,8 @@ import {
   type NativeCommitRequest,
   type NativeErpOrderConsequence,
 } from "./native-buyer-commitment"
-import type { FinalNativeValuationFacts } from "./buyer-commitment-valuation"
+import { buildFinalBuyerCommitmentValuation, type FinalNativeValuationFacts } from "./buyer-commitment-valuation"
+import type { NativeFinalCartPrice } from "./medusa-final-cart-pricing"
 import {
   requireCurrentNativeCommitAuthority,
   type NativeCommitAuthorityReadback,
@@ -134,6 +135,13 @@ type NativeFacts = {
 /** Server-only provider; implementation must derive facts from the order and
  * cart records in the *same* managed native transaction. */
 export type NativeMedusaOrderSource = {
+  /** Mandatory native Cart Module + scoped charge read, twice in the same XID. */
+  readFinalCart(
+    db: Pick<PgClient, "query">,
+    nativeOrderId: string,
+    authority: AuthorizedCommitment,
+    manager: NativeManager,
+  ): Promise<NativeFinalCartPrice>
   orderInput(
     db: Pick<PgClient, "query">,
     nativeOrderId: string,
@@ -201,6 +209,22 @@ export async function commitMedusaNativeBuyerOrder(
   let currentAuthority: AuthorizedCommitment | null = null
   const live = new WeakMap<object, TransactionScope>()
   const finalSnapshots = new WeakMap<object, NativeFacts>()
+  const lockedCartPrices = new WeakMap<object, NativeFinalCartPrice>()
+  const assertAuthorizedCart = (price: NativeFinalCartPrice, authority: AuthorizedCommitment) => {
+    if (!price?.valuation || !/^sha256:[0-9a-f]{64}$/.test(price.sourceFingerprint) ||
+        price.sourceFingerprint !== price.valuation.transaction_digest) {
+      throw new Error("NATIVE_FINAL_CART_SOURCE_NOT_VERIFIED")
+    }
+    const actual = buildFinalBuyerCommitmentValuation(price.valuation)
+    if (actual.valuation_digest !== authority.valuation.valuation_digest ||
+        actual.buyer_commitment_amount_minor !== authority.receipt.amount_minor ||
+        actual.resource_id !== authority.receipt.resource_id ||
+        actual.resource_version !== authority.receipt.resource_version ||
+        actual.transaction_digest !== authority.receipt.transaction_digest ||
+        actual.currency !== authority.receipt.currency) {
+      throw new Error("NATIVE_FINAL_CART_CHANGED_SINCE_AUTHORIZATION")
+    }
+  }
   const currentSnapshot = async (
     db: Pick<PgClient, "query">,
     nativeOrderId: string,
@@ -269,7 +293,23 @@ export async function commitMedusaNativeBuyerOrder(
                   live.set(bounded, scope)
                   try {
                     await mutation(bounded)
+                    // The real, same-transaction Cart Module and charge records
+                    // are queried AGAIN after the native order, ledger and outbox
+                    // mutation. Never reuse the cached ERP/valuation snapshot to
+                    // assert that an intervening tax, freight, duty or cart edit
+                    // did not occur. A mismatch throws and rolls everything back.
+                    const before = lockedCartPrices.get(bounded)
+                    if (!before) throw new Error("NATIVE_FINAL_CART_SOURCE_NOT_VERIFIED")
+                    const after = await deps.source.readFinalCart(
+                      bounded, request.nativeOrderId, currentAuthority, manager)
+                    assertAuthorizedCart(after, currentAuthority)
+                    if (after.sourceFingerprint !== before.sourceFingerprint) {
+                      throw new Error("NATIVE_FINAL_CART_CHANGED_BEFORE_COMMIT")
+                    }
+                    requireCurrentNativeCommitAuthority(
+                      currentAuthority, current, (deps.now ?? Date.now)())
                   } finally {
+                    lockedCartPrices.delete(bounded)
                     finalSnapshots.delete(bounded)
                     live.delete(bounded)
                   }
@@ -307,6 +347,12 @@ export async function commitMedusaNativeBuyerOrder(
           const scope = read(db)
           const authority = currentAuthority
           if (!authority) throw new Error("MEDUSA_CURRENT_AUTHORITY_MISSING")
+          if (typeof deps.source?.readFinalCart !== "function") {
+            throw new Error("NATIVE_FINAL_CART_READER_UNAVAILABLE")
+          }
+          const before = await deps.source.readFinalCart(db, orderId, authority, scope.manager)
+          assertAuthorizedCart(before, authority)
+          lockedCartPrices.set(db, before)
           const input = await deps.source.orderInput(db, orderId, authority)
           if (input?.id !== orderId) throw new Error("MEDUSA_NATIVE_ORDER_ID_MISMATCH")
           if (input.is_draft_order !== false || input.status !== "pending") {
