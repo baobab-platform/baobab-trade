@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto"
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import type { IOrderModuleService } from "@medusajs/framework/types"
+import type { IOrderModuleService, ICartModuleService } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
 import { BuyerTokenVerifier } from "../../../../baobab/auth/buyer-access-token"
 import { interimAssurancePolicy } from "../../../../baobab/auth/buyer-assurance"
@@ -23,6 +23,9 @@ import { type BaobabTenantContext } from "../../../../baobab/contracts/tenant-co
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
 import { medusaB2BPolicyStore } from "../../../../baobab/b2b/medusa-b2b-policy-store"
+import { medusaNativeBuyerPurchaseSource } from "../../../../baobab/b2b/medusa-native-buyer-purchase-source"
+import { nativeMedusaCartPriceReadback, type NativeCartModule, type CurrentPriceIssuerAuthority } from "../../../../baobab/b2b/medusa-final-cart-pricing"
+import type { PgClient } from "../../../../baobab/orders/postgres-governed-binding-persistence"
 import { tradeOrderAuthorityDependencies } from "../../../../baobab/orders/trade-a-runtime"
 import { resolveNativeCheckoutEnvironment } from "../../../../baobab/orders/native-cart-legal-seller"
 
@@ -52,14 +55,13 @@ export type NativeBuyerCommitRuntime = Pick<
   CurrentNativeBuyerAuthorityDependencies,
   "markets" | "tokens"
 > & {
-  /** Read the exact requested cart from Trade custody. Market read credentials
-   * are governed independently from the seller's operation credential. */
-  readPurchase(
-    identity: Parameters<CurrentNativeBuyerAuthorityDependencies["readPurchase"]>[0],
-    cartId: string,
-  ): ReturnType<CurrentNativeBuyerAuthorityDependencies["readPurchase"]>
   spend: PostgresSpendReservationCommands
-  source: NativeMedusaOrderSource
+  /** The native Order and Cart Modules own the price and Site readback.
+   * No runtime service may inject a fake readPurchase or readFinalCart.
+   */
+  currencyExponent(db: Pick<PgClient, "query">, currency: string): Promise<number>
+  verifyCurrentIssuer: CurrentPriceIssuerAuthority
+  source: Pick<NativeMedusaOrderSource, "orderInput" | "readFinal">
   resolveTenant(request: {
     callerToken: string
     subjectToken: string
@@ -181,11 +183,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
     const runtime = req.scope.resolve<NativeBuyerCommitRuntime>(NATIVE_BUYER_COMMIT_RUNTIME)
     if (
-      !runtime?.source?.readFinalCart ||
       !runtime?.source?.readFinal ||
       !runtime?.source?.orderInput ||
+      typeof runtime.currencyExponent !== "function" ||
+      typeof runtime.verifyCurrentIssuer !== "function" ||
       !runtime?.spend ||
-      !runtime?.readPurchase ||
       typeof runtime.markets?.getMarket !== "function" ||
       typeof runtime.tokens?.getAccessToken !== "function" ||
       !runtime?.verifyReplay ||
@@ -194,6 +196,16 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       return deny(res, correlation, 503)
     }
     const policies = medusaB2BPolicyStore(req.scope.resolve<B2BModuleService>(B2B_MODULE))
+    const orders = req.scope.resolve<IOrderModuleService>(Modules.ORDER)
+    const carts = req.scope.resolve<ICartModuleService>(Modules.CART)
+    const nativeCart = carts as unknown as NativeCartModule
+    const readPurchase = medusaNativeBuyerPurchaseSource({
+      orders, carts: nativeCart, currencyExponent: runtime.currencyExponent,
+      verifyCurrentIssuer: runtime.verifyCurrentIssuer,
+    })
+    const readFinalCart = nativeMedusaCartPriceReadback(
+      nativeCart, runtime.currencyExponent, runtime.verifyCurrentIssuer,
+    )
     const seller = { ...tradeOrderAuthorityDependencies(req.scope), environment: sellerEnvironment }
     const cartId = b.cart_id
     const request = {
@@ -226,7 +238,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         tokens: runtime.tokens,
         seller,
         readPurchase: async (identity) => {
-          const purchase = await runtime.readPurchase(identity, cartId)
+          const purchase = await readPurchase(identity, cartId)
           if (purchase.valuation.resource_id !== cartId)
             throw new Error("NATIVE_BUYER_CART_CHANGED")
           return purchase
@@ -262,9 +274,9 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     ])
     const result = await commitMedusaNativeBuyerOrder(
       {
-        orderModule: req.scope.resolve<IOrderModuleService>(Modules.ORDER),
+        orderModule: orders,
         spend: runtime.spend,
-        source: runtime.source,
+        source: { ...runtime.source, readFinalCart },
         authorizeNow: async (): Promise<AuthorizedCommitment> => {
           const fresh = await authority.authorizeNow()
           if (
