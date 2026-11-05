@@ -5,5 +5,8 @@ WORKDIR /opt/baobab-trade
 COPY scripts/dev11-rabbit-requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --disable-pip-version-check -r /tmp/requirements.txt
 COPY scripts/dev11_rabbit_dispatcher.py /opt/baobab-trade/dispatcher.py
+# Independent read-only DEV-07 witness reuses the exact Trade native-origin SQL;
+# the disposable Infrastructure runner overrides ENTRYPOINT to invoke it.
+COPY scripts/dev11_native_business_origin.py /opt/baobab-trade/native_origin.py
 USER 65532:65532
 ENTRYPOINT ["python", "-B", "/opt/baobab-trade/dispatcher.py"]
