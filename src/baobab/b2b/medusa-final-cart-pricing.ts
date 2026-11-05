@@ -111,7 +111,7 @@ function component(kind: ComponentKind, amount: number, reference: string): Fina
  * before native order COMMIT. Any unreviewed Medusa schema change fails closed.
  */
 async function lockNativeCart(db: Query, cartId: string): Promise<{
-  currency: string; updatedAt: number; customerId: string
+  currency: string; updatedAt: number; updatedAtExact: string; customerId: string
 }> {
   const cart = await db.query(
     "SELECT id,currency_code,customer_id,completed_at,updated_at FROM cart " +
@@ -121,6 +121,7 @@ async function lockNativeCart(db: Query, cartId: string): Promise<{
   const customerId = text(cart.rows[0].customer_id)
   if (!/^[A-Z]{3}$/.test(currency)) return refuse("CURRENCY_INVALID")
   const updatedAt = date(cart.rows[0].updated_at)
+  const updatedAtExact = text(cart.rows[0].updated_at)
   const items = await db.query(
     "SELECT id FROM cart_line_item WHERE cart_id=$1 AND deleted_at IS NULL FOR UPDATE", [cartId])
   if (!items.rows.length || items.rows.length > 250) return refuse("ITEMS_UNAVAILABLE")
@@ -138,7 +139,7 @@ async function lockNativeCart(db: Query, cartId: string): Promise<{
         "=ANY($1::text[]) AND deleted_at IS NULL FOR UPDATE", [ids])
     }
   }
-  return { currency, updatedAt, customerId }
+  return { currency, updatedAt, updatedAtExact, customerId }
 }
 
 function assertSameIds(actual: RecordValue[], native: RecordValue[], code: string): void {
@@ -225,8 +226,8 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
   const discount = money(cart.discount_subtotal, e)
   const tax = money(cart.tax_total, e)
   const nativeTotal = money(cart.total, e)
-  if (money(cart.subtotal, e) !== merchandise + freight ||
-      money(cart.item_tax_total, e) + money(cart.shipping_tax_total, e) !== tax ||
+  if (BigInt(money(cart.subtotal, e)) !== BigInt(merchandise) + BigInt(freight) ||
+      BigInt(money(cart.item_tax_total, e)) + BigInt(money(cart.shipping_tax_total, e)) !== BigInt(tax) ||
       money(cart.credit_line_total, e) !== 0 || money(cart.gift_card_total, e) !== 0 ||
       BigInt(nativeTotal) !== BigInt(merchandise) + BigInt(freight) +
         BigInt(tax) - BigInt(discount)) return refuse("NATIVE_TOTALS_INCONSISTENT")
@@ -258,8 +259,8 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
   }
   if (shippingSum !== BigInt(freight)) return refuse("FREIGHT_TOTAL_CHANGED")
 
-  // All seven classes have explicit signed/approved-source provenance and a
-  // current validity interval. No missing row (even duty=0) is acceptable.
+  // All seven classes require explicit scoped provenance from a trusted issuer; the
+  // database record alone is not IAM/CP or provider certification. No missing row is acceptable.
   const evidence = await scope.db.query(
     "SELECT charge_kind,resolution,amount_minor,currency,source_reference," +
     "evaluated_at,expires_at,resource_version FROM trade_native_cart_charge_determination " +
@@ -310,7 +311,7 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
     component("REFUNDABLE_DEPOSIT", cost.REFUNDABLE_DEPOSIT!, references.REFUNDABLE_DEPOSIT!),
   ]
   const fingerprint = stableHash({
-    id: scope.cartId, updated_at: locked.updatedAt, customer: locked.customerId,
+    id: scope.cartId, updated_at: locked.updatedAtExact, customer: locked.customerId,
     tenant: scope.tenantId, market: scope.marketId, seller: scope.sellerLegalEntityId,
     currency: locked.currency, lineFingerprint, shippingFingerprint,
     merchandise, freight, discount, tax, nativeTotal, proofs,
