@@ -62,6 +62,9 @@ function ownerHarness() {
         return { rows: [{ xid: "4294967301" }], rowCount: 1 }
       }
       if (sql.includes("SELECT xmin")) return { rows: [{ xid: "5" }], rowCount: 1 }
+      if (sql.includes("SELECT decimal_digits FROM currency")) {
+        return { rows: [{ decimal_digits: 0 }], rowCount: 1 }
+      }
       return { rows: [], rowCount: 1 }
     }),
   }
@@ -238,6 +241,18 @@ describe("CAA-06b native Medusa transaction boundary", () => {
       expect.objectContaining({ is_draft_order: false }),
       { transactionManager: h.manager },
     )
+  })
+
+  it("refuses a source which contradicts the native Currency Module's precision", async () => {
+    const h = ownerHarness()
+    h.source.readFinal.mockResolvedValueOnce({
+      valuation: structuredClone(valuationFacts),
+      erp: syntheticErpConsequence(),
+      currencyExponent: 2,
+    })
+    expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome)
+      .toBe("REFUSED")
+    expect(h.settled).toEqual(["rollback"])
   })
 
   it("refuses missing final-cart proof before writing an order", async () => {
