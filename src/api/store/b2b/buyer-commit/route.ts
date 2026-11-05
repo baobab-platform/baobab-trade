@@ -22,6 +22,7 @@ import { getWorkloadTenantVerifier } from "../../../../baobab/control-plane/work
 import { type BaobabTenantContext } from "../../../../baobab/contracts/tenant-context"
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
+import { medusaB2BPolicyStore } from "../../../../baobab/b2b/medusa-b2b-policy-store"
 import { tradeOrderAuthorityDependencies } from "../../../../baobab/orders/trade-a-runtime"
 import { resolveNativeCheckoutEnvironment } from "../../../../baobab/orders/native-cart-legal-seller"
 
@@ -49,7 +50,7 @@ const TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 export const NATIVE_BUYER_COMMIT_RUNTIME = "baobab_native_buyer_commit_runtime"
 export type NativeBuyerCommitRuntime = Pick<
   CurrentNativeBuyerAuthorityDependencies,
-  "policies" | "markets" | "tokens"
+  "markets" | "tokens"
 > & {
   /** Read the exact requested cart from Trade custody. Market read credentials
    * are governed independently from the seller's operation credential. */
@@ -184,7 +185,6 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       !runtime?.source?.readFinal ||
       !runtime?.source?.orderInput ||
       !runtime?.spend ||
-      !runtime?.policies ||
       !runtime?.readPurchase ||
       typeof runtime.markets?.getMarket !== "function" ||
       typeof runtime.tokens?.getAccessToken !== "function" ||
@@ -193,6 +193,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     ) {
       return deny(res, correlation, 503)
     }
+    const policies = medusaB2BPolicyStore(req.scope.resolve<B2BModuleService>(B2B_MODULE))
     const seller = { ...tradeOrderAuthorityDependencies(req.scope), environment: sellerEnvironment }
     const cartId = b.cart_id
     const request = {
@@ -220,7 +221,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
           b2b: req.scope.resolve<B2BModuleService>(B2B_MODULE),
           engineInstanceId: env.tradeEngineInstanceId,
         },
-        policies: runtime.policies,
+        policies,
         markets: runtime.markets,
         tokens: runtime.tokens,
         seller,
