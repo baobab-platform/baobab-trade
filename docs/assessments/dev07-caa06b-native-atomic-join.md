@@ -414,3 +414,20 @@ reservation with a native-sized version.
 The buyer route receives its canonical Market reader and workload token from
 the engine runtime registration. The seller PEP uses its existing credential.
 The buyer route refuses when the Market authority is unavailable.
+
+The route binds the governed purchase read to the requested cart before the
+seller PEP runs. It forwards the resolved development environment to that
+existing PEP, including conflicting environment markers so they can be
+refused. The charge writer uses the issuer's registered Ed25519 public key
+and retains the CP adapter's receiver when verifying the mandate.
+
+The native cart reader checks the signed issuer, attestation, policy and
+timestamps against the persisted evidence. Each cart read carries the earlier
+of the signed-price expiry and live issuer authority expiry. The native owner
+uses the earliest expiry across its two reads at the final transaction fence.
+A subsequent CP read cannot extend the lease under which the order began.
+
+The confidential route still requires a registered engine runtime providing
+the actual cart purchase, native order input and result readback, current
+authority, and authorised replay. The source and rollback checks do not
+supply those runtime dependencies or demonstrate a genuine buyer commit.

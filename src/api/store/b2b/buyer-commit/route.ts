@@ -23,6 +23,7 @@ import { type BaobabTenantContext } from "../../../../baobab/contracts/tenant-co
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
 import { tradeOrderAuthorityDependencies } from "../../../../baobab/orders/trade-a-runtime"
+import { resolveNativeCheckoutEnvironment } from "../../../../baobab/orders/native-cart-legal-seller"
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const JWS = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
@@ -48,8 +49,14 @@ const TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 export const NATIVE_BUYER_COMMIT_RUNTIME = "baobab_native_buyer_commit_runtime"
 export type NativeBuyerCommitRuntime = Pick<
   CurrentNativeBuyerAuthorityDependencies,
-  "policies" | "readPurchase" | "markets" | "tokens"
+  "policies" | "markets" | "tokens"
 > & {
+  /** Read the exact requested cart from Trade custody. Market read credentials
+   * are governed independently from the seller's operation credential. */
+  readPurchase(
+    identity: Parameters<CurrentNativeBuyerAuthorityDependencies["readPurchase"]>[0],
+    cartId: string,
+  ): ReturnType<CurrentNativeBuyerAuthorityDependencies["readPurchase"]>
   spend: PostgresSpendReservationCommands
   source: NativeMedusaOrderSource
   resolveTenant(request: {
@@ -100,8 +107,17 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const correlation =
     suppliedCorrelation && UUID.test(suppliedCorrelation) ? suppliedCorrelation : randomUUID()
   const env = getBaobabTradeEnvironment()
+  const sellerEnvironment = {
+    node: process.env.NODE_ENV,
+    baobab: process.env.BAOBAB_ENVIRONMENT,
+    deployment: process.env.BAOBAB_DEPLOYMENT_ENV,
+    enabled: process.env.BAOBAB_TRADE_A_ORDER_AUTHORITY_ENABLED,
+  }
+  const profile = resolveNativeCheckoutEnvironment(sellerEnvironment)
   if (
     process.env.BAOBAB_NATIVE_BUYER_COMMIT_ENABLED !== "true" ||
+    profile.production ||
+    profile.staging ||
     !["development", "integration"].includes(process.env.BAOBAB_ENVIRONMENT ?? "") ||
     process.env.BAOBAB_TRADE_A_ORDER_AUTHORITY_ENABLED !== "true" ||
     !env.buyerIdentityEnabled
@@ -170,14 +186,15 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       !runtime?.spend ||
       !runtime?.policies ||
       !runtime?.readPurchase ||
-      !runtime?.markets?.getMarket ||
-      !runtime?.tokens?.getAccessToken ||
+      typeof runtime.markets?.getMarket !== "function" ||
+      typeof runtime.tokens?.getAccessToken !== "function" ||
       !runtime?.verifyReplay ||
       !runtime?.resolveTenant
     ) {
       return deny(res, correlation, 503)
     }
-    const seller = tradeOrderAuthorityDependencies(req.scope)
+    const seller = { ...tradeOrderAuthorityDependencies(req.scope), environment: sellerEnvironment }
+    const cartId = b.cart_id
     const request = {
       callerToken: bearer[1],
       subjectToken: b.subject_token,
@@ -207,7 +224,12 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         markets: runtime.markets,
         tokens: runtime.tokens,
         seller,
-        readPurchase: runtime.readPurchase,
+        readPurchase: async (identity) => {
+          const purchase = await runtime.readPurchase(identity, cartId)
+          if (purchase.valuation.resource_id !== cartId)
+            throw new Error("NATIVE_BUYER_CART_CHANGED")
+          return purchase
+        },
       },
       request,
     )

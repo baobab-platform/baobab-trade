@@ -102,6 +102,7 @@ function ownerHarness() {
     readFinalCart: vi.fn(async () => ({
       valuation: structuredClone(valuationFacts),
       sourceFingerprint: valuationFacts.transaction_digest,
+      leaseExpiresAt: NOW.getTime() + 20_000,
     })),
     orderInput: vi.fn(async () => ({
       id: request.nativeOrderId,
@@ -257,6 +258,7 @@ describe("CAA-06b native Medusa transaction boundary", () => {
         components: [{ ...valuationFacts.components[0], amount_minor: 1250001 }],
       },
       sourceFingerprint: valuationFacts.transaction_digest,
+      leaseExpiresAt: NOW.getTime() + 20_000,
     })
     expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
     expect(h.settled).toEqual(["rollback"])
@@ -269,10 +271,12 @@ describe("CAA-06b native Medusa transaction boundary", () => {
       .mockResolvedValueOnce({
         valuation: structuredClone(valuationFacts),
         sourceFingerprint: valuationFacts.transaction_digest,
+        leaseExpiresAt: NOW.getTime() + 20_000,
       })
       .mockResolvedValueOnce({
         valuation: structuredClone(valuationFacts),
         sourceFingerprint: "sha256:" + "f".repeat(64),
+        leaseExpiresAt: NOW.getTime() + 20_000,
       })
     expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
     expect(h.settled).toEqual(["rollback"])
@@ -286,6 +290,26 @@ describe("CAA-06b native Medusa transaction boundary", () => {
     expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
     expect(h.settled).toEqual(["rollback"])
     expect(h.createOrders).not.toHaveBeenCalled()
+  })
+
+  it("rolls back when the first price issuer lease expires during ledger settlement", async () => {
+    const h = ownerHarness()
+    const expiry = NOW.getTime() + 1000
+    h.source.readFinalCart.mockResolvedValueOnce({
+      valuation: structuredClone(valuationFacts),
+      sourceFingerprint: valuationFacts.transaction_digest,
+      leaseExpiresAt: expiry,
+    })
+    const commit = h.commit.getMockImplementation()
+    assert.ok(commit)
+    h.commit.mockImplementation(async (...args) => {
+      const result = await commit(...args)
+      h.advanceTo(expiry)
+      return result
+    })
+    expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
+    expect(h.createOrders).toHaveBeenCalledOnce()
+    expect(h.settled).toEqual(["rollback"])
   })
 
   it.each(["source-read", "ledger-finish", "last-xid-read"] as const)(

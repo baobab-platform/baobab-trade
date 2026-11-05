@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, verify } from "node:crypto"
+import { createHash, verify } from "node:crypto"
 import type { KeyObject } from "node:crypto"
 import type { PgPool } from "../orders/postgres-governed-binding-persistence"
 
@@ -236,8 +236,8 @@ export async function issueGovernedCartCharges(
   const signed = await issuer.obtainFromIssuer(cartId)
   const validated = await verifyGovernedChargeEvidence(
     signed,
-    issuer.verifyCpIssuer,
-    createPublicKey(issuer.publicKey),
+    (evidence) => issuer.verifyCpIssuer(evidence),
+    issuer.publicKey,
   )
   const e = validated.evidence
   if (e.cartId !== cartId) refuse()
@@ -305,7 +305,7 @@ export async function issueGovernedCartCharges(
           signed.signature,
           createHash("sha256")
             .update(
-              createPublicKey(issuer.publicKey).export({
+              issuer.publicKey.export({
                 type: "spki",
                 format: "der",
               }),

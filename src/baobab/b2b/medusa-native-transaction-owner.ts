@@ -216,6 +216,8 @@ export async function commitMedusaNativeBuyerOrder(
   const assertAuthorizedCart = (price: NativeFinalCartPrice, authority: AuthorizedCommitment) => {
     if (
       !price?.valuation ||
+      !Number.isFinite(price.leaseExpiresAt) ||
+      price.leaseExpiresAt <= (deps.now ?? Date.now)() ||
       !/^sha256:[0-9a-f]{64}$/.test(price.sourceFingerprint) ||
       price.sourceFingerprint !== price.valuation.transaction_digest
     ) {
@@ -283,6 +285,7 @@ export async function commitMedusaNativeBuyerOrder(
               const db = medusaNativeQuery(trx)
               const xid = await currentXid(db)
               let checkedAuthority: NativeCommitAuthorityReadback | undefined
+              let priceLeaseExpiresAt: number | undefined
               const outcome = await deps.spend.commitWithOwnerTransaction(
                 command,
                 db,
@@ -318,6 +321,7 @@ export async function commitMedusaNativeBuyerOrder(
                     if (after.sourceFingerprint !== before.sourceFingerprint) {
                       throw new Error("NATIVE_FINAL_CART_CHANGED_BEFORE_COMMIT")
                     }
+                    priceLeaseExpiresAt = Math.min(before.leaseExpiresAt, after.leaseExpiresAt)
                     requireCurrentNativeCommitAuthority(
                       currentAuthority,
                       current,
@@ -332,6 +336,12 @@ export async function commitMedusaNativeBuyerOrder(
               )
               if ((await currentXid(db)) !== xid) {
                 throw new Error("MEDUSA_ORDER_TRANSACTION_CHANGED")
+              }
+              if (
+                priceLeaseExpiresAt !== undefined &&
+                (deps.now ?? Date.now)() >= priceLeaseExpiresAt
+              ) {
+                throw new Error("NATIVE_FINAL_CART_LEASE_EXPIRED")
               }
               // The fresh readback can have a shorter lease than the original
               // buyer/seller receipt. Include source reads and final ledger /

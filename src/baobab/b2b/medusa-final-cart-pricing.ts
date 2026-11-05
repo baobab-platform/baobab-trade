@@ -72,6 +72,8 @@ export type NativeFinalCartPrice = {
   valuation: FinalNativeValuationFacts
   /** Includes native rows, amounts, explicit zero reasons and source versions. */
   sourceFingerprint: string
+  /** Earliest signed charge or live CP issuer expiry, in epoch milliseconds. */
+  leaseExpiresAt: number
 }
 type RecordValue = Record<string, unknown>
 type ChargeKind =
@@ -482,6 +484,11 @@ export async function readMedusaFinalCartPrice(
       packageValue.sellerLegalEntityId !== scope.sellerLegalEntityId ||
       packageValue.currency !== locked.currency ||
       packageValue.resourceVersion !== locked.updatedAt ||
+      packageValue.issuerId !== row.issuer_id ||
+      packageValue.attestationId !== row.attestation_id ||
+      packageValue.policyReference !== row.policy_reference ||
+      date(packageValue.evaluatedAt) !== date(row.evaluated_at) ||
+      date(packageValue.expiresAt) !== date(row.expires_at) ||
       packageValue.cartUpdatedAtExact !== locked.updatedAtExact ||
       row.signer_key_fingerprint !== keyFingerprint ||
       typeof row.issuer_signature !== "string"
@@ -545,6 +552,11 @@ export async function readMedusaFinalCartPrice(
   } catch {
     return refuse("ISSUER_CURRENT_AUTHORITY_UNAVAILABLE")
   }
+  const checkedAt = scope.now?.getTime() ?? Date.now()
+  const leaseExpiresAt = Math.min(
+    Date.parse(live?.expiresAt ?? ""),
+    ...evidence.rows.map((row) => date(row.expires_at)),
+  )
   if (
     live?.outcome !== "AUTHORIZED" ||
     live.decisionId !== priceIssuerCheck.decisionId ||
@@ -554,8 +566,9 @@ export async function readMedusaFinalCartPrice(
     live.sellerLegalEntityId !== priceIssuerCheck.sellerLegalEntityId ||
     live.policyReference !== priceIssuerCheck.policyReference ||
     live.sourceDigest !== priceIssuerCheck.sourceDigest ||
-    !Number.isFinite(Date.parse(live.expiresAt)) ||
-    Date.parse(live.expiresAt) <= now.getTime()
+    !Number.isFinite(leaseExpiresAt) ||
+    checkedAt < now.getTime() ||
+    leaseExpiresAt <= checkedAt
   ) {
     return refuse("ISSUER_CURRENT_AUTHORITY_DENIED")
   }
@@ -616,5 +629,6 @@ export async function readMedusaFinalCartPrice(
       components,
     },
     sourceFingerprint: fingerprint,
+    leaseExpiresAt,
   }
 }
