@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto"
+import { createHash, createPublicKey, verify } from "node:crypto"
+import { signedChargeBytes, type ChargeEvidence } from "./governed-cart-charge-issuer"
 import type { PgClient } from "../orders/postgres-governed-binding-persistence"
 import type { FinalNativeValuationFacts, FinalNativeComponent, ComponentKind } from "./buyer-commitment-valuation"
 
@@ -271,7 +272,8 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
     "SELECT d.charge_kind,d.resolution,d.amount_minor,d.currency,d.source_reference," +
     "d.evaluated_at,d.expires_at,d.resource_version,a.issuer_id," +
     "a.attestation_id::text AS attestation_id,a.cp_decision_id::text AS cp_decision_id," +
-    "a.source_digest,a.policy_reference,a.cart_updated_at_exact " +
+    "a.source_digest,a.policy_reference,a.cart_updated_at_exact," +
+    "a.zero_reason,a.canonical_evidence,a.issuer_signature,a.signer_key_fingerprint " +
     "FROM trade_native_cart_charge_determination d " +
     "JOIN trade_native_cart_charge_authority a USING " +
     "(tenant_id,cart_id,market_id,seller_legal_entity_id,resource_version,charge_kind) " +
@@ -279,6 +281,23 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
     "AND d.seller_legal_entity_id=$4 AND d.resource_version=$5 FOR SHARE OF d,a",
     [scope.tenantId, scope.cartId, scope.marketId, scope.sellerLegalEntityId, locked.updatedAt])
   if (evidence.rows.length !== CHARGES.length) return refuse("CHARGE_DETERMINATION_MISSING")
+  // The full signed price package is immutable, and is verified AGAIN by the
+  // native owner, not trusted merely because a provider once wrote a digest.
+  // Protected deployments without a reviewed price signing key deny.
+  const trustedPem = process.env.BAOBAB_NATIVE_PRICE_ISSUER_PUBLIC_KEY_PEM
+  if (!trustedPem) return refuse("ISSUER_KEY_UNAVAILABLE")
+  let signer: ReturnType<typeof createPublicKey>
+  try {
+    signer = createPublicKey(trustedPem)
+    if (signer.asymmetricKeyType !== "ed25519" || signer.type !== "public") {
+      return refuse("ISSUER_KEY_UNAVAILABLE")
+    }
+  } catch {
+    return refuse("ISSUER_KEY_UNAVAILABLE")
+  }
+  const keyFingerprint = createHash("sha256").update(signer.export({
+    type: "spki", format: "der",
+  })).digest("hex")
   const issuerBindings = new Set<string>()
   const proofs: unknown[] = []
   const cost: Partial<Record<ChargeKind, number>> = {}
@@ -312,12 +331,43 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
       row.issuer_id, row.attestation_id, row.cp_decision_id,
       row.source_digest, row.policy_reference,
     ].join("\u0000"))
+    const packageValue = row.canonical_evidence as ChargeEvidence | null
+    if (!packageValue || typeof packageValue !== "object" ||
+        !Array.isArray(packageValue.charges) ||
+        packageValue.charges.length !== CHARGES.length ||
+        packageValue.cartId !== scope.cartId ||
+        packageValue.tenantId !== scope.tenantId ||
+        packageValue.marketId !== scope.marketId ||
+        packageValue.sellerLegalEntityId !== scope.sellerLegalEntityId ||
+        packageValue.currency !== locked.currency ||
+        packageValue.resourceVersion !== locked.updatedAt ||
+        packageValue.cartUpdatedAtExact !== locked.updatedAtExact ||
+        row.signer_key_fingerprint !== keyFingerprint ||
+        typeof row.issuer_signature !== "string") {
+      return refuse("SIGNED_ISSUER_SCOPE_INVALID")
+    }
+    const bytes = signedChargeBytes(packageValue)
+    const digest = createHash("sha256").update(bytes).digest("hex")
+    const sig = Buffer.from(row.issuer_signature, "base64url")
+    if (row.source_digest !== digest || sig.length !== 64 ||
+        !verify(null, bytes, signer, sig)) return refuse("ISSUER_SIGNATURE_INVALID")
+    const signedLine = packageValue.charges.find((line) => line.kind === row.charge_kind)
+    if (!signedLine ||
+        signedLine.amountMinor !== String(row.amount_minor) ||
+        signedLine.resolution !== row.resolution ||
+        signedLine.sourceReference !== row.source_reference ||
+        signedLine.zeroReason !== row.zero_reason ||
+        (value === 0 && !signedLine.zeroReason) ||
+        (value > 0 && signedLine.zeroReason !== null)) {
+      return refuse("SIGNED_ISSUER_CHARGE_CHANGED")
+    }
     const kind = row.charge_kind as ChargeKind
     cost[kind] = value
     references[kind] = row.source_reference
     proofs.push([kind, row.resolution, value, row.source_reference, date(row.expires_at),
       row.issuer_id, row.attestation_id, row.cp_decision_id,
-      row.source_digest, row.policy_reference, row.cart_updated_at_exact])
+      row.source_digest, row.policy_reference, row.cart_updated_at_exact,
+      row.issuer_signature, row.signer_key_fingerprint])
   }
   // One coherent signed price package and CP decision; mixing multiple
   // issuers' separate answers would bypass whole-cart governance.
