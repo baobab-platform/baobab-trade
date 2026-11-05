@@ -118,7 +118,9 @@ async function lockNativeCart(db: Query, cartId: string): Promise<{
   currency: string; updatedAt: number; updatedAtExact: string; customerId: string
 }> {
   const cart = await db.query(
-    "SELECT id,currency_code,customer_id,completed_at,updated_at::text AS updated_at FROM cart " +
+    "SELECT id,currency_code,customer_id,completed_at," +
+    "to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS updated_at " +
+    "FROM cart " +
     "WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [cartId])
   if (cart.rows.length !== 1 || cart.rows[0].completed_at !== null) return refuse("CART_NOT_OPEN")
   const currency = text(cart.rows[0].currency_code).toUpperCase()
