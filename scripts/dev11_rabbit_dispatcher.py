@@ -94,15 +94,35 @@ class Claimed:
     idempotency_key: str | None = None
 
 
+# Expired claims must consume the same finite budget as explicit failures.
+# Exhausted rows remain available to an operator as ambiguous delivery evidence.
+EXHAUSTED_SQL = """
+WITH exhausted AS (
+    SELECT id FROM event_outbox
+    WHERE deleted_at IS NULL AND event_type = ANY(%(types)s::text[])
+      AND (%(only_event_id)s::text IS NULL OR event_id = %(only_event_id)s)
+      AND attempt_count >= %(max_attempts)s
+      AND (status IN ('PENDING','RETRY')
+        OR (status = 'PUBLISHING' AND lease_expires_at <= now()))
+    ORDER BY next_attempt_at, id
+    FOR UPDATE SKIP LOCKED LIMIT 50
+)
+UPDATE event_outbox AS o
+SET status = 'DEAD_LETTER', last_error_code = 'BROKER_ATTEMPT_BUDGET_EXHAUSTED',
+    lease_expires_at = NULL, updated_at = now()
+FROM exhausted WHERE o.id = exhausted.id
+"""
+
 CLAIM_SQL = """
 WITH next AS (
     SELECT id FROM event_outbox
     WHERE deleted_at IS NULL
       AND event_type = ANY(%(types)s::text[])
       AND (%(only_event_id)s::text IS NULL OR event_id = %(only_event_id)s)
+      AND attempt_count < %(max_attempts)s
       AND (
         (status IN ('PENDING','RETRY') AND next_attempt_at <= now())
-        OR (status = 'PUBLISHING' AND lease_expires_at < now())
+        OR (status = 'PUBLISHING' AND lease_expires_at <= now())
       )
     ORDER BY next_attempt_at, id
     FOR UPDATE SKIP LOCKED LIMIT 1
@@ -177,10 +197,10 @@ def claim_next(db, *, only_event_id: str | None = None, lease_seconds: int = LEA
             os.environ.get("BAOBAB_DEV11_RABBIT_CONNECTED_REQUIRED") != "true"):
         raise ValueError("TRADE_OUTBOX_LEASE_POLICY_UNAPPROVED")
     with db.transaction():
-        row = db.execute(CLAIM_SQL, {
-            "types": list(TYPES), "lease": lease_seconds,
-            "only_event_id": only_event_id,
-        }).fetchone()
+        scope = {"types": list(TYPES), "only_event_id": only_event_id,
+                 "max_attempts": MAX_ATTEMPTS}
+        db.execute(EXHAUSTED_SQL, scope)
+        row = db.execute(CLAIM_SQL, {**scope, "lease": lease_seconds}).fetchone()
     return Claimed(row["id"], row["event_id"], row["event_type"],
                    row["envelope"], row["attempt_count"], row["tenant_id"],
                    row["idempotency_key"]) if row else None
