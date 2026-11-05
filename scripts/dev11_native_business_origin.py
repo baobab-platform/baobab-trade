@@ -279,13 +279,41 @@ def assess_native_origin(db, event_id: str) -> OriginObservation:
         return OriginObservation(False, "NATIVE_ORIGIN_READBACK_UNAVAILABLE")
 
 
+def assess_order_origin(db, order_id: str, idempotency_key: str) -> OriginObservation:
+    """Locate the original event from the real checkout response and request."""
+    if not _ID.fullmatch(order_id) or not re.fullmatch(r"[A-Za-z0-9._:-]{16,128}", idempotency_key):
+        return OriginObservation(False, "CHECKOUT_SELECTOR_INVALID")
+    try:
+        with db.transaction():
+            db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            db.execute("SET LOCAL statement_timeout = '3s'")
+            rows = db.execute(
+                """SELECT event_id, idempotency_key FROM event_outbox
+                   WHERE event_type=%s AND deleted_at IS NULL
+                     AND envelope #>> '{data,commerce_order_id}' = %s
+                   LIMIT 2""",
+                (EVENT_TYPE, order_id),
+            ).fetchall()
+            if len(rows) != 1 or rows[0]["idempotency_key"] != idempotency_key:
+                _refuse("CHECKOUT_ORIGINAL_EVENT_NOT_UNIQUE_OR_BOUND")
+            return _read_native_origin(db, rows[0]["event_id"])
+    except OriginRefusal as err:
+        return OriginObservation(False, err.code)
+    except (psycopg.Error, KeyError, ValueError, TypeError, AttributeError):
+        return OriginObservation(False, "NATIVE_ORIGIN_READBACK_UNAVAILABLE")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--event-id")
+    group.add_argument("--order-id")
     group.add_argument("--expect-synthetic-refusal", action="store_true")
+    parser.add_argument("--idempotency-key")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if bool(args.order_id) != bool(args.idempotency_key):
+        parser.error("--order-id and --idempotency-key must be used together")
     if (os.getenv("NODE_ENV") != "test"
             or os.getenv("BAOBAB_ENVIRONMENT") not in {"test", "development", "integration"}
             or not os.getenv("DATABASE_URL")):
@@ -293,7 +321,9 @@ def main() -> int:
     try:
         with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True,
                              row_factory=dict_row, connect_timeout=5) as db:
-            if args.expect_synthetic_refusal:
+            if args.order_id:
+                observed = assess_order_origin(db, args.order_id, args.idempotency_key)
+            elif args.expect_synthetic_refusal:
                 # Bind the complete LIKE pattern: a literal percent in a query
                 # with parameters is parsed by psycopg before PostgreSQL sees
                 # it. The wildcard is data, not a driver placeholder.
@@ -305,10 +335,9 @@ def main() -> int:
                 ).fetchall()
                 if len(event_ids) != 1:
                     raise SystemExit("NATIVE_ORIGIN_SYNTHETIC_FIXTURE_NOT_UNIQUE")
-                event_id = event_ids[0]["event_id"]
+                observed = assess_native_origin(db, event_ids[0]["event_id"])
             else:
-                event_id = args.event_id
-            observed = assess_native_origin(db, event_id)
+                observed = assess_native_origin(db, args.event_id)
     except psycopg.Error:
         raise SystemExit("NATIVE_ORIGIN_DATABASE_UNAVAILABLE") from None
 

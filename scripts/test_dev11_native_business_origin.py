@@ -17,7 +17,7 @@ from psycopg.adapt import Transformer
 
 from dev11_native_business_origin import (
     EVENT_SOURCE, EVENT_TYPE, OriginObservation, OriginRefusal, _normalised_envelope,
-    _read_native_origin, assess_native_origin, main,
+    _read_native_origin, assess_native_origin, assess_order_origin, main,
 )
 
 
@@ -176,6 +176,17 @@ class NativeOriginRefusalTests(unittest.TestCase):
         rows[2][0]["order_xid"] = "102"
         with self.assertRaisesRegex(OriginRefusal, "NATIVE_OUTBOX_NOT_IN_ORDER_TRANSACTION"):
             _read_native_origin(Source(rows), self.event_id)
+
+    def test_checkout_selector_requires_one_original_event_and_the_same_request_key(self):
+        key = self.envelope["idempotencykey"]
+        event = {"event_id": self.event_id, "idempotency_key": key}
+        source = ReadOnlyTxn([[], [], [event], *self.complete_unit_snapshot()])
+        self.assertTrue(assess_order_origin(source, self.order_id, key).qualified)
+        for events in ([event, event], [{**event, "idempotency_key": "another-checkout-key"}]):
+            with self.subTest(events=events):
+                source = ReadOnlyTxn([[], [], events])
+                self.assertEqual(assess_order_origin(source, self.order_id, key).code,
+                                 "CHECKOUT_ORIGINAL_EVENT_NOT_UNIQUE_OR_BOUND")
 
     def test_absent_buyer_consumption_never_qualifies_from_seller_and_spend_only(self):
         rows = self.complete_unit_snapshot()
