@@ -268,12 +268,18 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
   // All seven classes require explicit scoped provenance from a trusted issuer; the
   // database record alone is not IAM/CP or provider certification. No missing row is acceptable.
   const evidence = await scope.db.query(
-    "SELECT charge_kind,resolution,amount_minor,currency,source_reference," +
-    "evaluated_at,expires_at,resource_version FROM trade_native_cart_charge_determination " +
-    "WHERE tenant_id=$1 AND cart_id=$2 AND market_id=$3 AND seller_legal_entity_id=$4 " +
-    "AND resource_version=$5 FOR SHARE",
+    "SELECT d.charge_kind,d.resolution,d.amount_minor,d.currency,d.source_reference," +
+    "d.evaluated_at,d.expires_at,d.resource_version,a.issuer_id," +
+    "a.attestation_id::text AS attestation_id,a.cp_decision_id::text AS cp_decision_id," +
+    "a.source_digest,a.policy_reference " +
+    "FROM trade_native_cart_charge_determination d " +
+    "JOIN trade_native_cart_charge_authority a USING " +
+    "(tenant_id,cart_id,market_id,seller_legal_entity_id,resource_version,charge_kind) " +
+    "WHERE d.tenant_id=$1 AND d.cart_id=$2 AND d.market_id=$3 " +
+    "AND d.seller_legal_entity_id=$4 AND d.resource_version=$5 FOR SHARE OF d,a",
     [scope.tenantId, scope.cartId, scope.marketId, scope.sellerLegalEntityId, locked.updatedAt])
   if (evidence.rows.length !== CHARGES.length) return refuse("CHARGE_DETERMINATION_MISSING")
+  const issuerBindings = new Set<string>()
   const proofs: unknown[] = []
   const cost: Partial<Record<ChargeKind, number>> = {}
   const references: Partial<Record<ChargeKind, string>> = {}
@@ -285,7 +291,15 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
         Number(row.resource_version) !== locked.updatedAt ||
         date(row.evaluated_at) > now.getTime() ||
         date(row.expires_at) <= now.getTime() ||
-        typeof row.source_reference !== "string" || !REF.test(row.source_reference)) {
+        typeof row.source_reference !== "string" || !REF.test(row.source_reference) ||
+        typeof row.issuer_id !== "string" || !REF.test(row.issuer_id) ||
+        typeof row.attestation_id !== "string" ||
+        !/^[0-9a-f-]{36}$/i.test(row.attestation_id) ||
+        typeof row.cp_decision_id !== "string" ||
+        !/^[0-9a-f-]{36}$/i.test(row.cp_decision_id) ||
+        typeof row.policy_reference !== "string" || !REF.test(row.policy_reference) ||
+        typeof row.source_digest !== "string" ||
+        !/^[0-9a-f]{64}$/.test(row.source_digest)) {
       return refuse("CHARGE_DETERMINATION_INVALID")
     }
     const value = numericMinor(row.amount_minor)
@@ -293,11 +307,20 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
         (row.resolution !== "CHARGED" && value !== 0)) {
       return refuse("UNJUSTIFIED_ZERO_OR_CHARGE")
     }
+    issuerBindings.add([
+      row.issuer_id, row.attestation_id, row.cp_decision_id,
+      row.source_digest, row.policy_reference,
+    ].join("\u0000"))
     const kind = row.charge_kind as ChargeKind
     cost[kind] = value
     references[kind] = row.source_reference
-    proofs.push([kind, row.resolution, value, row.source_reference, date(row.expires_at)])
+    proofs.push([kind, row.resolution, value, row.source_reference, date(row.expires_at),
+      row.issuer_id, row.attestation_id, row.cp_decision_id,
+      row.source_digest, row.policy_reference])
   }
+  // One coherent signed price package and CP decision; mixing multiple
+  // issuers' separate answers would bypass whole-cart governance.
+  if (issuerBindings.size !== 1) return refuse("ISSUER_PROVENANCE_MISMATCH")
   if (!CHARGES.every((kind) => cost[kind] !== undefined)) {
     return refuse("CHARGE_DETERMINATION_MISSING")
   }
