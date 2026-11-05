@@ -25,7 +25,11 @@ import type B2BModuleService from "../../../../modules/b2b/service"
 import { medusaB2BPolicyStore } from "../../../../baobab/b2b/medusa-b2b-policy-store"
 import { medusaNativeBuyerPurchaseSource } from "../../../../baobab/b2b/medusa-native-buyer-purchase-source"
 import { readNativeCurrencyExponent } from "../../../../baobab/b2b/native-currency-exponent"
-import { nativeMedusaCartPriceReadback, type NativeCartModule, type CurrentPriceIssuerAuthority } from "../../../../baobab/b2b/medusa-final-cart-pricing"
+import {
+  nativeMedusaCartPriceReadback,
+  type NativeCartModule,
+  type CurrentPriceIssuerAuthority,
+} from "../../../../baobab/b2b/medusa-final-cart-pricing"
 import { tradeOrderAuthorityDependencies } from "../../../../baobab/orders/trade-a-runtime"
 import { resolveNativeCheckoutEnvironment } from "../../../../baobab/orders/native-cart-legal-seller"
 
@@ -197,12 +201,18 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     const orders = req.scope.resolve<IOrderModuleService>(Modules.ORDER)
     const carts = req.scope.resolve<ICartModuleService>(Modules.CART)
     const nativeCart = carts as unknown as NativeCartModule
+    const verifyCurrentIssuer: NativeBuyerCommitRuntime["verifyCurrentIssuer"] = (check) =>
+      runtime.verifyCurrentIssuer(check)
     const readPurchase = medusaNativeBuyerPurchaseSource({
-      orders, carts: nativeCart, currencyExponent: readNativeCurrencyExponent,
-      verifyCurrentIssuer: runtime.verifyCurrentIssuer,
+      orders,
+      carts: nativeCart,
+      currencyExponent: readNativeCurrencyExponent,
+      verifyCurrentIssuer,
     })
     const readFinalCart = nativeMedusaCartPriceReadback(
-      nativeCart, readNativeCurrencyExponent, runtime.verifyCurrentIssuer,
+      nativeCart,
+      readNativeCurrencyExponent,
+      verifyCurrentIssuer,
     )
     const seller = { ...tradeOrderAuthorityDependencies(req.scope), environment: sellerEnvironment }
     const cartId = b.cart_id
@@ -274,7 +284,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       {
         orderModule: orders,
         spend: runtime.spend,
-        source: { ...runtime.source, readFinalCart },
+        source: {
+          readFinalCart,
+          orderInput: (...args) => runtime.source.orderInput(...args),
+          readFinal: (...args) => runtime.source.readFinal(...args),
+        },
         authorizeNow: async (): Promise<AuthorizedCommitment> => {
           const fresh = await authority.authorizeNow()
           if (

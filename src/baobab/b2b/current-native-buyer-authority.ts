@@ -43,6 +43,7 @@ export type NativeBuyerPurchase = {
   operationReference: string
   marketKey: string
   valuation: FinalNativeValuationFacts
+  priceLeaseExpiresAt?: number
   reservationId: string
   holdRevision: number
   sites: SiteUse[]
@@ -106,6 +107,7 @@ export class CurrentNativeBuyerAuthority {
     const expiresAt = Math.min(
       Date.parse(context.expires_at),
       startedAt + 30_000,
+      ...(purchase.priceLeaseExpiresAt === undefined ? [] : [purchase.priceLeaseExpiresAt]),
       ...(policy.reservation && policy.reservation !== "UNAVAILABLE"
         ? [policy.reservation.expiresAt.getTime()]
         : []),

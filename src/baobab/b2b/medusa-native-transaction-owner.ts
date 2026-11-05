@@ -255,8 +255,10 @@ export async function commitMedusaNativeBuyerOrder(
     // persisted native value on this very PostgreSQL transaction. A mismatch
     // aborts the order, seller/buyer receipts, spend and event together.
     const nativePrecision = await readNativeCurrencyExponent(db, snapshot.valuation.currency)
-    if (snapshot.currencyExponent !== nativePrecision ||
-        snapshot.erp.currency !== snapshot.valuation.currency) {
+    if (
+      snapshot.currencyExponent !== nativePrecision ||
+      snapshot.erp.currency !== snapshot.valuation.currency
+    ) {
       throw new Error("MEDUSA_NATIVE_CURRENCY_PRECISION_CHANGED")
     }
     finalSnapshots.set(db, snapshot)

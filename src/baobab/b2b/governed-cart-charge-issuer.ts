@@ -202,7 +202,10 @@ export async function verifyGovernedChargeEvidence(
       assert(
         line.resolution === "CHARGED"
           ? charge > 0n && line.zeroReason === null
-          : charge === 0n && typeof line.zeroReason === "string" && line.zeroReason === ZERO_REASON_FOR[line.resolution as Exclude<Resolution, "CHARGED">],
+          : charge === 0n &&
+              typeof line.zeroReason === "string" &&
+              line.zeroReason ===
+                ZERO_REASON_FOR[line.resolution as Exclude<Resolution, "CHARGED">],
       )
       kinds.add(line.kind)
     }

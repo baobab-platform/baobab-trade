@@ -37,6 +37,7 @@ const amounts: Record<string, number> = {
 }
 const bn = (numeric: string) => ({ numeric })
 function fixture() {
+  const address = { id: "caaddr_1", address_1: "Synthetic delivery address" }
   const cart = {
     id: "cart_governed_test01",
     currency_code: "UGX",
@@ -154,10 +155,12 @@ function fixture() {
               customer_id: cart.customer_id,
               completed_at: null,
               updated_at: exact,
+              shipping_address_id: address.id,
             },
           ],
           rowCount: 1,
         }
+      if (sql.includes("FROM cart_address")) return { rows: [address], rowCount: 1 }
       if (sql.includes("FROM cart_line_item WHERE"))
         return {
           rows: [{ id: "cali_1" }],
@@ -217,7 +220,7 @@ function fixture() {
     if (!row) throw new Error(`Missing fixture determination for ${kind}`)
     return row
   }
-  return { cart, determinations, determination, db, cartModule, scope, queries, reissue }
+  return { address, cart, determinations, determination, db, cartModule, scope, queries, reissue }
 }
 
 afterEach(() => vi.unstubAllEnvs())
@@ -373,4 +376,13 @@ describe("CAA-06b native Cart Module complete final obligation reader (unit-only
       "NATIVE_FINAL_CART_SHIPPING_SET_CHANGED",
     )
   })
+})
+
+it("binds address edits to the priced cart even when its version timestamp is unchanged", async () => {
+  const h = fixture()
+  const before = await readMedusaFinalCartPrice(h.scope)
+  h.address.address_1 = "Changed native delivery address"
+  const after = await readMedusaFinalCartPrice(h.scope)
+  expect(after.valuation.resource_version).toBe(before.valuation.resource_version)
+  expect(after.valuation.transaction_digest).not.toBe(before.valuation.transaction_digest)
 })

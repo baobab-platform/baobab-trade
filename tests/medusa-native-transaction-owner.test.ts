@@ -250,8 +250,7 @@ describe("CAA-06b native Medusa transaction boundary", () => {
       erp: syntheticErpConsequence(),
       currencyExponent: 2,
     })
-    expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome)
-      .toBe("REFUSED")
+    expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
     expect(h.settled).toEqual(["rollback"])
   })
 

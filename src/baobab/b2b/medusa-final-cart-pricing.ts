@@ -187,9 +187,10 @@ async function lockNativeCart(
   updatedAt: number
   updatedAtExact: string
   customerId: string
+  routing: unknown[]
 }> {
   const cart = await db.query(
-    "SELECT id,currency_code,customer_id,completed_at," +
+    "SELECT id,currency_code,customer_id,completed_at,sales_channel_id,region_id,shipping_address_id,billing_address_id," +
       "to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS updated_at " +
       "FROM cart " +
       "WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",
@@ -201,6 +202,39 @@ async function lockNativeCart(
   if (!/^[A-Z]{3}$/.test(currency)) return refuse("CURRENCY_INVALID")
   const updatedAt = date(cart.rows[0].updated_at)
   const updatedAtExact = text(cart.rows[0].updated_at)
+  const native = cart.rows[0]
+  const addressIds = [
+    ...new Set(
+      [native.shipping_address_id, native.billing_address_id].filter(
+        (id) => id !== null && id !== undefined,
+      ),
+    ),
+  ]
+  const addresses = addressIds.length
+    ? (
+        await db.query(
+          `SELECT id,address_1,address_2,city,province,postal_code,country_code FROM cart_address
+     WHERE id=ANY($1::text[]) AND deleted_at IS NULL ORDER BY id FOR SHARE`,
+          [addressIds],
+        )
+      ).rows
+    : []
+  if (addresses.length !== addressIds.length) return refuse("ADDRESS_UNAVAILABLE")
+  const routing = [
+    native.sales_channel_id,
+    native.region_id,
+    native.shipping_address_id,
+    native.billing_address_id,
+    addresses.map((a) => [
+      a.id,
+      a.address_1,
+      a.address_2,
+      a.city,
+      a.province,
+      a.postal_code,
+      a.country_code,
+    ]),
+  ]
   const items = await db.query(
     "SELECT id FROM cart_line_item WHERE cart_id=$1 AND deleted_at IS NULL FOR UPDATE",
     [cartId],
@@ -228,7 +262,7 @@ async function lockNativeCart(
       )
     }
   }
-  return { currency, updatedAt, updatedAtExact, customerId }
+  return { currency, updatedAt, updatedAtExact, customerId, routing }
 }
 
 function assertSameIds(actual: RecordValue[], native: RecordValue[], code: string): void {
@@ -649,6 +683,7 @@ export async function readMedusaFinalCartPrice(
     id: scope.cartId,
     updated_at: locked.updatedAtExact,
     customer: locked.customerId,
+    routing: locked.routing,
     tenant: scope.tenantId,
     market: scope.marketId,
     seller: scope.sellerLegalEntityId,

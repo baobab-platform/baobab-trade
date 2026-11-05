@@ -709,7 +709,7 @@ describe("TA-06 service boundary inventory", () => {
     ])
   })
 
-  it("limits the native owner to the protected buyer route and disposable probe", () => {
+  it("limits the native owner to the protected buyer route, purchase reader and disposable probe", () => {
     // Each importer is reviewed explicitly. A new route, loader, subscriber,
     // or background job cannot acquire access to the native writer implicitly.
     const root = join(__dirname, "..", "src")
@@ -731,6 +731,7 @@ describe("TA-06 service boundary inventory", () => {
     walk(root)
     expect(importers.sort()).toEqual([
       "api/store/b2b/buyer-commit/route.ts",
+      "baobab/b2b/medusa-native-buyer-purchase-source.ts",
       "scripts/regression-medusa-native-order-owner.ts",
     ])
   })

@@ -130,13 +130,15 @@ describe("DEV-07 genuine source-owned final charge issuer (source-only)", () => 
   })
   it("will not relabel tax exemption as an Incoterm not-applicable finding", async () => {
     const wrong = evidence()
-    const tax = wrong.charges.find((line) => line.kind === "TAX")!
+    const tax = wrong.charges.find((line) => line.kind === "TAX")
+    if (!tax) throw new Error("Missing TAX fixture")
     tax.resolution = "EXEMPT"
     tax.amountMinor = "0"
     tax.zeroReason = "NOT_APPLICABLE_PER_INCOTERM"
     await denied(wrong)
     const valid = evidence()
-    const taxed = valid.charges.find((line) => line.kind === "TAX")!
+    const taxed = valid.charges.find((line) => line.kind === "TAX")
+    if (!taxed) throw new Error("Missing TAX fixture")
     taxed.resolution = "ZERO_RATED"
     taxed.amountMinor = "0"
     taxed.zeroReason = "ZERO_RATE_AUTHORISED"
