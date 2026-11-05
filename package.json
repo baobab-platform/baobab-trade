@@ -102,7 +102,9 @@
     "qualify:dev11-rabbit-prepare": "medusa exec ./src/scripts/prepare-dev11-rabbit-event.ts",
     "regression:commercial-lifecycle": "medusa exec ./src/scripts/regression-commercial-lifecycle.ts",
     "test:commercial-kernel": "node --experimental-transform-types --test scripts/check-commercial-lifecycle.mjs",
-    "qualify:dev11-jvm-prepare": "medusa exec ./src/scripts/prepare-dev11-jvm-handoff.ts"
+    "qualify:dev11-jvm-prepare": "medusa exec ./src/scripts/prepare-dev11-jvm-handoff.ts",
+    "dev07:synthetic-price-issuer": "ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' src/scripts/serve-dev07-synthetic-price-issuer.ts",
+    "test:dev07-price-issuer": "vitest run tests/dev07-synthetic-price-issuer.test.ts tests/trade-price-issuer.test.ts tests/governed-cart-charge-issuer.test.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",
