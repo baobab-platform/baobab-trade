@@ -72,11 +72,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const MONEY = /^(0|[1-9][0-9]{0,15})$/
 const PRINTABLE = /^[\x21-\x7e]{8,200}$/
 const REQUIRED = new Set<string>(REQUIRED_CHARGES)
-const ZERO = new Set<string>([
-  "ZERO_RATE_AUTHORISED",
-  "EXEMPTION_DOCUMENTED",
-  "NOT_APPLICABLE_PER_INCOTERM",
-])
+const ZERO_REASON_FOR: Readonly<Record<Exclude<Resolution, "CHARGED">, ZeroReason>> = {
+  ZERO_RATED: "ZERO_RATE_AUTHORISED",
+  EXEMPT: "EXEMPTION_DOCUMENTED",
+  NOT_APPLICABLE: "NOT_APPLICABLE_PER_INCOTERM",
+}
 const ENC = /^[A-Za-z0-9_-]{64,256}$/
 
 function refuse(): never {
@@ -202,7 +202,7 @@ export async function verifyGovernedChargeEvidence(
       assert(
         line.resolution === "CHARGED"
           ? charge > 0n && line.zeroReason === null
-          : charge === 0n && typeof line.zeroReason === "string" && ZERO.has(line.zeroReason),
+          : charge === 0n && typeof line.zeroReason === "string" && line.zeroReason === ZERO_REASON_FOR[line.resolution as Exclude<Resolution, "CHARGED">],
       )
       kinds.add(line.kind)
     }
