@@ -75,7 +75,9 @@ function fixture() {
       throw new Error("unexpected native SQL")
     }),
   }
-  const cartModule = { retrieveCart: vi.fn(async () => cart) }
+  const cartModule = {
+    retrieveCart: vi.fn(async (_id: string, _config: unknown, _context: unknown) => cart),
+  }
   const scope = {
     db, transactionManager: { readonly: "fake unit manager, not native proof" },
     cartModule, cartId: cart.id, tenantId: "tn_test01", marketId: "zuribeans_ug",
