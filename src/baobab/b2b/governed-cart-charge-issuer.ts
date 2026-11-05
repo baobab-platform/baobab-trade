@@ -120,8 +120,14 @@ export async function verifyGovernedChargeEvidence(
   signed: SignedChargeEvidence,
   mandate: (value: ChargeEvidence) => Promise<ChargeIssuerMandate>,
   key: KeyObject,
-  now = Date.now(),
-): Promise<{ evidence: ChargeEvidence; decisionId: string; digest: string }> {
+  now?: number,
+): Promise<{
+  evidence: ChargeEvidence
+  decisionId: string
+  digest: string
+  leaseExpiresAt: number
+}> {
+  const startedAt = now ?? Date.now()
   try {
     assert(key.asymmetricKeyType === "ed25519")
     assert(
@@ -168,12 +174,15 @@ export async function verifyGovernedChargeEvidence(
         PRINTABLE.test(e.policyReference) &&
         Array.isArray(e.charges) &&
         e.charges.length === REQUIRED_CHARGES.length &&
-        Number.isFinite(now),
+        Number.isFinite(startedAt),
     )
     const evaluated = date(e.evaluatedAt),
       expires = date(e.expiresAt)
     assert(
-      evaluated <= now && expires > now && expires > evaluated && expires <= evaluated + 300000,
+      evaluated <= startedAt &&
+        expires > startedAt &&
+        expires > evaluated &&
+        expires <= evaluated + 300000,
     )
     const kinds = new Set<string>()
     for (const line of e.charges) {
@@ -203,6 +212,8 @@ export async function verifyGovernedChargeEvidence(
     assert(signature.length === 64 && verify(null, payload, key, signature))
     // Only after the signature passes may an issuer trigger a CP authority call.
     const cp = await mandate(e)
+    const checkedAt = now ?? Date.now()
+    const leaseExpiresAt = Math.min(expires, date(cp.expiresAt))
     assert(
       cp.outcome === "AUTHORIZED" &&
         UUID.test(cp.cpDecisionId) &&
@@ -211,11 +222,13 @@ export async function verifyGovernedChargeEvidence(
         cp.marketId === e.marketId &&
         cp.sellerLegalEntityId === e.sellerLegalEntityId &&
         cp.policyReference === e.policyReference &&
-        date(cp.expiresAt) > now,
+        checkedAt >= startedAt &&
+        leaseExpiresAt > checkedAt,
     )
     return {
       evidence: e,
       decisionId: cp.cpDecisionId,
+      leaseExpiresAt,
       digest: createHash("sha256").update(payload).digest("hex"),
     }
   } catch {
@@ -251,13 +264,16 @@ export async function issueGovernedCartCharges(
         "WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",
       [cartId],
     )
+    const updatedAt = cart.rows[0]?.updated_at
+    // node-postgres returns a Date and Date#toString loses milliseconds.
+    const version = updatedAt instanceof Date ? updatedAt.getTime() : Date.parse(String(updatedAt))
     if (
       cart.rows.length !== 1 ||
       cart.rows[0].completed_at !== null ||
       String(cart.rows[0].currency_code).toUpperCase() !== e.currency ||
-      Date.parse(String(cart.rows[0].updated_at)) !== e.resourceVersion ||
+      version !== e.resourceVersion ||
       cart.rows[0].exact_updated_at !== e.cartUpdatedAtExact ||
-      Date.parse(e.expiresAt) <= Date.now()
+      validated.leaseExpiresAt <= Date.now()
     )
       refuse()
     for (const charge of e.charges) {
@@ -314,6 +330,7 @@ export async function issueGovernedCartCharges(
         ],
       )
     }
+    if (validated.leaseExpiresAt <= Date.now()) refuse()
     await db.query("COMMIT")
   } catch {
     await db.query("ROLLBACK").catch(() => undefined)

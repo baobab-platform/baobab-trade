@@ -11,9 +11,9 @@ import {
 } from "../src/baobab/b2b/medusa-final-cart-pricing"
 
 const now = new Date("2026-11-05T02:00:15.000Z")
-const updated = "2026-11-05T02:00:00.000Z"
+const updated = "2026-11-05T02:00:00.182Z"
 const resourceVersion = Date.parse(updated)
-const exact = "2026-11-05T02:00:00.000000Z"
+const exact = "2026-11-05T02:00:00.182396Z"
 const keys = generateKeyPairSync("ed25519")
 const ATTESTATION = "beadbead-4444-4444-8444-beadbeadbead"
 const CP_DECISION = "cafecafe-4444-4444-8444-cafecafecafe"
@@ -42,7 +42,7 @@ function fixture() {
     currency_code: "UGX",
     customer_id: "customer_governed_test01",
     completed_at: null,
-    updated_at: updated,
+    updated_at: new Date(updated),
     item_subtotal: bn("1000"),
     shipping_subtotal: bn("80"),
     subtotal: bn("1080"),
@@ -52,7 +52,6 @@ function fixture() {
     shipping_tax_total: bn("8"),
     total: bn("1168"),
     credit_line_total: bn("0"),
-    gift_card_total: bn("0"),
     items: [
       {
         id: "cali_1",
@@ -175,6 +174,7 @@ function fixture() {
           rowCount: determinations.length,
         }
       if (
+        sql.includes("FROM credit_line WHERE") ||
         sql.includes("cart_line_item_tax_line") ||
         sql.includes("cart_line_item_adjustment") ||
         sql.includes("cart_shipping_method_tax_line") ||
@@ -234,6 +234,10 @@ describe("CAA-06b native Cart Module complete final obligation reader (unit-only
       "DUTY_AND_IMPORT_CHARGE",
     )
     expect(h.cartModule.retrieveCart).toHaveBeenCalledOnce()
+    expect(h.cartModule.retrieveCart.mock.calls[0][1]).toEqual({
+      select: ["id", "customer_id", "currency_code", "updated_at", "completed_at", "total"],
+      relations: [],
+    })
     expect(h.cartModule.retrieveCart.mock.calls[0][2]).toEqual({
       transactionManager: h.scope.transactionManager,
     })
@@ -316,7 +320,7 @@ describe("CAA-06b native Cart Module complete final obligation reader (unit-only
         h.determinations[0].resource_version = "1"
       },
       (h: ReturnType<typeof fixture>) => {
-        h.cart.updated_at = "2026-11-05T02:00:01.000Z"
+        h.cart.updated_at = new Date("2026-11-05T02:00:01.000Z")
       },
     ]) {
       const h = fixture()

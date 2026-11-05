@@ -12,13 +12,20 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { mkdirSync, writeFileSync } from "node:fs"
-import type { ExecArgs, IOrderModuleService, OrderTypes } from "@medusajs/framework/types"
+import type {
+  ExecArgs,
+  ICartModuleService,
+  IOrderModuleService,
+  OrderTypes,
+} from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
 import { Pool } from "pg"
 import {
   nativeXid32,
   withNativeMedusaOrderTransaction,
 } from "../baobab/b2b/medusa-native-transaction-owner"
+
+import { nativeMedusaCartPriceReadback } from "../baobab/b2b/medusa-final-cart-pricing"
 
 const ROLLBACK = "DEV07_NATIVE_OWNER_EXPECTED_ROLLBACK"
 
@@ -53,10 +60,73 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
         },
       ],
     }) as OrderTypes.CreateOrderDTO
+  const carts = container.resolve<ICartModuleService>(Modules.CART)
+  let cartId: string | undefined
   let committedId: string | undefined
   try {
     const version = await pool.query("SELECT current_setting('server_version_num')::int AS v")
     assert.equal(Math.floor(version.rows[0].v / 10000), 17)
+    const cart = await carts.createCarts({
+      currency_code: "ZAR",
+      customer_id: "cus_" + randomUUID().replaceAll("-", ""),
+      items: [
+        {
+          title: "Disposable native Cart Module price probe",
+          variant_id: "variant_" + randomUUID().replaceAll("-", ""),
+          quantity: 2,
+          unit_price: 10.25,
+        },
+      ],
+    })
+    cartId = cart.id
+    const newRevision = "2026-11-05T08:00:00.182396Z"
+    const nativeCartPrice = nativeMedusaCartPriceReadback(
+      carts,
+      async () => 2,
+      async () => {
+        throw new Error("The missing charge package must prevent a CP issuer call")
+      },
+    )
+    await assert.rejects(
+      withNativeMedusaOrderTransaction(orders, async ({ db, manager }) => {
+        await db.query("UPDATE cart SET updated_at=$2::timestamptz WHERE id=$1", [
+          cart.id,
+          newRevision,
+        ])
+        const observer = await pool.query("SELECT updated_at FROM cart WHERE id=$1", [cart.id])
+        assert.notEqual(
+          observer.rows[0].updated_at.toISOString(),
+          new Date(newRevision).toISOString(),
+        )
+        // Getting to the expected missing-evidence refusal proves that the
+        // Cart Module read the uncommitted revision, produced exact native
+        // totals, and did not borrow a second connection or bypass pricing.
+        await assert.rejects(
+          nativeCartPrice(
+            db,
+            "unused_before_order_creation",
+            {
+              receipt: {
+                resource_id: cart.id,
+                tenant_id: "tn_dev07_native_probe",
+                market_id: "market_dev07_native_probe",
+                seller_legal_entity_id: "LE-DEV07-NATIVE-PROBE",
+                currency: "ZAR",
+              },
+            },
+            manager,
+          ),
+          /NATIVE_FINAL_CART_CHARGE_DETERMINATION_MISSING/,
+        )
+        throw new Error(ROLLBACK)
+      }),
+      new RegExp(ROLLBACK),
+    )
+    const afterCart = await pool.query("SELECT updated_at FROM cart WHERE id=$1", [cart.id])
+    assert.notEqual(afterCart.rows[0].updated_at.toISOString(), new Date(newRevision).toISOString())
+    await carts.deleteCarts([cart.id])
+    cartId = undefined
+
     const rolledBackId = id()
     await assert.rejects(
       withNativeMedusaOrderTransaction(orders, async ({ manager, db, xid }) => {
@@ -137,6 +207,8 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
         {
           schema: "baobab-trade.dev07-medusa-owned-transaction.v1",
           profile: "DISPOSABLE_POSTGRES17_MEDUSA_2_21_2",
+          native_cart_totals_read_in_order_xid: true,
+          absent_charge_evidence_refused: true,
           native_module_create_orders_executed: true,
           genuine_native_order_and_line_same_xid: true,
           rejected_native_order_rolled_back: true,
@@ -154,6 +226,7 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
     console.log("PASS DEV07 real native Medusa 2.21.2 Order Module transaction/rollback/cleanup")
   } finally {
     // Only disposable records named by this run may be cleaned.
+    if (cartId) await carts.deleteCarts([cartId]).catch(() => undefined)
     if (committedId) await orders.deleteOrders([committedId]).catch(() => undefined)
     await pool.end()
   }

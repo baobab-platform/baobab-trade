@@ -431,3 +431,20 @@ The confidential route still requires a registered engine runtime providing
 the actual cart purchase, native order input and result readback, current
 authority, and authorised replay. The source and rollback checks do not
 supply those runtime dependencies or demonstrate a genuine buyer commit.
+
+The pinned Cart Module receives a fresh manager with Cart metadata and the
+existing Order Module transaction context. Each price read uses a fresh
+identity map so the second read can see changes in the same transaction.
+Only the Order Module owns commit and rollback. The reader requests Medusa's
+computed total through the pinned Cart Module API and checks the returned
+discount, tax, shipping and credit totals. Native credit records cause a
+refusal while the commitment model excludes tender. PostgreSQL Date values
+retain their milliseconds and the exact cart timestamp remains separately
+bound to the signed package.
+
+The disposable PostgreSQL 17 native owner drill updates a real Cart Module
+record inside the Order Module transaction. A separate connection must see
+the previous revision. The Cart Module reader must compute valid totals on
+the uncommitted revision before refusing the absent governed charge package.
+The drill then rolls back the revision and removes the disposable cart. This
+qualifies the transaction boundary independently of an issuer or buyer.

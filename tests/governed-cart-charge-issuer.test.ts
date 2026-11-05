@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { generateKeyPairSync, sign } from "node:crypto"
 import {
   REQUIRED_CHARGES,
+  issueGovernedCartCharges,
+  type GovernedChargeIssuer,
   signedChargeBytes,
   verifyGovernedChargeEvidence,
   type ChargeEvidence,
@@ -61,6 +63,53 @@ describe("DEV-07 genuine source-owned final charge issuer (source-only)", () => 
     expect(receipt.digest).toMatch(/^[a-f0-9]{64}$/)
     expect(receipt.evidence.charges).toHaveLength(7)
   })
+  it("uses the real public key and bound CP adapter for a fractional-second cart version", async () => {
+    const e = evidence()
+    e.resourceVersion = now + 182
+    e.cartUpdatedAtExact = "2026-11-05T08:00:00.182396Z"
+    const queries: string[] = []
+    const release = vi.fn()
+    const issuer: GovernedChargeIssuer = {
+      publicKey: keys.publicKey,
+      obtainFromIssuer: async () => signed(e),
+      async verifyCpIssuer(value) {
+        expect(this.publicKey).toBe(keys.publicKey)
+        return cp(value)
+      },
+      db: {
+        connect: async () => ({
+          query: async (sql) => {
+            queries.push(sql)
+            if (sql.includes("FROM cart ")) {
+              return {
+                rows: [
+                  {
+                    currency_code: "zar",
+                    completed_at: null,
+                    updated_at: new Date(e.resourceVersion),
+                    exact_updated_at: e.cartUpdatedAtExact,
+                  },
+                ],
+                rowCount: 1,
+              }
+            }
+            return { rows: [], rowCount: 0 }
+          },
+          release,
+        }),
+      },
+    }
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now + 1000)
+    try {
+      await issueGovernedCartCharges(issuer, e.cartId)
+      expect(queries.filter((sql) => sql.startsWith("INSERT"))).toHaveLength(14)
+      expect(queries.at(-1)).toBe("COMMIT")
+      expect(release).toHaveBeenCalledOnce()
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
   it("refuses missing or duplicated tax, freight, duty, or other classes", async () => {
     for (const kind of REQUIRED_CHARGES) {
       const absent = evidence()

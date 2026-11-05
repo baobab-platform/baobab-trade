@@ -129,6 +129,14 @@ function money(v: unknown, exponent: number): number {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) return refuse("AMOUNT_UNSAFE")
   return Number(value)
 }
+/** Persisted DTO money can be exposed as a JS number alongside its exact
+ * Medusa raw value. Use the decimal from the same native record. */
+function nativeMoney(record: RecordValue, field: string, exponent: number): number {
+  if (record[field] == null) return refuse("AMOUNT_UNAVAILABLE")
+  const raw = record["raw_" + field]
+  return money(raw == null ? record[field] : object(raw).value, exponent)
+}
+
 function numericMinor(v: unknown): number {
   const s = typeof v === "number" && Number.isSafeInteger(v) ? String(v) : v
   if (typeof s !== "string" || !/^(0|[1-9][0-9]*)$/.test(s)) {
@@ -139,7 +147,7 @@ function numericMinor(v: unknown): number {
   return Number(value)
 }
 function date(v: unknown): number {
-  const t = typeof v === "string" || v instanceof Date ? Date.parse(String(v)) : NaN
+  const t = v instanceof Date ? v.getTime() : typeof v === "string" ? Date.parse(v) : NaN
   if (!Number.isSafeInteger(t) || t <= 0) return refuse("SOURCE_VERSION_UNAVAILABLE")
   return t
 }
@@ -229,6 +237,50 @@ function assertSameIds(actual: RecordValue[], native: RecordValue[], code: strin
   if (JSON.stringify(a) !== JSON.stringify(b)) refuse(code)
 }
 
+type CartTransactionManager = {
+  getTransactionContext(): object | undefined
+  setTransactionContext(transaction: object): void
+  resetTransactionContext(): void
+}
+
+/** Bind a fresh Cart manager to the Order owner's existing PostgreSQL
+ * transaction. The Order manager lacks Cart entity metadata. A fresh Cart
+ * identity map also forces each price read to see changes in this XID.
+ */
+function cartOnOrderTransaction(cartModule: NativeCartModule): NativeCartModule {
+  return {
+    async retrieveCart(id, config, context) {
+      const owner = (context as { transactionManager?: CartTransactionManager })?.transactionManager
+      const transaction = owner?.getTransactionContext?.()
+      const repository = (
+        cartModule as NativeCartModule & {
+          baseRepository_?: { getFreshManager(): CartTransactionManager }
+        }
+      ).baseRepository_
+      const manager = repository?.getFreshManager?.()
+      if (
+        !transaction ||
+        !manager ||
+        manager === owner ||
+        typeof manager.getTransactionContext !== "function" ||
+        typeof manager.setTransactionContext !== "function" ||
+        typeof manager.resetTransactionContext !== "function" ||
+        manager.getTransactionContext() != null
+      ) {
+        return refuse("CART_TRANSACTION_UNAVAILABLE")
+      }
+      // The Order Module owns commit and rollback. Reset only this fork's
+      // reference after the read and never close the underlying transaction.
+      manager.setTransactionContext(transaction)
+      try {
+        return await cartModule.retrieveCart(id, config, { transactionManager: manager })
+      } finally {
+        manager.resetTransactionContext()
+      }
+    },
+  }
+}
+
 /**
  * Ready-to-compose native Cart Module boundary. A caller can register this
  * function as its NativeMedusaOrderSource.readFinalCart implementation, but
@@ -240,6 +292,7 @@ export function nativeMedusaCartPriceReadback(
   currencyExponent: (db: Query, currency: string) => Promise<number>,
   verifyCurrentIssuer: CurrentPriceIssuerAuthority,
 ) {
+  const transactionalCart = cartOnOrderTransaction(cartModule)
   return async (
     db: Query,
     _nativeOrderId: string,
@@ -266,7 +319,7 @@ export function nativeMedusaCartPriceReadback(
     return readMedusaFinalCartPrice({
       db,
       transactionManager: manager,
-      cartModule,
+      cartModule: transactionalCart,
       cartId: authority.receipt.resource_id,
       tenantId: authority.receipt.tenant_id,
       marketId: authority.receipt.market_id,
@@ -301,35 +354,22 @@ export async function readMedusaFinalCartPrice(
     "SELECT id FROM cart_shipping_method WHERE cart_id=$1 AND deleted_at IS NULL FOR SHARE",
     [scope.cartId],
   )
+  // Cart credit lines are real native records. Lock their rows and refuse
+  // any tender until the commitment model can govern it explicitly.
+  const creditLines = await scope.db.query(
+    "SELECT id FROM credit_line WHERE cart_id=$1 AND deleted_at IS NULL FOR SHARE",
+    [scope.cartId],
+  )
+  if (creditLines.rows.length) return refuse("UNSUPPORTED_CART_TENDER")
   const cart = object(
     await scope.cartModule.retrieveCart(
       scope.cartId,
       {
-        select: [
-          "id",
-          "customer_id",
-          "currency_code",
-          "updated_at",
-          "completed_at",
-          "item_subtotal",
-          "shipping_subtotal",
-          "subtotal",
-          "discount_subtotal",
-          "tax_total",
-          "item_tax_total",
-          "shipping_tax_total",
-          "total",
-          "credit_line_total",
-          "gift_card_total",
-        ],
-        relations: [
-          "items",
-          "items.tax_lines",
-          "items.adjustments",
-          "shipping_methods",
-          "shipping_methods.tax_lines",
-          "shipping_methods.adjustments",
-        ],
+        // The pinned Cart Module treats total as a calculation trigger. It
+        // loads all required relations and computes discount/credit totals;
+        // those calculated names must never become ORM column selectors.
+        select: ["id", "customer_id", "currency_code", "updated_at", "completed_at", "total"],
+        relations: [],
       },
       { transactionManager: scope.transactionManager },
     ),
@@ -347,17 +387,20 @@ export async function readMedusaFinalCartPrice(
   assertSameIds(items, nativeItems.rows, "ITEM_SET_CHANGED")
   assertSameIds(shipping, nativeShipping.rows, "SHIPPING_SET_CHANGED")
   const e = scope.currencyExponent
-  const merchandise = money(cart.item_subtotal, e)
-  const freight = money(cart.shipping_subtotal, e)
-  const discount = money(cart.discount_subtotal, e)
-  const tax = money(cart.tax_total, e)
-  const nativeTotal = money(cart.total, e)
+  const merchandise = nativeMoney(cart, "item_subtotal", e)
+  const freight = nativeMoney(cart, "shipping_subtotal", e)
+  const discount = nativeMoney(cart, "discount_subtotal", e)
+  const tax = nativeMoney(cart, "tax_total", e)
+  const nativeTotal = nativeMoney(cart, "total", e)
   if (
-    BigInt(money(cart.subtotal, e)) !== BigInt(merchandise) + BigInt(freight) ||
-    BigInt(money(cart.item_tax_total, e)) + BigInt(money(cart.shipping_tax_total, e)) !==
+    BigInt(nativeMoney(cart, "subtotal", e)) !== BigInt(merchandise) + BigInt(freight) ||
+    BigInt(nativeMoney(cart, "item_tax_total", e)) +
+      BigInt(nativeMoney(cart, "shipping_tax_total", e)) !==
       BigInt(tax) ||
-    money(cart.credit_line_total, e) !== 0 ||
-    money(cart.gift_card_total, e) !== 0 ||
+    nativeMoney(cart, "credit_line_total", e) !== 0 ||
+    // Medusa 2.21.2 does not emit a gift-card total. Any future value must
+    // be zero; its actual credit-line records and computed total are required.
+    (cart.gift_card_total != null && nativeMoney(cart, "gift_card_total", e) !== 0) ||
     BigInt(nativeTotal) !== BigInt(merchandise) + BigInt(freight) + BigInt(tax) - BigInt(discount)
   )
     return refuse("NATIVE_TOTALS_INCONSISTENT")
@@ -366,13 +409,13 @@ export async function readMedusaFinalCartPrice(
   let itemSum = 0n
   for (const item of items) {
     const id = text(item.id)
-    const qty = item.quantity
-    if (!Number.isSafeInteger(qty) || (qty as number) <= 0 || !text(item.variant_id)) {
+    const qty = nativeMoney(item, "quantity", 0)
+    if (qty <= 0 || !text(item.variant_id)) {
       return refuse("ITEM_SOURCE_INCOMPLETE")
     }
-    const unit = money(item.unit_price, e)
-    const subtotal = money(item.subtotal, e)
-    if (BigInt(unit) * BigInt(qty as number) !== BigInt(subtotal)) {
+    const unit = nativeMoney(item, "unit_price", e)
+    const subtotal = nativeMoney(item, "subtotal", e)
+    if (BigInt(unit) * BigInt(qty) !== BigInt(subtotal)) {
       return refuse("ITEM_SUBTOTAL_INCONSISTENT")
     }
     itemSum += BigInt(subtotal)
@@ -383,7 +426,7 @@ export async function readMedusaFinalCartPrice(
   let shippingSum = 0n
   const shippingFingerprint: unknown[] = []
   for (const method of shipping) {
-    const amount = money(method.subtotal, e)
+    const amount = nativeMoney(method, "subtotal", e)
     shippingSum += BigInt(amount)
     shippingFingerprint.push([text(method.id), amount])
   }
