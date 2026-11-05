@@ -104,6 +104,14 @@ describe("DEV-07 actual native cart/buyer hold/site source negatives",()=>{
       .rejects.toThrow()
     expect(t.calls).toHaveLength(0)
   })
+  it("a perfectly scoped native hold and two registered Sites still cannot place an order without final issuer/Cart facts", async () => {
+    const t = fixture()
+    await expect(t.reader(identity, cartId)).rejects.toThrow("UNEXPECTED_NATIVE_SQL")
+    expect(t.calls.some((sql) => sql.includes("FROM native_seller_cart_binding"))).toBe(true)
+    expect(t.calls.some((sql) => sql.includes("FROM b2b_spend_reservation"))).toBe(true)
+    expect(t.calls.filter((sql) => sql.includes("JOIN b2b_delivery_site"))).toHaveLength(2)
+    expect(t.calls.some((sql) => sql.includes("FROM cart WHERE"))).toBe(true)
+  })
   it("requires the issuer checker and native Medusa Cart+Order service",()=>{
     expect(()=>medusaNativeBuyerPurchaseSource({
       orders:null as never,carts:null as never,
