@@ -24,8 +24,8 @@ import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
 import { medusaB2BPolicyStore } from "../../../../baobab/b2b/medusa-b2b-policy-store"
 import { medusaNativeBuyerPurchaseSource } from "../../../../baobab/b2b/medusa-native-buyer-purchase-source"
+import { readNativeCurrencyExponent } from "../../../../baobab/b2b/native-currency-exponent"
 import { nativeMedusaCartPriceReadback, type NativeCartModule, type CurrentPriceIssuerAuthority } from "../../../../baobab/b2b/medusa-final-cart-pricing"
-import type { PgClient } from "../../../../baobab/orders/postgres-governed-binding-persistence"
 import { tradeOrderAuthorityDependencies } from "../../../../baobab/orders/trade-a-runtime"
 import { resolveNativeCheckoutEnvironment } from "../../../../baobab/orders/native-cart-legal-seller"
 
@@ -59,7 +59,6 @@ export type NativeBuyerCommitRuntime = Pick<
   /** The native Order and Cart Modules own the price and Site readback.
    * No runtime service may inject a fake readPurchase or readFinalCart.
    */
-  currencyExponent(db: Pick<PgClient, "query">, currency: string): Promise<number>
   verifyCurrentIssuer: CurrentPriceIssuerAuthority
   source: Pick<NativeMedusaOrderSource, "orderInput" | "readFinal">
   resolveTenant(request: {
@@ -185,7 +184,6 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     if (
       !runtime?.source?.readFinal ||
       !runtime?.source?.orderInput ||
-      typeof runtime.currencyExponent !== "function" ||
       typeof runtime.verifyCurrentIssuer !== "function" ||
       !runtime?.spend ||
       typeof runtime.markets?.getMarket !== "function" ||
@@ -200,11 +198,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     const carts = req.scope.resolve<ICartModuleService>(Modules.CART)
     const nativeCart = carts as unknown as NativeCartModule
     const readPurchase = medusaNativeBuyerPurchaseSource({
-      orders, carts: nativeCart, currencyExponent: runtime.currencyExponent,
+      orders, carts: nativeCart, currencyExponent: readNativeCurrencyExponent,
       verifyCurrentIssuer: runtime.verifyCurrentIssuer,
     })
     const readFinalCart = nativeMedusaCartPriceReadback(
-      nativeCart, runtime.currencyExponent, runtime.verifyCurrentIssuer,
+      nativeCart, readNativeCurrencyExponent, runtime.verifyCurrentIssuer,
     )
     const seller = { ...tradeOrderAuthorityDependencies(req.scope), environment: sellerEnvironment }
     const cartId = b.cart_id
