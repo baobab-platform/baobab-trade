@@ -13,6 +13,7 @@ import {
   type FinalNativeValuationFacts,
 } from "./buyer-commitment-valuation"
 import type { NativeFinalCartPrice } from "./medusa-final-cart-pricing"
+import { readNativeCurrencyExponent } from "./native-currency-exponent"
 import {
   requireCurrentNativeCommitAuthority,
   type NativeCommitAuthorityReadback,
@@ -249,6 +250,14 @@ export async function commitMedusaNativeBuyerOrder(
     const snapshot = await deps.source.readFinal(db, nativeOrderId, currentAuthority)
     if (!snapshot?.valuation || !snapshot.erp || !Number.isSafeInteger(snapshot.currencyExponent)) {
       throw new Error("MEDUSA_FINAL_NATIVE_ORDER_SNAPSHOT_UNAVAILABLE")
+    }
+    // A source-provided precision is not proof. Currency metadata must be the
+    // persisted native value on this very PostgreSQL transaction. A mismatch
+    // aborts the order, seller/buyer receipts, spend and event together.
+    const nativePrecision = await readNativeCurrencyExponent(db, snapshot.valuation.currency)
+    if (snapshot.currencyExponent !== nativePrecision ||
+        snapshot.erp.currency !== snapshot.valuation.currency) {
+      throw new Error("MEDUSA_NATIVE_CURRENCY_PRECISION_CHANGED")
     }
     finalSnapshots.set(db, snapshot)
     return snapshot
