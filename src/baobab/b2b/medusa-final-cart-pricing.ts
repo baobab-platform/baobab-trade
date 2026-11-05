@@ -56,13 +56,17 @@ function text(v: unknown): string {
 function money(v: unknown, exponent: number): number {
   // Medusa BigNumber objects expose numeric; never use .toNumber(), Math.round,
   // parseFloat, or infer a missing amount as zero.
-  const raw = typeof v === "object" && v !== null
-    ? (v as RecordValue).numeric
-    : v
-  if (typeof raw !== "string" && !(typeof raw === "number" && Number.isSafeInteger(raw))) {
-    return refuse("AMOUNT_UNAVAILABLE")
-  }
-  const amount = String(raw)
+  const source = typeof v === "object" && v !== null ? v as RecordValue : null
+  const raw = source ? source.numeric : v
+  // BigNumber numeric may be a binary floating-point number. Use its
+  // decimal-string representation instead, never its rounded JS numeric.
+  const exact = source && typeof source.toString === "function"
+    ? source.toString()
+    : undefined
+  const amount = typeof raw === "string" ? raw
+    : typeof raw === "number" && Number.isSafeInteger(raw) ? String(raw)
+    : typeof exact === "string" ? exact : ""
+  if (!amount) return refuse("AMOUNT_UNAVAILABLE")
   if (!MONEY.test(amount) || amount.length > 30) return refuse("AMOUNT_UNAVAILABLE")
   const [whole, frac = ""] = amount.split(".")
   if (frac.length > exponent && /[1-9]/.test(frac.slice(exponent))) {
@@ -114,7 +118,7 @@ async function lockNativeCart(db: Query, cartId: string): Promise<{
   currency: string; updatedAt: number; updatedAtExact: string; customerId: string
 }> {
   const cart = await db.query(
-    "SELECT id,currency_code,customer_id,completed_at,updated_at FROM cart " +
+    "SELECT id,currency_code,customer_id,completed_at,updated_at::text AS updated_at FROM cart " +
     "WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [cartId])
   if (cart.rows.length !== 1 || cart.rows[0].completed_at !== null) return refuse("CART_NOT_OPEN")
   const currency = text(cart.rows[0].currency_code).toUpperCase()
