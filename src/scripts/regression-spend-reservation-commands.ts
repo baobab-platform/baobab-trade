@@ -47,8 +47,8 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   const membership = async (org: string, suffix: string) => {
     const id = `b2bmem_${run}${suffix}`
     await sql(
-      `insert into "b2b_buyer_membership" ("id", "organisation_id", "status") values ($1, $2, 'ACTIVE')`,
-      [id, org],
+      `insert into "b2b_buyer_membership" ("id", "organisation_id", "principal_id", "status") values ($1, $2, $3, 'ACTIVE')`,
+      [id, org, actor],
     )
     return id
   }
@@ -154,6 +154,13 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   const org = await organisation("a")
   const alice = await membership(org, "alice")
   const member = await budget(org, "MEMBERSHIP", alice, 10_000_000n, "alice")
+  const foreign = submission(org, alice, 1n, "foreign-actor", { actorPrincipalId: randomUUID() })
+  assert.deepEqual(await commands.submit(foreign), {
+    outcome: "REFUSED",
+    reason: "BUYER_NOT_AUTHORISED",
+  })
+  assert.deepEqual(await balance(member), [0n, 0n])
+  pass("a foreign Principal cannot consume the member's reservation capacity")
   const first = submission(org, alice, 5_500_000n, "1", {
     resourceVersion: Date.parse("2026-11-05T02:00:00Z"),
   })

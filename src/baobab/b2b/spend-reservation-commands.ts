@@ -451,10 +451,12 @@ export class PostgresSpendReservationCommands {
     const member = await db.query(
       `select 1 from "b2b_buyer_membership" m join "b2b_organisation" o on o."id" = m."organisation_id"
         where m."id" = $1 and m."organisation_id" = $2 and o."tenant_id" = $3
+          and m."principal_id" = $4 and o."status" = 'ACTIVE' and o."deleted_at" is null
           and m."status" = 'ACTIVE' and m."deleted_at" is null
           and (m."effective_from" is null or m."effective_from" <= now())
-          and (m."effective_until" is null or now() < m."effective_until")`,
-      [command.membershipId, command.organisationId, command.tenantId],
+          and (m."effective_until" is null or now() < m."effective_until")
+        for share of m,o`,
+      [command.membershipId, command.organisationId, command.tenantId, command.actorPrincipalId],
     )
     if (member.rowCount !== 1) throw new Refused("BUYER_NOT_AUTHORISED")
     const reservationId = reservationIdFor(command.organisationId, command.idempotencyKey)
