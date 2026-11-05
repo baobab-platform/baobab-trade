@@ -99,6 +99,10 @@ function ownerHarness() {
     }
   })
   const source = {
+    readFinalCart: vi.fn(async () => ({
+      valuation: structuredClone(valuationFacts),
+      sourceFingerprint: valuationFacts.transaction_digest,
+    })),
     orderInput: vi.fn(async () => ({
       id: request.nativeOrderId,
       is_draft_order: false as const,
@@ -228,10 +232,52 @@ describe("CAA-06b native Medusa transaction boundary", () => {
     })
     expect(h.settled).toEqual(["commit"])
     expect(h.source.readFinal).toHaveBeenCalledOnce()
+    expect(h.source.readFinalCart).toHaveBeenCalledTimes(2)
     expect(h.createOrders).toHaveBeenCalledWith(
       expect.objectContaining({ is_draft_order: false }),
       { transactionManager: h.manager },
     )
+  })
+
+  it("refuses missing final-cart proof before writing an order", async () => {
+    const h = ownerHarness()
+    h.source.readFinalCart.mockImplementationOnce(async () => {
+      throw new Error("NATIVE_FINAL_CART_CHARGE_DETERMINATION_MISSING")
+    })
+    expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
+    expect(h.settled).toEqual(["rollback"])
+    expect(h.createOrders).not.toHaveBeenCalled()
+  })
+
+  it("refuses a repriced cart before creation even if the authority lease is live", async () => {
+    const h = ownerHarness()
+    h.source.readFinalCart.mockResolvedValue({
+      valuation: {
+        ...structuredClone(valuationFacts),
+        components: [{ ...valuationFacts.components[0], amount_minor: 1250001 }],
+      },
+      sourceFingerprint: valuationFacts.transaction_digest,
+    })
+    expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
+    expect(h.settled).toEqual(["rollback"])
+    expect(h.createOrders).not.toHaveBeenCalled()
+  })
+
+  it("re-reads every priced fact after event/ledger work, refusing a new duty quote", async () => {
+    const h = ownerHarness()
+    h.source.readFinalCart
+      .mockResolvedValueOnce({
+        valuation: structuredClone(valuationFacts),
+        sourceFingerprint: valuationFacts.transaction_digest,
+      })
+      .mockResolvedValueOnce({
+        valuation: structuredClone(valuationFacts),
+        sourceFingerprint: "sha256:" + "f".repeat(64),
+      })
+    expect((await commitMedusaNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
+    expect(h.settled).toEqual(["rollback"])
+    expect(h.source.readFinalCart).toHaveBeenCalledTimes(2)
+    expect(h.createOrders).toHaveBeenCalledOnce()
   })
 
   it("propagates a revoked readback out of the owner before the native writer", async () => {
