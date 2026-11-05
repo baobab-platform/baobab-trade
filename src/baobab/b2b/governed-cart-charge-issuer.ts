@@ -29,6 +29,8 @@ export type ChargeEvidence = {
   sellerLegalEntityId: string
   currency: string
   resourceVersion: number
+  /** Exact UTC source timestamp: milliseconds alone could hide an edit. */
+  cartUpdatedAtExact: string
   evaluatedAt: string
   expiresAt: string
   policyReference: string
@@ -109,7 +111,7 @@ export async function verifyGovernedChargeEvidence(
     const e = signed.evidence
     assert(e !== null && typeof e === "object" &&
       Object.keys(e).sort().join() === [
-        "attestationId", "cartId", "charges", "currency", "evaluatedAt",
+        "attestationId", "cartId", "cartUpdatedAtExact", "charges", "currency", "evaluatedAt",
         "expiresAt", "issuerId", "marketId", "policyReference",
         "resourceVersion", "sellerLegalEntityId", "tenantId",
       ].sort().join())
@@ -119,6 +121,7 @@ export async function verifyGovernedChargeEvidence(
       ID.test(e.sellerLegalEntityId) &&
       /^[A-Z]{3}$/.test(e.currency) &&
       Number.isSafeInteger(e.resourceVersion) && e.resourceVersion > 0 &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(e.cartUpdatedAtExact) &&
       PRINTABLE.test(e.policyReference) &&
       Array.isArray(e.charges) && e.charges.length === REQUIRED_CHARGES.length &&
       Number.isFinite(now))
@@ -183,12 +186,15 @@ export async function issueGovernedCartCharges(
   try {
     await db.query("BEGIN ISOLATION LEVEL SERIALIZABLE")
     const cart = await db.query(
-      "SELECT currency_code,completed_at,updated_at FROM cart " +
+      "SELECT currency_code,completed_at,updated_at," +
+      "to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS exact_updated_at " +
+      "FROM cart " +
       "WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [cartId],
     )
     if (cart.rows.length !== 1 || cart.rows[0].completed_at !== null ||
         String(cart.rows[0].currency_code).toUpperCase() !== e.currency ||
         Date.parse(String(cart.rows[0].updated_at)) !== e.resourceVersion ||
+        cart.rows[0].exact_updated_at !== e.cartUpdatedAtExact ||
         Date.parse(e.expiresAt) <= Date.now()) refuse()
     for (const charge of e.charges) {
       await db.query(
@@ -203,11 +209,11 @@ export async function issueGovernedCartCharges(
       await db.query(
         "INSERT INTO trade_native_cart_charge_authority " +
         "(tenant_id,cart_id,market_id,seller_legal_entity_id,resource_version," +
-        "charge_kind,issuer_id,attestation_id,cp_decision_id,source_digest,policy_reference) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8::uuid,$9::uuid,$10,$11)",
+        "charge_kind,issuer_id,attestation_id,cp_decision_id,source_digest,policy_reference,cart_updated_at_exact) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8::uuid,$9::uuid,$10,$11,$12)",
         [e.tenantId,e.cartId,e.marketId,e.sellerLegalEntityId,e.resourceVersion,
          charge.kind,e.issuerId,e.attestationId,validated.decisionId,
-         validated.digest,e.policyReference],
+         validated.digest,e.policyReference,e.cartUpdatedAtExact],
       )
     }
     await db.query("COMMIT")
