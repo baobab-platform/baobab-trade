@@ -1,3 +1,4 @@
+import { outboundTraceparent } from "../observability/tracing"
 import { createHash } from "node:crypto"
 import {
   bindingAuthorizationRequestSchema,
@@ -96,6 +97,8 @@ export class HttpBindingAuthorityClient implements BindingAuthorityClient {
   private async post(path: string, token: string, body: unknown): Promise<unknown> {
     if (!token.trim() || token.length > 16384 || /\s/.test(token))
       throw new Error("Human or workload credential required")
+    const parent = outboundTraceparent()
+    const traceHeaders = parent ? { traceparent: parent } : {}
     const response = await fetch(this.base + path, {
       method: "POST",
       redirect: "error",
@@ -103,6 +106,7 @@ export class HttpBindingAuthorityClient implements BindingAuthorityClient {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
         "cache-control": "no-store",
+        ...traceHeaders,
         "x-correlation-id": crypto.randomUUID(),
       },
       body: JSON.stringify(body),

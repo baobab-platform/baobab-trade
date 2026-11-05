@@ -5,6 +5,7 @@
 // TA-08: denials raised inside native handlers answer the same RFC 9457
 // documents; every other error keeps Medusa's own handler.
 import { authenticate, defineMiddlewares, errorHandler } from "@medusajs/framework/http"
+import { tradeTraceMiddleware } from "../baobab/observability/http-middleware"
 import { PROTECTED_ORDER_PREFIXES } from "../baobab/orders/trade-a-entry-points"
 import {
   createTradeAErrorHandler,
@@ -14,6 +15,11 @@ import {
 export default defineMiddlewares({
   errorHandler: createTradeAErrorHandler(errorHandler()),
   routes: [
+    // Real Medusa BFF buyer handoff, internal authority and OAuth endpoints.
+    // Trace context does not authenticate callers or loosen existing guards.
+    { matcher: "/store/b2b/*", middlewares: [tradeTraceMiddleware] },
+    { matcher: "/internal/*", middlewares: [tradeTraceMiddleware] },
+    { matcher: "/auth/*", middlewares: [tradeTraceMiddleware] },
     // No `methods`: every verb reaches the guard, which classifies reads and mutations.
     ...PROTECTED_ORDER_PREFIXES.map((prefix) => ({
       matcher: `${prefix}*`,

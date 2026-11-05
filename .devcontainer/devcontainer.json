@@ -4,10 +4,18 @@
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "init": true,
-  "postCreateCommand": "baobab-verify --contract && npm ci --ignore-scripts && npm run typecheck",
+  "postCreateCommand": "test \"$(node --version)\" = v26.13.0 && baobab-verify --contract && npm ci --ignore-scripts && npm run typecheck",
   "customizations": {
     "vscode": {
-      "extensions": ["github.vscode-github-actions", "redhat.vscode-yaml"]
+      "extensions": [
+        "github.vscode-github-actions",
+        "redhat.vscode-yaml"
+      ]
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "26.13.0"
     }
   }
 }
