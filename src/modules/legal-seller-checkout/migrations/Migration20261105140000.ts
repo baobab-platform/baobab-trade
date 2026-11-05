@@ -6,6 +6,12 @@ export class Migration20261105140000 extends Migration {
       ALTER TABLE event_outbox ADD COLUMN native_insert_xid text;
       CREATE FUNCTION trade_guard_native_outbox_event() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
+        IF TG_OP = 'TRUNCATE' THEN
+          IF EXISTS (SELECT 1 FROM event_outbox WHERE native_insert_xid IS NOT NULL) THEN
+            RAISE EXCEPTION 'Governed Trade outbox event is immutable';
+          END IF;
+          RETURN NULL;
+        END IF;
         IF TG_OP = 'INSERT' THEN
           IF NEW.native_insert_xid IS NOT NULL THEN
             IF NEW.event_type <> 'com.baobab-platform.trade.order.placed.v1'
@@ -35,10 +41,13 @@ export class Migration20261105140000 extends Migration {
       END $$;
       CREATE TRIGGER trade_native_outbox_event_guard BEFORE INSERT OR UPDATE OR DELETE ON event_outbox
         FOR EACH ROW EXECUTE FUNCTION trade_guard_native_outbox_event();
+      CREATE TRIGGER trade_native_outbox_event_no_truncate BEFORE TRUNCATE ON event_outbox
+        FOR EACH STATEMENT EXECUTE FUNCTION trade_guard_native_outbox_event();
     `)
   }
 
   async down(): Promise<void> {
+    this.addSql("DROP TRIGGER trade_native_outbox_event_no_truncate ON event_outbox")
     this.addSql("DROP TRIGGER trade_native_outbox_event_guard ON event_outbox")
     this.addSql("DROP FUNCTION trade_guard_native_outbox_event()")
     this.addSql("ALTER TABLE event_outbox DROP COLUMN native_insert_xid")
