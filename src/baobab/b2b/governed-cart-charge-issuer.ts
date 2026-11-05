@@ -215,11 +215,16 @@ export async function issueGovernedCartCharges(
       await db.query(
         "INSERT INTO trade_native_cart_charge_authority " +
         "(tenant_id,cart_id,market_id,seller_legal_entity_id,resource_version," +
-        "charge_kind,issuer_id,attestation_id,cp_decision_id,source_digest,policy_reference,cart_updated_at_exact) " +
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8::uuid,$9::uuid,$10,$11,$12)",
+        "charge_kind,issuer_id,attestation_id,cp_decision_id,source_digest,policy_reference,cart_updated_at_exact," +
+        "zero_reason,canonical_evidence,issuer_signature,signer_key_fingerprint) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8::uuid,$9::uuid,$10,$11,$12,$13,$14::jsonb,$15,$16)",
         [e.tenantId,e.cartId,e.marketId,e.sellerLegalEntityId,e.resourceVersion,
          charge.kind,e.issuerId,e.attestationId,validated.decisionId,
-         validated.digest,e.policyReference,e.cartUpdatedAtExact],
+         validated.digest,e.policyReference,e.cartUpdatedAtExact,charge.zeroReason,
+         JSON.stringify(e),signed.signature,
+         createHash("sha256").update(createPublicKey(issuer.publicKey).export({
+           type: "spki", format: "der",
+         })).digest("hex")],
       )
     }
     await db.query("COMMIT")
