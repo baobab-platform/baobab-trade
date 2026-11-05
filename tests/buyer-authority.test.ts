@@ -5,7 +5,11 @@ import {
 } from "../src/baobab/auth/buyer-assurance"
 import { loadBuyerAssurancePolicy } from "../src/baobab/auth/buyer-assurance-policy"
 import { BuyerTokenError } from "../src/baobab/auth/buyer-access-token"
-import { resolveBuyerContext, type BuyerContextResult } from "../src/baobab/b2b/buyer-authority"
+import {
+  resolveBuyerContext,
+  resolveBuyerCommitIdentity,
+  type BuyerContextResult,
+} from "../src/baobab/b2b/buyer-authority"
 import { buyerExecutionContextSchema } from "../src/baobab/contracts/authority-validation"
 import { EstateBindingError } from "../src/baobab/control-plane/estate-binding"
 import { PrincipalResolutionError } from "../src/baobab/control-plane/principal-resolution"
@@ -267,6 +271,117 @@ const refused = (result: BuyerContextResult) => {
     status: result.status,
   }
 }
+
+describe("CAA-06b consequential buyer context (synthetic independent authority ports)", () => {
+  const request = {
+    callerToken: "bff-token",
+    subjectToken: "buyer-token",
+    requestedOrganisationId: ORG,
+    requestedCountryCode: "UG",
+    correlationId: CORRELATION,
+  }
+  const approved = () => {
+    const profile = {
+      accepted_acr_values: [SESSION_ACR],
+      required_methods: ["pwd", "totp"],
+      step_up_required: true,
+      max_authentication_age_seconds: 60,
+    }
+    return loadBuyerAssurancePolicy(
+      JSON.stringify({
+        policy_id: "synthetic.commit-only-test",
+        policy_version: 1,
+        status: "APPROVED",
+        issuer: ISSUER,
+        audience: "baobab-trade",
+        approval_reference: "synthetic:source-tests-only",
+        effective_from: new Date(NOW - 1000).toISOString(),
+        effective_until: new Date(NOW + 300_000).toISOString(),
+        profiles: {
+          BUYER_SESSION: profile,
+          BUYER_COMMITMENT: profile,
+          BUYER_ADMINISTRATION: profile,
+        },
+        operation_profiles: CANONICAL_OPERATION_PROFILES,
+      }),
+      ISSUER,
+    )
+  }
+  const commitmentWorld = (change: Change = {}) => {
+    const w = world(change)
+    const verifier = w.deps.tokens.verify
+    return {
+      ...w,
+      deps: {
+        ...w.deps,
+        assurance: approved(),
+        tokens: {
+          ...w.deps.tokens,
+          verify: async (token: string) => ({
+            ...(await verifier(token)),
+            amr: ["pwd", "totp"],
+            authTime: new Date(NOW - 10_000),
+          }),
+        },
+      },
+    }
+  }
+  it("runs the independent checks for the commitment operation and CP-selected Market", async () => {
+    const w = commitmentWorld()
+    const result = await resolveBuyerCommitIdentity(w.deps as never, request)
+    expect(result.outcome).toBe("RESOLVED")
+    if (result.outcome !== "RESOLVED") throw new Error("source context refused")
+    expect("decision" in result.identity).toBe(false)
+    expect(result.identity.operation).toBe("trade.order.commit")
+    expect(result.identity.market_id).toBe("market_ug")
+    expect(result.identity.policy_revision).toMatch(
+      /^trade.buyer-operation-policy:v1;assurance.sha256:/,
+    )
+    expect(w.calls.filter((x) => x === "principal")).toHaveLength(1)
+  })
+  it("never upgrades an interim discovery assurance allowlist into commitment authority", async () => {
+    const w = world()
+    const result = await resolveBuyerCommitIdentity(w.deps as never, request)
+    expect(refused(result as BuyerContextResult).reasons).toEqual(["OPERATION_NOT_ACTIVATED"])
+    expect(w.calls).toEqual(["caller", "token"])
+  })
+  it.each([undefined, "ug", "UGX"])(
+    "requires explicit CP country selection (%s)",
+    async (country) => {
+      const w = commitmentWorld()
+      const result = await resolveBuyerCommitIdentity(w.deps as never, {
+        ...request,
+        requestedCountryCode: country,
+      })
+      expect(refused(result as BuyerContextResult).reasons).toEqual(["MARKET_NOT_PERMITTED"])
+      expect(w.calls).toEqual([])
+    },
+  )
+  it("re-reads online Principal status on each attempt and refuses a revoked session", async () => {
+    const w = commitmentWorld()
+    expect((await resolveBuyerCommitIdentity(w.deps as never, request)).outcome).toBe("RESOLVED")
+    const result = await resolveBuyerCommitIdentity(w.deps as never, {
+      ...request,
+      subjectToken: "revoked-session",
+    })
+    expect(refused(result as BuyerContextResult)).toEqual({
+      outcome: "DENY",
+      status: 401,
+      reasons: ["BUYER_TOKEN_INVALID"],
+    })
+    expect(w.calls.filter((x) => x === "principal")).toHaveLength(2)
+  })
+  it("refuses an AAL1 token despite the same approved issuer and current Principal", async () => {
+    const w = commitmentWorld()
+    const verifier = w.deps.tokens.verify
+    w.deps.tokens.verify = async (token) => ({ ...(await verifier(token)), amr: ["pwd"] })
+    expect(
+      refused((await resolveBuyerCommitIdentity(w.deps as never, request)) as BuyerContextResult)
+        .reasons,
+    ).toEqual(["ASSURANCE_INSUFFICIENT"])
+    expect(w.calls).not.toContain("principal")
+  })
+})
 
 describe("buyer execution context (ADR-SHARED-042 CAA-04/05)", () => {
   it("bounds a full-policy context to assurance freshness, including I/O delay", async () => {

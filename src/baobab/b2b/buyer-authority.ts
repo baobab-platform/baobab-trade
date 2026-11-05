@@ -29,6 +29,7 @@ import {
   type WorkloadTenantVerifier,
 } from "../control-plane/workload-tenant-verifier"
 import { B2B_ROLES, type B2BRole } from "./types"
+import { BUYER_OPERATION_POLICY_REVISION } from "./buyer-operation-policy"
 
 /**
  * ADR-SHARED-042 CAA-04/05 (ADR-0033): the TradeBuyerExecutionContext Trade
@@ -116,7 +117,22 @@ export type TradeBuyerExecutionContext = {
   evaluated_at: string
   expires_at: string
   evidence_references: string[]
+  resource_id?: string
+  resource_version?: number
+  transaction_digest?: string
+  amount_minor?: number
+  currency?: string
+  valuation_digest?: string
+  seller_legal_entity_id?: string
+  seller_binding_reference?: { binding_id: string; binding_version: number }
 }
+
+/** Internal identity facts have no ALLOW decision. Only the completed
+ * operation evaluator may assemble a canonical consequential context. */
+export type BuyerIdentitySnapshot = Omit<TradeBuyerExecutionContext, "decision">
+export type BuyerCommitIdentityResult =
+  | { outcome: "RESOLVED"; status: 200; identity: BuyerIdentitySnapshot }
+  | Exclude<BuyerContextResult, { outcome: "ALLOW" }>
 
 export type BuyerContextResult =
   | { outcome: "ALLOW"; status: 200; context: TradeBuyerExecutionContext }
@@ -192,8 +208,66 @@ export async function resolveBuyerContext(
   deps: BuyerAuthorityDependencies,
   request: BuyerContextRequest,
 ): Promise<BuyerContextResult> {
+  const result = await resolveIdentityForOperation(
+    deps,
+    request,
+    OPERATION,
+    BUYER_CONTEXT_POLICY_REVISION,
+  )
+  if (result.outcome !== "RESOLVED") return result
+  const context: TradeBuyerExecutionContext = {
+    ...result.identity,
+    decision: { outcome: "ALLOW", reasons: [] },
+  }
+  if (!buyerExecutionContextSchema(context))
+    return {
+      outcome: "UNAVAILABLE",
+      status: 503,
+      decision: { outcome: "UNAVAILABLE", reasons: ["SOURCE_UNAVAILABLE"] },
+    }
+  return { outcome: "ALLOW", status: 200, context }
+}
+
+/**
+ * Server-only identity/context half of CAA-06b. Re-runs the existing BFF,
+ * human-token, CP online Principal/estate/Organisation and native membership
+ * checks for BUYER_COMMITMENT assurance. A discovery ALLOW cannot be upgraded.
+ * This context alone is NOT permission to place an order: the consequential
+ * policy, current seller decision, final native valuation and same-XID owner
+ * still have to succeed. It deliberately exposes no operation selector to HTTP.
+ */
+export async function resolveBuyerCommitIdentity(
+  deps: BuyerAuthorityDependencies,
+  request: BuyerContextRequest,
+): Promise<BuyerCommitIdentityResult> {
+  // Commit always requires CP to attest a selected country and its Market.
+  if (!request.requestedCountryCode || !/^[A-Z]{2}$/.test(request.requestedCountryCode)) {
+    return {
+      outcome: "DENY",
+      status: 403,
+      decision: { outcome: "DENY", reasons: ["MARKET_NOT_PERMITTED"] },
+    }
+  }
+  return resolveIdentityForOperation(
+    deps,
+    request,
+    "trade.order.commit",
+    BUYER_OPERATION_POLICY_REVISION,
+  )
+}
+
+async function resolveIdentityForOperation(
+  deps: BuyerAuthorityDependencies,
+  request: BuyerContextRequest,
+  operation: BuyerOperation,
+  policyRevision: string,
+): Promise<BuyerCommitIdentityResult> {
   try {
-    return { outcome: "ALLOW", status: 200, context: await evaluate(deps, request) }
+    return {
+      outcome: "RESOLVED",
+      status: 200,
+      identity: await evaluate(deps, request, operation, policyRevision),
+    }
   } catch (error) {
     const refusal = error instanceof Refusal ? error : unavailable()
     const decision = { outcome: refusal.outcome, reasons: [refusal.reason] }
@@ -211,7 +285,9 @@ export async function resolveBuyerContext(
 async function evaluate(
   deps: BuyerAuthorityDependencies,
   request: BuyerContextRequest,
-): Promise<TradeBuyerExecutionContext> {
+  operation: BuyerOperation,
+  policyRevision: string,
+): Promise<BuyerIdentitySnapshot> {
   const clock = deps.now ?? Date.now
   const startedAt = clock()
   if (!Number.isFinite(startedAt)) throw unavailable()
@@ -229,7 +305,7 @@ async function evaluate(
   }
 
   // 3. Assurance for this operation's canonical profile.
-  const assurance = evaluateAssurance(deps.assurance, OPERATION, token, startedAt)
+  const assurance = evaluateAssurance(deps.assurance, operation, token, startedAt)
   if (!assurance.ok) throw deny(assurance.reason)
 
   // 4. The canonical Principal.
@@ -398,7 +474,7 @@ async function evaluate(
   const expiresAt = Math.min(...expiries)
   if (!Number.isFinite(expiresAt) || expiresAt <= now) throw deny("CONTEXT_NOT_USABLE")
 
-  const context: TradeBuyerExecutionContext = {
+  const context: BuyerIdentitySnapshot = {
     context_id: newId(),
     decision_id: newId(),
     correlation_id: request.correlationId,
@@ -415,9 +491,8 @@ async function evaluate(
     membership_revision: Number(membership.revision),
     roles: [...new Set(roles)],
     cp_context_id: cpContext.contextId,
-    operation: OPERATION,
-    policy_revision: `${BUYER_CONTEXT_POLICY_REVISION};${assurance.policyRevision}`,
-    decision: { outcome: "ALLOW", reasons: [] },
+    operation,
+    policy_revision: `${policyRevision};${assurance.policyRevision}`,
     evaluated_at: new Date(now).toISOString(),
     expires_at: new Date(expiresAt).toISOString(),
     evidence_references: [
@@ -428,7 +503,7 @@ async function evaluate(
       `assurance:${assurance.policyRevision}@${deps.assurance?.approvalReference ?? ""}`,
     ],
   }
-  // The context must satisfy the Shared wire contract it claims to be.
-  if (!buyerExecutionContextSchema(context)) throw unavailable()
+  // Deliberately NOT a wire ALLOW: commitment still needs exact purchase,
+  // policy and seller facts before the complete Shared context can validate.
   return context
 }

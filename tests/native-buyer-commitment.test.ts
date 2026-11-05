@@ -80,6 +80,34 @@ describe("CAA-06b proposed owner transaction composition (source-only, not activ
     expect(h.commitWithMutation).not.toHaveBeenCalled()
   })
 
+  it.each([
+    "resource_id",
+    "resource_version",
+    "transaction_digest",
+    "amount_minor",
+    "currency",
+    "valuation_digest",
+    "seller_legal_entity_id",
+    "seller_binding_reference",
+  ] as const)("refuses an incomplete consequential context (%s) before spend", async (field) => {
+    const h = harness((p) => {
+      Reflect.deleteProperty(p.context, field)
+    })
+    expect(await commitAuthorizedNativeBuyerOrder(h.deps, request)).toEqual({
+      outcome: "REFUSED",
+      reason: "CURRENT_IAM_CP_BUYER_AUTHORITY_NOT_PROVEN",
+    })
+    expect(h.commitWithMutation).not.toHaveBeenCalled()
+  })
+
+  it("refuses a schema-valid context naming a different purchase amount", async () => {
+    const h = harness((p) => {
+      p.context.amount_minor = (p.context.amount_minor ?? 0) + 1
+    })
+    expect((await commitAuthorizedNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
+    expect(h.commitWithMutation).not.toHaveBeenCalled()
+  })
+
   it("denies stale, mismatched and foreign buyer/seller proofs before touching spend", async () => {
     for (const mutate of [
       (p: AuthorizedCommitment) => {

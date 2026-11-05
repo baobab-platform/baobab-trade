@@ -99,15 +99,71 @@ The gate remains SHADOW pending their connected qualification.
 
 ## Explicitly incomplete / not qualified
 
+### 5 November: consequential current-authority composition
+
+`CurrentNativeBuyerAuthority` now composes the existing BFF/human token
+verifiers, online CP Principal resolution (including current-token
+introspection), estate/Organisation participation, canonical Market read,
+Trade role/Site/spend/budget sources and existing seller PEP. It does not
+introduce another IAM client, messaging abstraction or authority registry.
+
+The shared identity evaluator returns an internal **RESOLVED identity** for
+commitment assurance, with no ALLOW decision. Only a successful consequential
+policy and seller PEP can produce the full Shared buyer execution context:
+resource/version/digest, whole final obligation, currency, valuation and seller
+binding are mandatory and schema-checked. The native commit boundary repeats
+that check and reconciles every purchase/seller field with the buyer receipt.
+The discovery route continues to resolve only `trade.buyer-context.resolve`.
+
+Under the spend lock, the provider re-reads identity, policy, canonical Market,
+native seller configuration and the CP seller decision. It checks the original
+mandate and binding without inserting a second seller receipt, which would make
+TA-07's receipt selection ambiguous. The native reservation read binds the exact
+tenant, purchase, hold revision, amount and expiry, in addition to the existing
+membership/version/digest/budget checks. Earlier leases are never extended.
+
+This increment does not implement the governed cart pricing/purchase reader:
+`readPurchase` must obtain actual, complete final native obligations, shipping
+Sites and commercial terms. It cannot accept browser prices, cart metadata
+assertions, placeholder shipping prices or absent tax/duty facts as final.
+Purchases that require an approval remain refused until live independent
+approver re-evaluation is connected. This provider is server-only and is not
+wired into an application checkout or an ENFORCED deployment.
+
+Unit tests exercise real policy loading/evaluation, contract validation,
+independent identity refusal, Market/key/country separation, revocation
+readback, hold changes, source failure and incomplete-context rejection.
+Their authority/native ports are synthetic and are **not connected evidence**.
+
+The repaired ERP #125 source `115e9a0d22ed6516a649bc6d36bdfc0b658880c2`
+passes full CI, Foundation/security and real same-event runtime run
+`41946627517`. Original artifact `13379825989`, independently downloaded and
+validated, has ZIP SHA-256
+`9a49bd788e3159ec313a8e88cfb5d28d0082ff433fc72a9bf18bd6ab2fcab90b`.
+It proves the same persisted event at the real JVM effect, unknown-result
+adoption and an independently exported 10-span/9-parent-edge component graph.
+That run executes the historical composed Trade source `f2c88d4a`; it does not
+execute this new authority increment. Its originating order is synthetic and
+its unchanged buyer-origin refusal remains `NATIVE_ORDER_ABSENT`.
+
+The pattern to qualify for DEV-07/08/09/11/12/14 therefore remains the existing
+native owner → atomic spend/outbox → confirmed dispatcher → RabbitMQ → durable
+inbox → current engine authority → native consequence/recovery → independent
+database/exported-trace observation. Reuse these components and their failure
+semantics. Do not promote this to accepted canonical buyer execution until the
+genuine non-draft origin and exact downstream event are independently proved.
+
 This PR now contains a pinned Medusa 2.21.2 `Order Module`
 transaction-owner adapter (`medusa-native-transaction-owner.ts`) and a
 disposable Medusa runtime qualification, but **the positive same-XID native
 buyer commitment is not yet independently qualified**. The adapter requires
-two real source-owned providers: `NativeMedusaOrderSource` must build
+two qualified source-owned providers: `NativeMedusaOrderSource` must build
 `createOrders` input from a governed cart and re-read **all final obligations**
 from one native snapshot, and `recheckAuthorityNow` must actually perform
 current IAM/CP/Trade buyer and seller readback inside the spend transaction.
-Neither can be substituted with the source-only synthetic unit fixtures.
+The current-authority composition above implements the second provider's
+existing authority joins, but still needs the real purchase source and
+connected qualification. Neither can be substituted with unit fixtures.
 
 The pinned `OrderModuleService.baseRepository_.transaction` and
 `createOrders(..., {transactionManager})` compatibility seam was inspected
@@ -209,7 +265,8 @@ The complete Medusa build and standalone authority/schema asset verification
 also pass; final-head native runtime CI remains required.
 
 Pending acceptance therefore includes a concrete governed native cart
-reader, a real live IAM/CP readback provider, a first genuine **non-draft**
+reader, connected qualification of the current IAM/CP readback provider,
+a first genuine **non-draft**
 buyer-commit Medusa order under its seller and Decision 9 fences, complete
 source-row MVCC joins, deliberate crash and revocation windows, the same
 canonical event through RabbitMQ and iDempiere, exported lineage, original
@@ -265,7 +322,7 @@ it does not create a business fact or grant native authority.
 
 This source permits a real same-event outbox/broker/JVM qualification while
 retaining the separate `NATIVE_ORDER_ABSENT` refusal for its synthetic origin.
-It does not implement the missing governed native cart reader or live buyer
-operation provider, and cannot qualify the non-draft CAA-06b buyer positive or
+It does not implement the missing governed native cart reader or qualify the
+live buyer operation provider, and cannot qualify the non-draft CAA-06b buyer positive or
 L4-OPS-01. The future genuine buyer event uses the same immutable handoff and
 publisher/consumer path without another transport implementation.

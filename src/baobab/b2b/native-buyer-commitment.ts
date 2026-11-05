@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import {
   buyerAuthorityReceiptSchema,
+  buyerExecutionContextSchema,
   erpOrderConsequenceSchema,
 } from "../contracts/authority-validation"
 import { createTenantTradeEvent, isValidCloudEvent } from "../events/event-contracts"
@@ -178,6 +179,9 @@ function requireCommitment(
   // Schema conformance cannot replace a live authorisation readback, but
   // an unregistered or stale receipt must never reach native persistence.
   if (!buyerAuthorityReceiptSchema(b)) throw new Error("BUYER_RECEIPT_NOT_CANONICAL")
+  // Shared requires the consequential context to bind the full purchase
+  // and seller. A schema-valid receipt cannot repair an incomplete context.
+  if (!buyerExecutionContextSchema(c)) throw new Error("BUYER_CONTEXT_NOT_CANONICAL")
   if (
     !c ||
     c.decision.outcome !== "ALLOW" ||
@@ -201,6 +205,15 @@ function requireCommitment(
     c.operation !== b.operation ||
     c.decision_id !== b.decision_id ||
     c.policy_revision !== b.policy_revision ||
+    b.resource_id !== c.resource_id ||
+    b.resource_version !== c.resource_version ||
+    b.transaction_digest !== c.transaction_digest ||
+    b.amount_minor !== c.amount_minor ||
+    b.currency !== c.currency ||
+    b.valuation_digest !== c.valuation_digest ||
+    b.seller_legal_entity_id !== c.seller_legal_entity_id ||
+    b.seller_binding_reference.binding_id !== c.seller_binding_reference?.binding_id ||
+    b.seller_binding_reference.binding_version !== c.seller_binding_reference?.binding_version ||
     (c.market_id !== undefined && c.market_id !== b.market_id) ||
     request.tenant.lifecycleStatus !== "active" ||
     request.tenant.entitled !== true ||
