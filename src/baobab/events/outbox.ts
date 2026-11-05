@@ -1,3 +1,4 @@
+import { withEventDeliveryTrace } from "../observability/tracing"
 import { createHash } from "node:crypto"
 import { isValidCloudEvent, type BaobabCloudEvent } from "./event-contracts"
 import type { EventPublisher } from "./publisher"
@@ -12,8 +13,23 @@ const stableJson = (value: unknown): string => {
   return JSON.stringify(value)
 }
 
+/** Historical envelopes and their persisted digests are immutable.
+ * DEV-11 MUST NOT silently change this published canonical fingerprint.
+ * Durable redelivery always reuses the stored event/trace, never recreates it. */
 export const canonicalEventFingerprint = (event: BaobabCloudEvent): string =>
   createHash("sha256").update(stableJson(event)).digest("hex")
+
+/** Replay-equivalence deliberately excludes only W3C transport diagnostics.
+ * Historical canonical envelope digest stays byte-for-byte compatible.
+ * Event id, type, subject, tenant, causation, correlation and payload remain
+ * in the semantic fingerprint and MUST NOT change on a replay.
+ */
+export const canonicalEventSemanticFingerprint = (event: BaobabCloudEvent): string => {
+  const semantic = Object.fromEntries(
+    Object.entries(event).filter(([key]) => key !== "traceparent" && key !== "tracestate"),
+  )
+  return createHash("sha256").update(stableJson(semantic)).digest("hex")
+}
 
 export type OutboxStatus = "PENDING" | "PUBLISHING" | "PUBLISHED" | "RETRY" | "DEAD_LETTER"
 
@@ -79,7 +95,10 @@ export class TransactionalOutbox {
     if (!event.idempotencykey) throw new Error("Durable events require an idempotency key")
     const existing = await this.repository.findByIdempotencyKey(event.idempotencykey)
     if (existing) {
-      if (canonicalEventFingerprint(existing.envelope) !== canonicalEventFingerprint(event))
+      if (
+        canonicalEventSemanticFingerprint(existing.envelope) !==
+        canonicalEventSemanticFingerprint(event)
+      )
         throw new Error("Idempotency key collision: canonical event payload differs")
       return existing
     }
@@ -107,7 +126,9 @@ export class AtLeastOnceOutboxDispatcher {
       )
       if (!claimed) continue
       try {
-        await this.publisher.publish(claimed.envelope)
+        await withEventDeliveryTrace(claimed.envelope, "EVENT_PUBLISH", () =>
+          this.publisher.publish(claimed.envelope),
+        )
         results.push(await this.repository.markPublished(claimed.id, now))
       } catch (error) {
         const code = errorCode(error)
@@ -156,10 +177,14 @@ export class IdempotentEventConsumer {
     handler: (event: BaobabCloudEvent<T>) => Promise<void>,
   ): Promise<{ duplicate: boolean; receipt: ConsumerReceipt }> {
     if (!isValidCloudEvent(event)) throw new Error("Refusing a non-conforming canonical event")
-    const existing = await this.receipts.find(consumerName, event.id)
-    if (existing) return { duplicate: true, receipt: existing }
-    const receipt = await this.receipts.processAtomically(consumerName, event, handler)
-    return { duplicate: false, receipt }
+    // Run actual receipt + native business-effect transaction under a child
+    // of the persisted event's original trace. Never use trace ID as a key.
+    return withEventDeliveryTrace(event, "EVENT_CONSUME", async () => {
+      const existing = await this.receipts.find(consumerName, event.id)
+      if (existing) return { duplicate: true, receipt: existing }
+      const receipt = await this.receipts.processAtomically(consumerName, event, handler)
+      return { duplicate: false, receipt }
+    })
   }
 }
 

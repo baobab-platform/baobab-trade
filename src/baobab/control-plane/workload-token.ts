@@ -1,3 +1,4 @@
+import { outgoingTraceHeaders } from "../observability/tracing"
 /**
  * OAuth2 client-credentials grant against baobab-iam's Keycloak realm, for
  * the `baobab-trade-workload` service-account client (already configured in
@@ -126,7 +127,7 @@ export class ClientCredentialsWorkloadTokenProvider implements WorkloadTokenProv
       // The deployment-owned token endpoint is the sole credential target.
       redirect: "error",
       cache: "no-store",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      headers: { "content-type": "application/x-www-form-urlencoded", ...outgoingTraceHeaders() },
       body: new URLSearchParams({
         grant_type: "client_credentials",
         client_id: this.clientId,

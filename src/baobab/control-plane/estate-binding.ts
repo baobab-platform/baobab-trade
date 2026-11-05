@@ -1,3 +1,4 @@
+import { outgoingTraceHeaders } from "../observability/tracing"
 import { getBaobabTradeEnvironment } from "../config/environment"
 import { estateBindingAttestationSchema } from "../contracts/authority-validation"
 import {
@@ -135,6 +136,7 @@ export class ControlPlaneEstateBindingResolver implements EstateBindingResolver 
           "content-type": "application/json",
           accept: "application/json",
           "x-correlation-id": request.correlationId,
+          ...outgoingTraceHeaders(),
         },
         body: JSON.stringify({
           purpose: "BUYER_OPERATION",
