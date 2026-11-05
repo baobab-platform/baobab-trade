@@ -74,6 +74,8 @@ export async function runNativeBuyerGuardRegression(pool: Pool): Promise<Negativ
     ["trade_buyer_authority_consumption", "trade_buyer_consumption_immutable"],
     ["trade_buyer_authority_consumption", "trade_buyer_consumption_no_truncate"],
     ["trade_order_commitment", "trade_order_commitment_classification"],
+    ["trade_native_cart_charge_determination", "trade_native_cart_charge_no_update"],
+    ["trade_native_cart_charge_determination", "trade_native_cart_charge_no_truncate"],
   ] as const
   for (const [relation, trigger] of expectedTriggers) {
     const found = await pool.query(
@@ -198,6 +200,42 @@ export async function runNativeBuyerGuardRegression(pool: Pool): Promise<Negativ
       ],
       /buyer\/native\/spend\/outbox transaction not proven/,
     )
+    const chargeInsert =
+      "INSERT INTO trade_native_cart_charge_determination " +
+      "(tenant_id,cart_id,market_id,seller_legal_entity_id,resource_version," +
+      "charge_kind,resolution,amount_minor,currency,source_reference,evaluated_at,expires_at) " +
+      "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::timestamptz,$12::timestamptz)"
+    const args = [
+      "tn_native_guard_" + runId, "cart_missing_" + runId, "market_missing",
+      "LE-SYNTHETIC", 1, "DUTY", "NOT_APPLICABLE", "0",
+      "UGX", "synthetic:rule-not-authority", evaluatedAt, expiresAt,
+    ]
+    await mustRefuse(
+      db, cases, "missing-duty-explanation-cannot-be-charged",
+      chargeInsert,
+      args.map((v, i) => i === 6 ? "CHARGED" : v),
+      /check constraint/,
+    )
+    await mustRefuse(
+      db, cases, "unjustified-nonzero-duty-exemption",
+      chargeInsert,
+      args.map((v, i) => i === 7 ? "100" : v),
+      /check constraint/,
+    )
+    await db.query(chargeInsert, args)
+    await mustRefuse(
+      db, cases, "immutable-duty-determination",
+      "UPDATE trade_native_cart_charge_determination SET amount_minor=2 " +
+      "WHERE tenant_id=$1 AND cart_id=$2 AND charge_kind='DUTY'",
+      args.slice(0, 2),
+      /final cart charge determination is immutable/,
+    )
+    const noChargeMutation = await db.query(
+      "SELECT amount_minor::text AS amount FROM trade_native_cart_charge_determination " +
+      "WHERE tenant_id=$1 AND cart_id=$2 AND charge_kind='DUTY'",
+      args.slice(0, 2),
+    )
+    assert.equal(noChargeMutation.rows[0].amount, "0")
     const noConsumption = await db.query(
       "SELECT count(*)::int AS n FROM trade_buyer_authority_consumption WHERE receipt_id=$1::uuid",
       [receiptId],
@@ -213,7 +251,7 @@ export async function runNativeBuyerGuardRegression(pool: Pool): Promise<Negativ
     [receiptId],
   )
   assert.equal(residue.rows[0].n, 0, "Disposable buyer receipt was retained")
-  assert.equal(cases.length, 6)
+  assert.equal(cases.length, 9)
   return cases
 }
 
