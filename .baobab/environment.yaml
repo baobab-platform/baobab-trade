@@ -21,4 +21,4 @@ validation:
     - "development.docker"
     - "development.github_cli"
 notes:
-  - "Medusa remains the Trade runtime; this declaration only describes compatibility with nabhold/baobab-dev."
+  - "Medusa remains the Trade runtime; the application uses Node 26 and npm while the forthcoming baobab-dev v1.5.0 image may additionally carry pnpm 12/Corepack 0.35. The image is not yet adopted or qualified."

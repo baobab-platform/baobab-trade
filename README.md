@@ -18,7 +18,7 @@ P0-04B-02 adds [authenticated binding intake and versioned CP-owned activation](
 
 ## Local development
 
-Prerequisites: Node.js 24, Git, PostgreSQL and Redis.
+Prerequisites: Node.js 26.13.0, Git, PostgreSQL and Redis (npm 11.20.0, lockfile v3).
 
 ```bash
 cp .env.example .env
@@ -321,3 +321,7 @@ PostgreSQL 17, over TLS. CI runs it as `trade-a-real-cp`. The
 [scenarios, defects found, residual risk and staging contract](docs/plans/trade-a-ta08-real-runtime-acceptance.md)
 are recorded with it. This is real-component evidence on synthetic data, not
 EA Gate D, L4 or protected staging.
+
+## DEV-10 Node 26 and forthcoming baobab-dev v1.5.0
+
+Trade's Medusa application deliberately retains **npm** and its reproducible `package-lock.json` even though the upcoming development image is expected to provide **Node 26, pnpm 12 and Corepack 0.35**. pnpm/Corepack are shared developer tools, not evidence that Trade's native Medusa/npm installer has changed. The existing v1.4.4 Dev Container temporarily adds the Node 26 feature. Switch to the separately published v1.5.0 image only after verifying its immutable digest and the actual runtime/toolchain under the non-root developer user, then exercising frozen npm install, real Medusa/PostgreSQL17 integration and private package access in a disposable Codespace. Source-only or synthetic checks never count as live buyer commitment or production readiness.

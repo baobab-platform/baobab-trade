@@ -2,7 +2,7 @@ import { outgoingTraceHeaders } from "../observability/tracing"
 import {
   createPublicKey,
   verify as verifySignature,
-  type JsonWebKey,
+  type webcrypto,
   type KeyObject,
 } from "node:crypto"
 
@@ -310,7 +310,7 @@ export class BuyerTokenVerifier {
     const jwks = await this.getDocument(jwksUri)
     if (!Array.isArray(jwks.keys)) throw unavailable()
     const byKid = new Map<string, KeyObject>()
-    for (const candidate of jwks.keys as JsonWebKey[]) {
+    for (const candidate of jwks.keys as webcrypto.JsonWebKey[]) {
       if (
         typeof candidate?.kid !== "string" ||
         (candidate.use !== undefined && candidate.use !== "sig")

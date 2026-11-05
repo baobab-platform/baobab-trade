@@ -5,9 +5,9 @@
   "description": "Baobab Trade Engine - independently deployable MedusaJS commerce engine for the Baobab Platform.",
   "license": "GPL-3.0-or-later",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=26.13.0 <27"
   },
-  "packageManager": "npm@10.8.2",
+  "packageManager": "npm@11.20.0",
   "scripts": {
     "dev": "medusa develop",
     "build": "medusa build",
@@ -118,16 +118,16 @@
   "devDependencies": {
     "@medusajs/admin-sdk": "2.21.2",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "24.13.6",
-    "@typescript-eslint/eslint-plugin": "8.69.0",
-    "@typescript-eslint/parser": "8.69.0",
+    "@types/node": "26.6.5",
+    "@typescript-eslint/eslint-plugin": "8.71.2",
+    "@typescript-eslint/parser": "8.71.2",
     "eslint": "9.39.5",
     "eslint-config-prettier": "10.1.8",
     "jsonwebtoken": "^9.0.3",
     "prettier": "3.9.6",
     "ts-node": "10.9.2",
     "typescript": "5.7.2",
-    "vitest": "5.0.3",
+    "vitest": "5.0.5",
     "yaml": "^2.9.0"
   },
   "overrides": {
