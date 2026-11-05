@@ -1,0 +1,225 @@
+name: DEV-11 actual Medusa outbox -> RabbitMQ -> ERP PostgreSQL inbox
+
+# Real PostgreSQL 17, RabbitMQ quorum queue, native Medusa outbox module and
+# ERP application package. Intentionally does NOT claim real iDempiere posting.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/dev11-rabbit-connected.yml
+      - Dockerfile.dev11-rabbit-dispatcher
+      - scripts/dev11_rabbit_dispatcher.py
+      - scripts/dev11_rabbit_connected.py
+      - scripts/dev11_erp_crash_consumer.py
+      - scripts/dev11_broker_crash_publisher.py
+      - scripts/test_dev11_rabbit_dispatcher.py
+      - scripts/dev11_native_business_origin.py
+      - scripts/test_dev11_native_business_origin.py
+      - scripts/dev11-rabbit-requirements.txt
+      - src/scripts/prepare-dev11-rabbit-event.ts
+      - src/baobab/events/**
+      - src/baobab/observability/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-broker-erp-inbox:
+    name: Real RabbitMQ confirms and signed ERP inbox replay/denial
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17.11-alpine3.24
+        env:
+          POSTGRES_USER: baobab_trade
+          POSTGRES_PASSWORD: baobab_trade
+          POSTGRES_DB: baobab_trade_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U baobab_trade -d baobab_trade_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      erp-postgres:
+        image: postgres:17.11-alpine3.24
+        env:
+          POSTGRES_USER: baobab_erp
+          # Disposable CI-only database. This is public fixture data, not a secret.
+          POSTGRES_PASSWORD: dev11
+          POSTGRES_DB: baobab_erp_dev11
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U baobab_erp -d baobab_erp_dev11"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7.4.11-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      rabbitmq:
+        image: rabbitmq:4.3.5-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: dev11
+          RABBITMQ_DEFAULT_PASS: dev11_synthetic
+        ports: [5672:5672, 15672:15672]
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 6s
+          --health-retries 25
+    env:
+      NODE_ENV: test
+      BAOBAB_ENVIRONMENT: development
+      BAOBAB_DEV11_RABBIT_CONNECTED_REQUIRED: "true"
+      BAOBAB_EVENT_DISPATCH_BACKEND: rabbitmq-confirmed
+      DATABASE_URL: postgresql://baobab_trade:baobab_trade@127.0.0.1:5432/baobab_trade_test
+      ERP_DATABASE_URL: postgresql://baobab_erp:dev11@127.0.0.1:5433/baobab_erp_dev11
+      BAOBAB_RABBITMQ_URL: amqp://dev11:dev11_synthetic@127.0.0.1:5672/%2F
+      BAOBAB_EVENT_SIGNING_SECRET: dev11-synthetic-signed-transport-secret-only
+      REDIS_URL: redis://127.0.0.1:6379
+      JWT_SECRET: dev11-synthetic-jwt-nonproduction
+      COOKIE_SECRET: dev11-synthetic-cookie-nonproduction
+      BAOBAB_WEBHOOK_SIGNING_SECRET: dev11-synthetic-webhook-nonproduction
+      PYTHONPATH: scripts:erp-source/modules
+      # Real native source, publisher and ERP consumer all emit to one
+      # disposable collector; no source-only W3C JSON counts as an export.
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://127.0.0.1:4318/v1/traces
+      OTEL_BSP_SCHEDULE_DELAY: "200"
+    steps:
+      - name: Checkout owning Trade source at current exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Checkout ERP native inbox companion commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: baobab-platform/baobab-erp
+          ref: 1db56a20d049ac772afc40c0223f2d897cdcf7e7
+          path: erp-source
+          persist-credentials: false
+      - name: Checkout independently owned trace-query observer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: baobab-platform/infrastructure
+          ref: 65931ab9892b829b0e0b1ca23c53199ba1216e8b
+          path: infrastructure-source
+          persist-credentials: false
+      - name: Start isolated real Jaeger v2 and OTLP Collector
+        run: |
+          set -euo pipefail
+          docker network create dev11-native-traces
+          docker run -d --rm --name jaeger --network dev11-native-traces \
+            -p 127.0.0.1:16686:16686 jaegertracing/jaeger:2.22.0 >/dev/null
+          docker run -d --rm --name dev11-collector --network dev11-native-traces \
+            -p 127.0.0.1:4318:4318 \
+            -v "$PWD/infrastructure-source/compose/otel/dev11-collector.yaml:/etc/otelcol-contrib/config.yaml:ro" \
+            otel/opentelemetry-collector-contrib:0.159.0 \
+            --config=/etc/otelcol-contrib/config.yaml >/dev/null
+      - name: Preserve exact current owner and companion source revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/dev11-rabbit
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          def sha(path):
+              return subprocess.check_output(
+                  ["git", "-C", path, "rev-parse", "HEAD"], text=True
+              ).strip()
+          result = {
+              "trade_sha": sha("."),
+              "erp_sha": sha("erp-source"),
+              "infrastructure_sha": sha("infrastructure-source"),
+          }
+          Path("artifacts/dev11-rabbit/source-pins.json").write_text(
+              json.dumps(result, sort_keys=True, indent=2) + "\n"
+          )
+          PY
+      - name: Native Node 24 Medusa baseline
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Native Python 3.14 AMQP and OTel baseline
+        uses: actions/setup-python@06da6279cdbca41027908073e81a4544dc79c06b # v6
+        with:
+          python-version: "3.14"
+      - name: Install immutable Trade dependencies and native ERP application wheel
+        run: |
+          npm ci
+          python -m pip install -r scripts/dev11-rabbit-requirements.txt
+          python -m pip install -e erp-source/modules
+      - name: Fixed native publisher and order-origin negative regressions
+        env:
+          PYTHONPATH: scripts
+        run: python -m unittest discover -s scripts -p 'test_dev11_*.py' -v
+      - name: Apply the real owner Medusa PostgreSQL migrations
+        run: npm run migrate
+      - name: Apply real ERP migrations in an independent PostgreSQL 17 instance
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+          DATABASE_URL="$ERP_DATABASE_URL" bash erp-source/db/migrate.sh
+          test "$(psql "$ERP_DATABASE_URL" -tAc "SHOW server_version_num" | cut -c 1-2)" = "17"
+          test "$(psql "$DATABASE_URL" -tAc "SHOW server_version_num" | cut -c 1-2)" = "17"
+      - name: Prepare canonical event with the actual Medusa module and native locking
+        run: npm run qualify:dev11-rabbit-prepare
+      - name: Independently refuse synthetic outbox as native B2B buyer order
+        run: |
+          python -B scripts/dev11_native_business_origin.py \
+            --expect-synthetic-refusal \
+            --output artifacts/dev11-rabbit/native-origin.json
+      - name: Real RabbitMQ publisher confirmation, durable ERP inbox and replay/forgery negatives
+        run: python -B scripts/dev11_rabbit_connected.py
+      - name: Independently query actual native Trade, publisher and ERP spans
+        run: |
+          set -euo pipefail
+          trace_file=artifacts/dev11-rabbit/source-trace.private
+          test -s "$trace_file"
+          verified=0
+          for attempt in $(seq 1 25); do
+            if python3 -B infrastructure-source/tests/platform-integration/development/dev11_exported_trace.py \
+              --trace-id "$(cat "$trace_file")" \
+              --jaeger http://127.0.0.1:16686 \
+              --service baobab-trade \
+              --service baobab-trade-rabbit-publisher \
+              --service baobab-erp \
+              --output artifacts/dev11-rabbit/independent-exported.json; then
+              verified=1
+              break
+            fi
+            sleep 2
+          done
+          test "$verified" -eq 1 || {
+            echo DEV11_NATIVE_OTLP_LINEAGE_NOT_INDEPENDENTLY_OBSERVED
+            exit 2
+          }
+      - name: Independently tear down disposable OTel runtime and remove private source IDs
+        if: always()
+        run: |
+          docker rm -f dev11-collector jaeger || true
+          docker network rm dev11-native-traces || true
+          rm -f artifacts/dev11-rabbit/source-trace.private
+      - name: Preserve safe provider boundary observations only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.7.5
+        with:
+          name: dev11-real-rabbit-erp-inbox
+          path: |
+            artifacts/dev11-rabbit/connected.json
+            artifacts/dev11-rabbit/independent-exported.json
+            artifacts/dev11-rabbit/source-pins.json
+            artifacts/dev11-rabbit/native-origin.json
+          if-no-files-found: warn
+          retention-days: 14

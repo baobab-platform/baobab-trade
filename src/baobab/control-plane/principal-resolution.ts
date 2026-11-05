@@ -1,3 +1,4 @@
+import { outgoingTraceHeaders } from "../observability/tracing"
 import { getBaobabTradeEnvironment } from "../config/environment"
 import {
   ClientCredentialsWorkloadTokenProvider,
@@ -103,6 +104,7 @@ export class ControlPlanePrincipalResolver implements BuyerPrincipalResolver {
           "content-type": "application/json",
           accept: "application/json",
           "x-correlation-id": correlationId,
+          ...outgoingTraceHeaders(),
         },
         body: JSON.stringify({
           subject_token: subjectToken,

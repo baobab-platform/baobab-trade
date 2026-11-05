@@ -677,12 +677,14 @@ describe("TA-06 HTTP boundary (real Express routing, as Medusa mounts it)", () =
 })
 
 describe("TA-06 service boundary inventory", () => {
-  it("has no in-repo caller that creates or finalises an order around the guarded hooks", () => {
+  it("limits direct native creation to the reviewed, unrouted transaction owner", () => {
     // completeCartWorkflow and createOrderWorkflow runs reach their guarded
     // hooks; these entry points have none. TA-07 fences them at persistence,
-    // and only disposable-database harness scripts may drive them directly:
-    // the regressions and the TA-08 acceptance helper, which refuses any
-    // database but the marked harness one.
+    // and disposable-database harness scripts may drive them directly. The
+    // CAA-06b owner is the sole additional writer: it composes current buyer
+    // authority, seller persistence fences, spend and outbox in the actual
+    // Order Module transaction. Enumerate its precise hits rather than
+    // excluding its directory or allowing future unreviewed writers.
     const harness = /^scripts\/(?:regression-|acceptance-trade-a\.ts$)/
     const bypass =
       /\b(?:convertDraftOrderWorkflow|convertDraftOrderStep|createOrdersStep)\b|\.createOrders\(|is_draft_order:\s*false/g
@@ -702,7 +704,35 @@ describe("TA-06 service boundary inventory", () => {
       }
     }
     walk(root)
-    expect(offenders).toEqual([])
+    expect(offenders).toEqual([
+      "baobab/b2b/medusa-native-transaction-owner.ts: is_draft_order: false,.createOrders(",
+    ])
+  })
+
+  it("limits the native owner to the protected buyer route and disposable probe", () => {
+    // Each importer is reviewed explicitly. A new route, loader, subscriber,
+    // or background job cannot acquire access to the native writer implicitly.
+    const root = join(__dirname, "..", "src")
+    const importers: string[] = []
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const full = join(dir, name)
+        if (statSync(full).isDirectory()) walk(full)
+        else if (/\.ts$/.test(name)) {
+          const code = readFileSync(full, "utf8")
+            .replace(/\/\*[\s\S]*?\*\//g, "")
+            .replace(/(^|[^:])\/\/.*$/gm, "$1")
+          if (/["'][^"']*medusa-native-transaction-owner["']/.test(code)) {
+            importers.push(relative(root, full))
+          }
+        }
+      }
+    }
+    walk(root)
+    expect(importers.sort()).toEqual([
+      "api/store/b2b/buyer-commit/route.ts",
+      "scripts/regression-medusa-native-order-owner.ts",
+    ])
   })
 })
 

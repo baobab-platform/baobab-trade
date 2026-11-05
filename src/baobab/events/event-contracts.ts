@@ -1,3 +1,4 @@
+import { outboundTraceparent } from "../observability/tracing"
 import type { BaobabTenantContext } from "../contracts/tenant-context"
 
 /**
@@ -75,6 +76,7 @@ export const createTenantTradeEvent = <TData extends Record<string, unknown>>(
   input: TradeEventInput<TData>,
 ): BaobabTenantEvent<TData> => {
   assertValidEventType(input.type)
+  const generated = input.traceparent === undefined ? outboundTraceparent() : undefined
   return {
     specversion: "1.0",
     datacontenttype: "application/json",
@@ -82,6 +84,9 @@ export const createTenantTradeEvent = <TData extends Record<string, unknown>>(
     baobabscope: "tenant",
     tenantid: context.tenantId,
     ...input,
+    // Only materialise tracing if the native request actually has a span.
+    // Historical no-trace events retain their original digest and structure.
+    ...(generated === undefined ? {} : { traceparent: generated }),
   }
 }
 
@@ -89,12 +94,14 @@ export const createPlatformTradeEvent = <TData extends Record<string, unknown>>(
   input: TradeEventInput<TData>,
 ): BaobabPlatformEvent<TData> => {
   assertValidEventType(input.type)
+  const generated = input.traceparent === undefined ? outboundTraceparent() : undefined
   return {
     specversion: "1.0",
     datacontenttype: "application/json",
     source: TRADE_EVENT_SOURCE,
     baobabscope: "platform",
     ...input,
+    ...(generated === undefined ? {} : { traceparent: generated }),
   }
 }
 
@@ -120,6 +127,12 @@ export const isValidCloudEvent = (candidate: unknown): candidate is BaobabCloudE
     value.data !== null
 
   if (!baseValid) return false
+  if (
+    value.traceparent !== undefined &&
+    (typeof value.traceparent !== "string" ||
+      !/^00-(?!0{32})[0-9a-f]{32}-(?!0{16})[0-9a-f]{16}-0[01]$/.test(value.traceparent))
+  )
+    return false
 
   if (value.baobabscope === "tenant") {
     return typeof value.tenantid === "string" && value.tenantid.length > 0

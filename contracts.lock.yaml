@@ -44,6 +44,9 @@ contracts:
   - contracts/errors/v1/problem-details.schema.json
   - contracts/events/v1/context-registry.yaml
   - contracts/events/v1/envelope.schema.json
+  # DEV-07/11: contract for the actual Trade order's ERP business facts.
+  - contracts/erp/v1/commerce-order-consequence.schema.json
+  - contracts/erp/v1/domain.schema.json
   # ADR-SHARED-018: every event type Trade publishes is registered here.
   - contracts/events/v1/event-registry.yaml
   - contracts/idempotency/v1/policy.yaml

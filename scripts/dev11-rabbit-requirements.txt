@@ -1,0 +1,6 @@
+# Isolated Trade-owned AMQP publisher worker; do not change core Medusa Node 24 toolchain.
+pika==1.3.2
+psycopg[binary]==3.2.12
+opentelemetry-api==1.38.0
+opentelemetry-sdk==1.38.0
+opentelemetry-exporter-otlp-proto-http==1.38.0

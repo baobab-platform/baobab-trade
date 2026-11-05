@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
+  "title": "Commerce order requiring ERP consequences",
+  "description": "An immutable Trade-owned order version accepted for eventual ERP processing. It requests business consequences, not journal lines or vendor operations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["legal_entity_id", "commerce_order_id", "order_version", "customer_id", "placed_at", "currency", "lines", "totals"],
+  "properties": {
+    "legal_entity_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/legalEntityId" },
+    "commerce_order_id": { "$ref": "./domain.schema.json#/$defs/canonicalResourceId" },
+    "order_version": { "$ref": "./domain.schema.json#/$defs/version" },
+    "customer_id": { "$ref": "./domain.schema.json#/$defs/canonicalResourceId" },
+    "market_id": { "$ref": "./domain.schema.json#/$defs/canonicalResourceId" },
+    "sales_channel_id": { "$ref": "./domain.schema.json#/$defs/canonicalResourceId" },
+    "placed_at": { "$ref": "./domain.schema.json#/$defs/timestamp" },
+    "currency": { "$ref": "./domain.schema.json#/$defs/currency" },
+    "lines": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["line_id", "sku_id", "quantity", "unit_price", "line_total"],
+        "properties": {
+          "line_id": { "$ref": "./domain.schema.json#/$defs/canonicalResourceId" },
+          "sku_id": { "$ref": "./domain.schema.json#/$defs/canonicalResourceId" },
+          "quantity": { "$ref": "./domain.schema.json#/$defs/quantity" },
+          "unit_price": { "$ref": "./domain.schema.json#/$defs/money" },
+          "discount_total": { "$ref": "./domain.schema.json#/$defs/money" },
+          "quoted_tax_total": { "$ref": "./domain.schema.json#/$defs/money" },
+          "line_total": { "$ref": "./domain.schema.json#/$defs/money" }
+        }
+      }
+    },
+    "totals": {
+      "type": "object", "additionalProperties": false,
+      "required": ["subtotal", "discount", "quoted_tax", "grand_total"],
+      "properties": {
+        "subtotal": { "$ref": "./domain.schema.json#/$defs/money" },
+        "discount": { "$ref": "./domain.schema.json#/$defs/money" },
+        "quoted_tax": { "$ref": "./domain.schema.json#/$defs/money" },
+        "grand_total": { "$ref": "./domain.schema.json#/$defs/money" }
+      }
+    },
+    "payment_capture_ids": {
+      "type": "array", "uniqueItems": true,
+      "items": { "$ref": "./domain.schema.json#/$defs/canonicalResourceId" },
+      "description": "Provider/Trade capture references. Their presence never means that ERP accounting or allocation succeeded."
+    }
+  }
+}

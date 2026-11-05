@@ -154,8 +154,15 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   const org = await organisation("a")
   const alice = await membership(org, "alice")
   const member = await budget(org, "MEMBERSHIP", alice, 10_000_000n, "alice")
-  const first = submission(org, alice, 5_500_000n, "1")
+  const first = submission(org, alice, 5_500_000n, "1", {
+    resourceVersion: Date.parse("2026-11-05T02:00:00Z"),
+  })
   const firstRes = applied(await commands.submit(first))
+  const firstVersion = await sql(
+    "SELECT resource_version::text AS version FROM b2b_spend_reservation WHERE id=$1",
+    [firstRes.reservationId],
+  )
+  assert.equal(firstVersion.rows[0]?.version, String(first.resourceVersion))
   applied(await commands.commit(commitOf(org, firstRes.reservationId, first)))
   applied(await commands.submit(submission(org, alice, 3_000_000n, "2")))
   assert.deepEqual(await balance(member), [5_500_000n, 3_000_000n])
@@ -614,6 +621,201 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   pass(
     "same-transaction mutation and spend; callback/deferred refusal rolls back; replay writes once",
   )
+
+  // The native Order Module owns the transaction. The spend command must
+  // join its connection without issuing BEGIN/COMMIT or swallowing failures.
+  const ownedOrg = await organisation("owned")
+  const ownedMember = await membership(ownedOrg, "owned")
+  const ownedBudget = await budget(ownedOrg, "MEMBERSHIP", ownedMember, 80_000n, "owned")
+  const ownedSubmission = submission(ownedOrg, ownedMember, 12_345n, "owned")
+  const ownedReservation = applied(await commands.submit(ownedSubmission))
+  const ownedCommand = commitOf(ownedOrg, ownedReservation.reservationId, ownedSubmission, {
+    commitmentReference: `order_owner_${run}`,
+  })
+  const outside = await pool.connect()
+  const ownerDb = await pool.connect()
+  let ownerAttempts = 0
+  const ownerWrite = async (db: Pick<PgClient, "query">) => {
+    ownerAttempts += 1
+    await db.query(
+      `INSERT INTO dev07_atomic_spend_probe (id,transaction_id,unique_value)
+       VALUES ($1,pg_current_xact_id()::text,$1)`,
+      [ownedCommand.commitmentReference],
+    )
+  }
+  try {
+    await ownerDb.query("BEGIN")
+    assert.equal(
+      (await commands.commitWithOwnerTransaction(ownedCommand, ownerDb, ownerWrite)).outcome,
+      "APPLIED",
+    )
+    // Only the transaction owner can see uncommitted business writes.
+    assert.equal(
+      (
+        await ownerDb.query("SELECT 1 FROM dev07_atomic_spend_probe WHERE id=$1", [
+          ownedCommand.commitmentReference,
+        ])
+      ).rowCount,
+      1,
+    )
+    assert.equal(
+      (
+        await outside.query("SELECT 1 FROM dev07_atomic_spend_probe WHERE id=$1", [
+          ownedCommand.commitmentReference,
+        ])
+      ).rowCount,
+      0,
+    )
+    await ownerDb.query("ROLLBACK")
+    assert.equal(
+      (
+        await sql("SELECT status FROM b2b_spend_reservation WHERE id=$1", [
+          ownedReservation.reservationId,
+        ])
+      ).rows[0].status,
+      "ACTIVE",
+    )
+    assert.equal(
+      await count('SELECT 1 FROM "b2b_spend_command" WHERE "idempotency_key"=$1', [
+        ownedCommand.idempotencyKey,
+      ]),
+      0,
+    )
+    // Throwing from the mutation is a real refusal. The owner, not the
+    // spend primitive, rolls back its native transaction.
+    await ownerDb.query("BEGIN")
+    await assert.rejects(
+      commands.commitWithOwnerTransaction(ownedCommand, ownerDb, async (db) => {
+        await ownerWrite(db)
+        throw new Error("native order veto: must rollback owner")
+      }),
+      /native order veto/,
+    )
+    await ownerDb.query("ROLLBACK")
+    assert.deepEqual(await balance(ownedBudget), [0n, 12_345n])
+    await ownerDb.query("BEGIN")
+    assert.equal(
+      (await commands.commitWithOwnerTransaction(ownedCommand, ownerDb, ownerWrite)).outcome,
+      "APPLIED",
+    )
+    await ownerDb.query("COMMIT")
+    const xids = await sql(
+      `SELECT p.transaction_id, p.xmin::text AS mutation,
+         r.xmin::text AS reservation, c.xmin::text AS command, l.xmin::text AS ledger
+       FROM dev07_atomic_spend_probe p
+       JOIN b2b_spend_reservation r ON r.id=$2
+       JOIN b2b_spend_command c ON c.idempotency_key=$3
+       JOIN b2b_spend_ledger_entry l ON l.reservation_id=r.id AND l.entry_kind='COMMIT'
+       WHERE p.id=$1`,
+      [
+        ownedCommand.commitmentReference,
+        ownedReservation.reservationId,
+        ownedCommand.idempotencyKey,
+      ],
+    )
+    assert.equal(xids.rowCount, 1)
+    assert.ok(
+      [
+        xids.rows[0].mutation,
+        xids.rows[0].reservation,
+        xids.rows[0].command,
+        xids.rows[0].ledger,
+      ].every((xid) => xid === xids.rows[0].transaction_id),
+    )
+    await ownerDb.query("BEGIN")
+    assert.equal(
+      (await commands.commitWithOwnerTransaction(ownedCommand, ownerDb, ownerWrite)).outcome,
+      "REPLAYED",
+    )
+    await ownerDb.query("COMMIT")
+    assert.equal(ownerAttempts, 3, "replay must not enter the native writer")
+    pass("external Medusa-owned transaction: visibility, rollback, same XID and replay")
+  } finally {
+    // No transaction from the owner may survive an exception in CI.
+    await ownerDb.query("ROLLBACK").catch(() => undefined)
+    ownerDb.release()
+    outside.release()
+  }
+
+  // Two native owners cannot consume the same purchase concurrently, even
+  // with two distinct command keys. The loser must abort its *own* connection
+  // after the first transaction commits, never manufacture a replay receipt.
+  const nativeRaceOrg = await organisation("ownerrace")
+  const raceMember = await membership(nativeRaceOrg, "race")
+  await budget(nativeRaceOrg, "MEMBERSHIP", raceMember, 50_000n, "race")
+  const raceSubmission = submission(nativeRaceOrg, raceMember, 15_000n, "ownerrace")
+  const raceReservation = applied(await commands.submit(raceSubmission))
+  const winnerCommand = commitOf(nativeRaceOrg, raceReservation.reservationId, raceSubmission, {
+    commitmentReference: `order_race_${run}`,
+  })
+  const loserCommand = commitOf(nativeRaceOrg, raceReservation.reservationId, raceSubmission, {
+    commitmentReference: `order_race_other_${run}`,
+  })
+  const firstOwner = await pool.connect()
+  const secondOwner = await pool.connect()
+  let signalStarted = () => {}
+  const firstStarted = new Promise<void>((resolve) => {
+    signalStarted = resolve
+  })
+  let raceWrites = 0
+  try {
+    await firstOwner.query("BEGIN")
+    const winning = (async () => {
+      const result = await commands.commitWithOwnerTransaction(
+        winnerCommand,
+        firstOwner,
+        async (db) => {
+          raceWrites += 1
+          signalStarted()
+          await sleep(100)
+          await db.query(
+            `INSERT INTO dev07_atomic_spend_probe (id,transaction_id,unique_value)
+           VALUES ($1,pg_current_xact_id()::text,$1)`,
+            [winnerCommand.commitmentReference],
+          )
+        },
+      )
+      await firstOwner.query("COMMIT")
+      return result
+    })()
+    await firstStarted
+    await secondOwner.query("BEGIN")
+    const losing = (async () => {
+      try {
+        await commands.commitWithOwnerTransaction(loserCommand, secondOwner, async () => {
+          raceWrites += 1
+        })
+        throw new Error("double spend: a second owner unexpectedly committed")
+      } catch (error) {
+        if (!/CONTEXT_NOT_USABLE/.test(String(error))) throw error
+        await secondOwner.query("ROLLBACK")
+        return "REFUSED"
+      }
+    })()
+    const [won, lost] = await Promise.all([winning, losing])
+    assert.equal(won.outcome, "APPLIED")
+    assert.equal(lost, "REFUSED")
+    assert.equal(raceWrites, 1)
+    assert.equal(
+      await count(
+        `SELECT 1 FROM b2b_spend_ledger_entry WHERE reservation_id=$1 AND entry_kind='COMMIT'`,
+        [raceReservation.reservationId],
+      ),
+      1,
+    )
+    assert.equal(
+      await count('SELECT 1 FROM "b2b_spend_command" WHERE "idempotency_key"=$1', [
+        loserCommand.idempotencyKey,
+      ]),
+      0,
+    )
+    pass("two independent native owners: one wins; loser refuses without extra ledger or mutation")
+  } finally {
+    await firstOwner.query("ROLLBACK").catch(() => undefined)
+    await secondOwner.query("ROLLBACK").catch(() => undefined)
+    firstOwner.release()
+    secondOwner.release()
+  }
 
   return passed
 }
