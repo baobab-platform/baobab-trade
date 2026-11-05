@@ -26,35 +26,37 @@ const evidence = (): ChargeEvidence => ({
   policyReference: "cp:policy:za-price-v3",
   charges: REQUIRED_CHARGES.map((kind) => ({
     kind,
-    resolution: kind === "TAX" || kind === "FREIGHT" ? "CHARGED" as const : "NOT_APPLICABLE" as const,
+    resolution:
+      kind === "TAX" || kind === "FREIGHT" ? ("CHARGED" as const) : ("NOT_APPLICABLE" as const),
     amountMinor: kind === "TAX" ? "15000" : kind === "FREIGHT" ? "2500" : "0",
     sourceReference: "provider:20261105:" + kind,
-    zeroReason: kind === "TAX" || kind === "FREIGHT"
-      ? null : "NOT_APPLICABLE_PER_INCOTERM" as const,
+    zeroReason:
+      kind === "TAX" || kind === "FREIGHT" ? null : ("NOT_APPLICABLE_PER_INCOTERM" as const),
   })),
 })
-const cp = (e: ChargeEvidence): Promise<ChargeIssuerMandate> => Promise.resolve({
-  outcome: "AUTHORIZED",
-  cpDecisionId: UUID,
-  issuerId: e.issuerId,
-  tenantId: e.tenantId,
-  marketId: e.marketId,
-  sellerLegalEntityId: e.sellerLegalEntityId,
-  policyReference: e.policyReference,
-  expiresAt: "2026-11-05T08:04:50Z",
-})
+const cp = (e: ChargeEvidence): Promise<ChargeIssuerMandate> =>
+  Promise.resolve({
+    outcome: "AUTHORIZED",
+    cpDecisionId: UUID,
+    issuerId: e.issuerId,
+    tenantId: e.tenantId,
+    marketId: e.marketId,
+    sellerLegalEntityId: e.sellerLegalEntityId,
+    policyReference: e.policyReference,
+    expiresAt: "2026-11-05T08:04:50Z",
+  })
 const signed = (e: ChargeEvidence) => ({
-  evidence: e, signature: sign(null, signedChargeBytes(e), keys.privateKey).toString("base64url"),
+  evidence: e,
+  signature: sign(null, signedChargeBytes(e), keys.privateKey).toString("base64url"),
 })
 const denied = async (e: ChargeEvidence, mandate = cp) =>
-  expect(verifyGovernedChargeEvidence(signed(e), mandate, keys.publicKey, now))
-    .rejects.toThrow("GOVERNED_FINAL_CHARGE_ISSUER_NOT_PROVEN")
+  expect(verifyGovernedChargeEvidence(signed(e), mandate, keys.publicKey, now)).rejects.toThrow(
+    "GOVERNED_FINAL_CHARGE_ISSUER_NOT_PROVEN",
+  )
 
 describe("DEV-07 genuine source-owned final charge issuer (source-only)", () => {
   it("requires cryptographic provider evidence AND a current exact CP decision", async () => {
-    const receipt = await verifyGovernedChargeEvidence(
-      signed(evidence()), cp, keys.publicKey, now,
-    )
+    const receipt = await verifyGovernedChargeEvidence(signed(evidence()), cp, keys.publicKey, now)
     expect(receipt.decisionId).toBe(UUID)
     expect(receipt.digest).toMatch(/^[a-f0-9]{64}$/)
     expect(receipt.evidence.charges).toHaveLength(7)
@@ -80,14 +82,16 @@ describe("DEV-07 genuine source-owned final charge issuer (source-only)", () => 
   it("refuses false provider signatures, expired mandate and wrong seller", async () => {
     const envelope = signed(evidence())
     envelope.signature = "A".repeat(86)
-    await expect(verifyGovernedChargeEvidence(
-      envelope, cp, keys.publicKey, now,
-    )).rejects.toThrow("GOVERNED_FINAL_CHARGE_ISSUER_NOT_PROVEN")
+    await expect(verifyGovernedChargeEvidence(envelope, cp, keys.publicKey, now)).rejects.toThrow(
+      "GOVERNED_FINAL_CHARGE_ISSUER_NOT_PROVEN",
+    )
     await denied(evidence(), async (e) => ({
-      ...await cp(e), expiresAt: "2026-11-05T07:59:00Z",
+      ...(await cp(e)),
+      expiresAt: "2026-11-05T07:59:00Z",
     }))
     await denied(evidence(), async (e) => ({
-      ...await cp(e), sellerLegalEntityId: "LE-WRONG",
+      ...(await cp(e)),
+      sellerLegalEntityId: "LE-WRONG",
     }))
   })
   it("refuses changed exact source timestamp and untrusted issuer scope", async () => {

@@ -206,33 +206,48 @@ export async function runNativeBuyerGuardRegression(pool: Pool): Promise<Negativ
       "charge_kind,resolution,amount_minor,currency,source_reference,evaluated_at,expires_at) " +
       "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::timestamptz,$12::timestamptz)"
     const args = [
-      "tn_native_guard_" + runId, "cart_missing_" + runId, "market_missing",
-      "LE-SYNTHETIC", 1, "DUTY", "NOT_APPLICABLE", "0",
-      "UGX", "synthetic:rule-not-authority", evaluatedAt, expiresAt,
+      "tn_native_guard_" + runId,
+      "cart_missing_" + runId,
+      "market_missing",
+      "LE-SYNTHETIC",
+      1,
+      "DUTY",
+      "NOT_APPLICABLE",
+      "0",
+      "UGX",
+      "synthetic:rule-not-authority",
+      evaluatedAt,
+      expiresAt,
     ]
     await mustRefuse(
-      db, cases, "missing-duty-explanation-cannot-be-charged",
+      db,
+      cases,
+      "missing-duty-explanation-cannot-be-charged",
       chargeInsert,
-      args.map((v, i) => i === 6 ? "CHARGED" : v),
+      args.map((v, i) => (i === 6 ? "CHARGED" : v)),
       /check constraint/,
     )
     await mustRefuse(
-      db, cases, "unjustified-nonzero-duty-exemption",
+      db,
+      cases,
+      "unjustified-nonzero-duty-exemption",
       chargeInsert,
-      args.map((v, i) => i === 7 ? "100" : v),
+      args.map((v, i) => (i === 7 ? "100" : v)),
       /check constraint/,
     )
     await db.query(chargeInsert, args)
     await mustRefuse(
-      db, cases, "immutable-duty-determination",
+      db,
+      cases,
+      "immutable-duty-determination",
       "UPDATE trade_native_cart_charge_determination SET amount_minor=2 " +
-      "WHERE tenant_id=$1 AND cart_id=$2 AND charge_kind='DUTY'",
+        "WHERE tenant_id=$1 AND cart_id=$2 AND charge_kind='DUTY'",
       args.slice(0, 2),
       /final cart charge determination is immutable/,
     )
     const noChargeMutation = await db.query(
       "SELECT amount_minor::text AS amount FROM trade_native_cart_charge_determination " +
-      "WHERE tenant_id=$1 AND cart_id=$2 AND charge_kind='DUTY'",
+        "WHERE tenant_id=$1 AND cart_id=$2 AND charge_kind='DUTY'",
       args.slice(0, 2),
     )
     assert.equal(noChargeMutation.rows[0].amount, "0")

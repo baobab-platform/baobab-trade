@@ -154,8 +154,15 @@ export async function runSpendReservationRegression(pool: Pool): Promise<string[
   const org = await organisation("a")
   const alice = await membership(org, "alice")
   const member = await budget(org, "MEMBERSHIP", alice, 10_000_000n, "alice")
-  const first = submission(org, alice, 5_500_000n, "1")
+  const first = submission(org, alice, 5_500_000n, "1", {
+    resourceVersion: Date.parse("2026-11-05T02:00:00Z"),
+  })
   const firstRes = applied(await commands.submit(first))
+  const firstVersion = await sql(
+    "SELECT resource_version::text AS version FROM b2b_spend_reservation WHERE id=$1",
+    [firstRes.reservationId],
+  )
+  assert.equal(firstVersion.rows[0]?.version, String(first.resourceVersion))
   applied(await commands.commit(commitOf(org, firstRes.reservationId, first)))
   applied(await commands.submit(submission(org, alice, 3_000_000n, "2")))
   assert.deepEqual(await balance(member), [5_500_000n, 3_000_000n])

@@ -8,7 +8,10 @@ import {
   type NativeCommitRequest,
   type NativeErpOrderConsequence,
 } from "./native-buyer-commitment"
-import { buildFinalBuyerCommitmentValuation, type FinalNativeValuationFacts } from "./buyer-commitment-valuation"
+import {
+  buildFinalBuyerCommitmentValuation,
+  type FinalNativeValuationFacts,
+} from "./buyer-commitment-valuation"
 import type { NativeFinalCartPrice } from "./medusa-final-cart-pricing"
 import {
   requireCurrentNativeCommitAuthority,
@@ -211,17 +214,22 @@ export async function commitMedusaNativeBuyerOrder(
   const finalSnapshots = new WeakMap<object, NativeFacts>()
   const lockedCartPrices = new WeakMap<object, NativeFinalCartPrice>()
   const assertAuthorizedCart = (price: NativeFinalCartPrice, authority: AuthorizedCommitment) => {
-    if (!price?.valuation || !/^sha256:[0-9a-f]{64}$/.test(price.sourceFingerprint) ||
-        price.sourceFingerprint !== price.valuation.transaction_digest) {
+    if (
+      !price?.valuation ||
+      !/^sha256:[0-9a-f]{64}$/.test(price.sourceFingerprint) ||
+      price.sourceFingerprint !== price.valuation.transaction_digest
+    ) {
       throw new Error("NATIVE_FINAL_CART_SOURCE_NOT_VERIFIED")
     }
     const actual = buildFinalBuyerCommitmentValuation(price.valuation)
-    if (actual.valuation_digest !== authority.valuation.valuation_digest ||
-        actual.buyer_commitment_amount_minor !== authority.receipt.amount_minor ||
-        actual.resource_id !== authority.receipt.resource_id ||
-        actual.resource_version !== authority.receipt.resource_version ||
-        actual.transaction_digest !== authority.receipt.transaction_digest ||
-        actual.currency !== authority.receipt.currency) {
+    if (
+      actual.valuation_digest !== authority.valuation.valuation_digest ||
+      actual.buyer_commitment_amount_minor !== authority.receipt.amount_minor ||
+      actual.resource_id !== authority.receipt.resource_id ||
+      actual.resource_version !== authority.receipt.resource_version ||
+      actual.transaction_digest !== authority.receipt.transaction_digest ||
+      actual.currency !== authority.receipt.currency
+    ) {
       throw new Error("NATIVE_FINAL_CART_CHANGED_SINCE_AUTHORIZATION")
     }
   }
@@ -301,13 +309,20 @@ export async function commitMedusaNativeBuyerOrder(
                     const before = lockedCartPrices.get(bounded)
                     if (!before) throw new Error("NATIVE_FINAL_CART_SOURCE_NOT_VERIFIED")
                     const after = await deps.source.readFinalCart(
-                      bounded, request.nativeOrderId, currentAuthority, manager)
+                      bounded,
+                      request.nativeOrderId,
+                      currentAuthority,
+                      manager,
+                    )
                     assertAuthorizedCart(after, currentAuthority)
                     if (after.sourceFingerprint !== before.sourceFingerprint) {
                       throw new Error("NATIVE_FINAL_CART_CHANGED_BEFORE_COMMIT")
                     }
                     requireCurrentNativeCommitAuthority(
-                      currentAuthority, current, (deps.now ?? Date.now)())
+                      currentAuthority,
+                      current,
+                      (deps.now ?? Date.now)(),
+                    )
                   } finally {
                     lockedCartPrices.delete(bounded)
                     finalSnapshots.delete(bounded)

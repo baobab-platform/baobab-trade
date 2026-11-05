@@ -709,10 +709,9 @@ describe("TA-06 service boundary inventory", () => {
     ])
   })
 
-  it("keeps the unqualified native owner unreachable from application entry points", () => {
-    // The owner remains a server-only implementation seam. Runtime wiring
-    // requires a separately reviewed connected authority/cart qualification;
-    // the disposable native-owner regression is its only current importer.
+  it("limits the native owner to the protected buyer route and disposable probe", () => {
+    // Each importer is reviewed explicitly. A new route, loader, subscriber,
+    // or background job cannot acquire access to the native writer implicitly.
     const root = join(__dirname, "..", "src")
     const importers: string[] = []
     const walk = (dir: string) => {
@@ -730,7 +729,10 @@ describe("TA-06 service boundary inventory", () => {
       }
     }
     walk(root)
-    expect(importers).toEqual(["scripts/regression-medusa-native-order-owner.ts"])
+    expect(importers.sort()).toEqual([
+      "api/store/b2b/buyer-commit/route.ts",
+      "scripts/regression-medusa-native-order-owner.ts",
+    ])
   })
 })
 

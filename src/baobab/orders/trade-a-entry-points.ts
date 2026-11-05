@@ -201,8 +201,13 @@ type Classified = { method: string; path: RegExp } & (
 const CLASSIFIED: readonly Classified[] = [
   // Only this exact confidential operation is routed to the CAA-06b native
   // Order Module transaction owner. It is never a generic B2B mutation pass.
-  { method: "POST", path: route("/store/b2b/buyer-commit"), decision: "trade-a",
-    operationClass: "trade.order.commit", enforcedBy: "workflow" },
+  {
+    method: "POST",
+    path: route("/store/b2b/buyer-commit"),
+    decision: "trade-a",
+    operationClass: "trade.order.commit",
+    enforcedBy: "workflow",
+  },
   {
     method: "POST",
     path: route("/store/carts/:id/complete"),

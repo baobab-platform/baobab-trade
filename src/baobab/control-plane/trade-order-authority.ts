@@ -180,19 +180,21 @@ export class HttpTradeOrderAuthorityClient implements TradeOrderAuthorityPort {
     token: string,
     correlationId: string,
   ): Promise<unknown> {
-    const response = await withTradeCpHttpSpan(async (parent) => fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
-      method: "POST",
-      redirect: "error",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "x-correlation-id": correlationId,
-        "cache-control": "no-store",
-        ...(parent ? { traceparent: parent } : {}),
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeoutMs),
-    }))
+    const response = await withTradeCpHttpSpan(async (parent) =>
+      fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
+        method: "POST",
+        redirect: "error",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-correlation-id": correlationId,
+          "cache-control": "no-store",
+          ...(parent ? { traceparent: parent } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      }),
+    )
     if (response.status !== 200)
       throw new Error("Control Plane Trade authority unavailable or refused")
     return response.json()

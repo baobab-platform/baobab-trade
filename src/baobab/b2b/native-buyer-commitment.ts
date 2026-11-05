@@ -347,40 +347,40 @@ export async function commitAuthorizedNativeBuyerOrder(
     )
       throw new Error("NATIVE_ERP_BUSINESS_FACTS_NOT_VERIFIED")
     const event = await withTradeOutboxSpan(eventId, async () => {
-    const original = createTenantTradeEvent(request.tenant, {
-      id: eventId,
-      type: "com.baobab-platform.trade.order.placed.v1",
-      subject: "commerce-order/" + request.nativeOrderId,
-      time: new Date().toISOString(),
-      dataschema:
-        "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
-      correlationid: request.correlationId,
-      causationid: b.receipt_id,
-      idempotencykey: request.idempotencyKey,
-      data,
-    })
-    if (!isValidCloudEvent(original)) throw new Error("NATIVE_EVENT_INVALID")
-    // Direct SQL is essential here. EventOutboxRecordAdapter uses a separate
-    // Medusa module transaction and cannot prove atomicity with this order.
-    await db.query(
-      `INSERT INTO event_outbox (id,event_id,event_type,subject,tenant_id,owner_legal_entity_id,
+      const original = createTenantTradeEvent(request.tenant, {
+        id: eventId,
+        type: "com.baobab-platform.trade.order.placed.v1",
+        subject: "commerce-order/" + request.nativeOrderId,
+        time: new Date().toISOString(),
+        dataschema:
+          "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
+        correlationid: request.correlationId,
+        causationid: b.receipt_id,
+        idempotencykey: request.idempotencyKey,
+        data,
+      })
+      if (!isValidCloudEvent(original)) throw new Error("NATIVE_EVENT_INVALID")
+      // Direct SQL is essential here. EventOutboxRecordAdapter uses a separate
+      // Medusa module transaction and cannot prove atomicity with this order.
+      await db.query(
+        `INSERT INTO event_outbox (id,event_id,event_type,subject,tenant_id,owner_legal_entity_id,
          correlation_id,causation_id,idempotency_key,envelope_digest,envelope,status,attempt_count,next_attempt_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,'PENDING',0,clock_timestamp())`,
-      [
-        "evtout_" + randomUUID().replaceAll("-", ""),
-        original.id,
-        original.type,
-        original.subject,
-        b.tenant_id,
-        s.responsible_legal_entity_id,
-        original.correlationid,
-        original.causationid,
-        original.idempotencykey,
-        canonicalEventFingerprint(original),
-        JSON.stringify(original),
-      ],
-    )
-    return original
+        [
+          "evtout_" + randomUUID().replaceAll("-", ""),
+          original.id,
+          original.type,
+          original.subject,
+          b.tenant_id,
+          s.responsible_legal_entity_id,
+          original.correlationid,
+          original.causationid,
+          original.idempotencykey,
+          canonicalEventFingerprint(original),
+          JSON.stringify(original),
+        ],
+      )
+      return original
     })
     // SQL guard verifies current membership, matching seller receipt,
     // committed spend ledger, actual native order and event all share this XID.

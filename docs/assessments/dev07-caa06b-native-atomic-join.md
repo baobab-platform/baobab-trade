@@ -356,7 +356,6 @@ live buyer operation provider, and cannot qualify the non-draft CAA-06b buyer po
 L4-OPS-01. The future genuine buyer event uses the same immutable handoff and
 publisher/consumer path without another transport implementation.
 
-
 ## 5 November 2026 — final native cart pricing and change-detection boundary
 
 **SOURCE IMPLEMENTED; CONNECTED COMMITMENT AND L4 HELD.** The Order Module
@@ -405,3 +404,13 @@ from exactly this source fingerprint; then qualify genuine non-draft
 same-XID buyer/seller/spend/order/outbox COMMIT, the same event in ERP and
 independently exported lineage. An unprivileged row insert is not authority.
 Decision 9 remains SHADOW, checkout stays disabled and L4-OPS-01 is BLOCKED.
+
+The PostgreSQL spend reservation and buyer consumption guard use a 64-bit
+cart version so the native epoch-millisecond value survives the full spend
+conversion. The migration preserves existing versions and the guard's equality
+check. The disposable spend regression submits, reads back and commits a
+reservation with a native-sized version.
+
+The buyer route receives its canonical Market reader and workload token from
+the engine runtime registration. The seller PEP uses its existing credential.
+The buyer route refuses when the Market authority is unavailable.
