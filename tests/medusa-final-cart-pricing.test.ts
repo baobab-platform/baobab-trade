@@ -1,10 +1,16 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { createHash, generateKeyPairSync, sign } from "node:crypto"
+import { signedChargeBytes, type ChargeEvidence } from "../src/baobab/b2b/governed-cart-charge-issuer"
 import { buildFinalBuyerCommitmentValuation } from "../src/baobab/b2b/buyer-commitment-valuation"
 import { readMedusaFinalCartPrice } from "../src/baobab/b2b/medusa-final-cart-pricing"
 
 const now = new Date("2026-11-05T02:00:15.000Z")
 const updated = "2026-11-05T02:00:00.000Z"
 const resourceVersion = Date.parse(updated)
+const exact = "2026-11-05T02:00:00.000000Z"
+const keys = generateKeyPairSync("ed25519")
+const ATTESTATION = "beadbead-4444-4444-8444-beadbeadbead"
+const CP_DECISION = "cafecafe-4444-4444-8444-cafecafecafe"
 const kinds = [
   "TAX", "FREIGHT", "DUTY", "HANDLING", "INSURANCE",
   "SERVICE_CHARGE", "REFUNDABLE_DEPOSIT",
@@ -37,6 +43,28 @@ function fixture() {
     }],
     shipping_methods: [{ id: "casm_1", subtotal: bn("80") }],
   }
+
+  const scoped = (): ChargeEvidence => ({
+    issuerId: "registered-price-issuer-ug",
+    attestationId: ATTESTATION,
+    tenantId: "tn_test01",
+    cartId: cart.id,
+    marketId: "zuribeans_ug",
+    sellerLegalEntityId: "LE-TEST-UG",
+    currency: "UGX",
+    resourceVersion,
+    cartUpdatedAtExact: exact,
+    evaluatedAt: "2026-11-05T02:00:10.000Z",
+    expiresAt: "2026-11-05T02:01:00.000Z",
+    policyReference: "cp:price:issuer-policy-v1",
+    charges: kinds.map((kind) => ({
+      kind: kind as ChargeEvidence["charges"][number]["kind"],
+      resolution: (amounts[kind] ? "CHARGED" : "NOT_APPLICABLE") as ChargeEvidence["charges"][number]["resolution"],
+      amountMinor: String(amounts[kind]),
+      sourceReference: "source:" + kind + ":governed-v1",
+      zeroReason: amounts[kind] ? null : "NOT_APPLICABLE_PER_INCOTERM",
+    })),
+  })
   const determinations = kinds.map((kind) => ({
     charge_kind: kind,
     resolution: amounts[kind] ? "CHARGED" : "NOT_APPLICABLE",
@@ -46,7 +74,42 @@ function fixture() {
     evaluated_at: "2026-11-05T02:00:10.000Z",
     expires_at: "2026-11-05T02:01:00.000Z",
     resource_version: String(resourceVersion),
+    cart_updated_at_exact: exact,
+    issuer_id: "registered-price-issuer-ug",
+    attestation_id: ATTESTATION,
+    cp_decision_id: CP_DECISION,
+    source_digest: "",
+    policy_reference: "cp:price:issuer-policy-v1",
+    zero_reason: amounts[kind] ? null as string | null : "NOT_APPLICABLE_PER_INCOTERM" as string | null,
+    canonical_evidence: scoped(),
+    issuer_signature: "",
+    signer_key_fingerprint: "",
   }))
+  const reissue = () => {
+    const original = scoped()
+    original.charges = determinations.map((row) => ({
+      kind: row.charge_kind as ChargeEvidence["charges"][number]["kind"],
+      resolution: row.resolution as ChargeEvidence["charges"][number]["resolution"],
+      amountMinor: row.amount_minor,
+      sourceReference: row.source_reference,
+      zeroReason: row.zero_reason as ChargeEvidence["charges"][number]["zeroReason"],
+    }))
+    const bytes = signedChargeBytes(original)
+    const digest = createHash("sha256").update(bytes).digest("hex")
+    const signature = sign(null, bytes, keys.privateKey).toString("base64url")
+    const keyHash = createHash("sha256").update(keys.publicKey.export({
+      type: "spki", format: "der",
+    })).digest("hex")
+    for (const row of determinations) {
+      row.canonical_evidence = original
+      row.source_digest = digest
+      row.issuer_signature = signature
+      row.signer_key_fingerprint = keyHash
+    }
+  }
+  reissue()
+  vi.stubEnv("BAOBAB_NATIVE_PRICE_ISSUER_PUBLIC_KEY_PEM",
+    keys.publicKey.export({ type: "spki", format: "pem" }) as string)
   const queries: string[] = []
   const db = {
     query: vi.fn(async (sql: string) => {
@@ -54,7 +117,7 @@ function fixture() {
       if (sql.includes("FROM cart WHERE")) return {
         rows: [{
           id: cart.id, currency_code: "ugx", customer_id: cart.customer_id,
-          completed_at: null, updated_at: updated,
+          completed_at: null, updated_at: exact,
         }], rowCount: 1,
       }
       if (sql.includes("FROM cart_line_item WHERE")) return {
@@ -83,8 +146,10 @@ function fixture() {
     cartModule, cartId: cart.id, tenantId: "tn_test01", marketId: "zuribeans_ug",
     sellerLegalEntityId: "LE-TEST-UG", currencyExponent: 0, now,
   }
-  return { cart, determinations, db, cartModule, scope, queries }
+  return { cart, determinations, db, cartModule, scope, queries, reissue }
 }
+
+afterEach(() => vi.unstubAllEnvs())
 
 describe("CAA-06b native Cart Module complete final obligation reader (unit-only)", () => {
   it("uses one native cart version and includes assessed duty, freight, tax and incidental costs", async () => {
@@ -131,8 +196,10 @@ describe("CAA-06b native Cart Module complete final obligation reader (unit-only
     const freight = h.determinations.find((v) => v.charge_kind === "FREIGHT")!
     freight.amount_minor = "0"
     freight.resolution = "NOT_APPLICABLE"
+    freight.zero_reason = "NOT_APPLICABLE_PER_INCOTERM"
     const tax = h.determinations.find((v) => v.charge_kind === "TAX")!
     tax.amount_minor = "100"
+    h.reissue()
     const priced = await readMedusaFinalCartPrice(h.scope)
     expect(priced.valuation.components.find((x) => x.component_kind === "SHIPPING")?.amount_minor).toBe(0)
     expect(priced.valuation.components.find((x) => x.component_kind === "DUTY_AND_IMPORT_CHARGE")?.amount_minor).toBe(10)
@@ -169,6 +236,7 @@ describe("CAA-06b native Cart Module complete final obligation reader (unit-only
     const otherSource = fixture()
     otherSource.determinations.find((row) => row.charge_kind === "DUTY")!.source_reference =
       "source:DUTY:other-rule-v2"
+    otherSource.reissue()
     const withNewDuty = await readMedusaFinalCartPrice(otherSource.scope)
     expect(withNewDuty.sourceFingerprint).not.toBe(original.sourceFingerprint)
   })
