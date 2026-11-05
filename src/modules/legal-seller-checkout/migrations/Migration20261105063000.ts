@@ -13,6 +13,7 @@ export class Migration20261105063000 extends Migration {
         "charge_kind text NOT NULL, issuer_id text NOT NULL," +
         "attestation_id uuid NOT NULL, cp_decision_id uuid NOT NULL," +
         "source_digest char(64) NOT NULL CHECK (source_digest ~ '^[0-9a-f]{64}$')," +
+        "cart_updated_at_exact text NOT NULL CHECK (length(cart_updated_at_exact) BETWEEN 24 AND 40)," +
         "policy_reference text NOT NULL CHECK (length(policy_reference) BETWEEN 8 AND 200)," +
         "verified_at timestamptz NOT NULL DEFAULT clock_timestamp()," +
         "PRIMARY KEY (tenant_id,cart_id,market_id,seller_legal_entity_id,resource_version,charge_kind)," +
