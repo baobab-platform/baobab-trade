@@ -49,6 +49,7 @@ describe("DEV-07 buyer operation authority: live Medusa policy source", () => {
       id:["b2bsite_actual"],organisation_id:"b2borg_exact",
     })
     expect(facts.roles).toHaveLength(1)
+    if (!Array.isArray(facts.roles)) throw new Error("B2B policy role source unavailable")
     expect(facts.spendAuthorities).toEqual([])
     expect(facts.budgets).toEqual([])
     expect(facts.roles[0].sites).toEqual([])
