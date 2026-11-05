@@ -6,6 +6,7 @@ import {
 } from "../contracts/authority-validation"
 import { createTenantTradeEvent, isValidCloudEvent } from "../events/event-contracts"
 import { canonicalEventFingerprint } from "../events/outbox"
+import { withTradeOutboxSpan } from "../observability/tracing"
 import type { BaobabTenantContext } from "../contracts/tenant-context"
 import type { PgClient } from "../orders/postgres-governed-binding-persistence"
 import type { OrderAuthorityReceipt } from "../orders/order-authority-enforcement"
@@ -345,7 +346,8 @@ export async function commitAuthorizedNativeBuyerOrder(
       )
     )
       throw new Error("NATIVE_ERP_BUSINESS_FACTS_NOT_VERIFIED")
-    const event = createTenantTradeEvent(request.tenant, {
+    const event = await withTradeOutboxSpan(eventId, async () => {
+    const original = createTenantTradeEvent(request.tenant, {
       id: eventId,
       type: "com.baobab-platform.trade.order.placed.v1",
       subject: "commerce-order/" + request.nativeOrderId,
@@ -357,7 +359,7 @@ export async function commitAuthorizedNativeBuyerOrder(
       idempotencykey: request.idempotencyKey,
       data,
     })
-    if (!isValidCloudEvent(event)) throw new Error("NATIVE_EVENT_INVALID")
+    if (!isValidCloudEvent(original)) throw new Error("NATIVE_EVENT_INVALID")
     // Direct SQL is essential here. EventOutboxRecordAdapter uses a separate
     // Medusa module transaction and cannot prove atomicity with this order.
     await db.query(
@@ -366,18 +368,20 @@ export async function commitAuthorizedNativeBuyerOrder(
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,'PENDING',0,clock_timestamp())`,
       [
         "evtout_" + randomUUID().replaceAll("-", ""),
-        event.id,
-        event.type,
-        event.subject,
+        original.id,
+        original.type,
+        original.subject,
         b.tenant_id,
         s.responsible_legal_entity_id,
-        event.correlationid,
-        event.causationid,
-        event.idempotencykey,
-        canonicalEventFingerprint(event),
-        JSON.stringify(event),
+        original.correlationid,
+        original.causationid,
+        original.idempotencykey,
+        canonicalEventFingerprint(original),
+        JSON.stringify(original),
       ],
     )
+    return original
+    })
     // SQL guard verifies current membership, matching seller receipt,
     // committed spend ledger, actual native order and event all share this XID.
     await db.query(
