@@ -145,6 +145,17 @@ function fixture() {
     db, transactionManager: { readonly: "fake unit manager, not native proof" },
     cartModule, cartId: cart.id, tenantId: "tn_test01", marketId: "zuribeans_ug",
     sellerLegalEntityId: "LE-TEST-UG", currencyExponent: 0, now,
+    verifyCurrentIssuer: vi.fn(async (check) => ({
+      outcome: "AUTHORIZED" as const,
+      issuerId: check.issuerId,
+      decisionId: check.decisionId,
+      tenantId: check.tenantId,
+      marketId: check.marketId,
+      sellerLegalEntityId: check.sellerLegalEntityId,
+      policyReference: check.policyReference,
+      sourceDigest: check.sourceDigest,
+      expiresAt: "2026-11-05T02:00:50Z",
+    })),
   }
   return { cart, determinations, db, cartModule, scope, queries, reissue }
 }
@@ -239,6 +250,21 @@ describe("CAA-06b native Cart Module complete final obligation reader (unit-only
     otherSource.reissue()
     const withNewDuty = await readMedusaFinalCartPrice(otherSource.scope)
     expect(withNewDuty.sourceFingerprint).not.toBe(original.sourceFingerprint)
+  })
+
+  it("refuses an issuer revocation at commit despite a valid historical signature", async () => {
+    const h = fixture()
+    h.scope.verifyCurrentIssuer.mockImplementationOnce(async (check) => ({
+      outcome: "DENIED" as const,
+      issuerId: check.issuerId, decisionId: check.decisionId,
+      tenantId: check.tenantId, marketId: check.marketId,
+      sellerLegalEntityId: check.sellerLegalEntityId,
+      policyReference: check.policyReference, sourceDigest: check.sourceDigest,
+      expiresAt: "2026-11-05T02:00:50Z",
+    }))
+    await expect(readMedusaFinalCartPrice(h.scope)).rejects.toThrow(
+      "NATIVE_FINAL_CART_ISSUER_CURRENT_AUTHORITY_DENIED",
+    )
   })
 
   it("refuses changed native item quantities and shipping methods", async () => {
