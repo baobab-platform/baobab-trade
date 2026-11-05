@@ -5,6 +5,7 @@
 import assert from "node:assert/strict"
 import { lstatSync, readFileSync, writeFileSync } from "node:fs"
 import type { ExecArgs, IApiKeyModuleService } from "@medusajs/framework/types"
+import { Pool } from "pg"
 import type B2BModuleService from "../modules/b2b/service"
 
 type OwnerFixture = {
@@ -82,7 +83,7 @@ export default async function ({ container }: ExecArgs) {
   assert.ok(stat.size > 0 && stat.size <= 4096)
   const f = validateOwnerFixture(JSON.parse(readFileSync(PATH, "utf8")), process.env)
   const phase = process.env.BAOBAB_DEV07_NATIVE_PHASE
-  assert.ok(["prepare", "suspend", "resume", "cleanup"].includes(phase ?? ""))
+  assert.ok(["prepare", "suspend", "resume", "cleanup", "enforce-checkout"].includes(phase ?? ""))
   const b2b = container.resolve<B2BModuleService>("b2b")
   const apiKeys = container.resolve<IApiKeyModuleService>("api_key")
   const keyTitle = `DEV07 BFF HTTP ${f.run_id}`
@@ -111,6 +112,44 @@ export default async function ({ container }: ExecArgs) {
   for (const role of roles) {
     assert.equal(role.membership_id, memberId)
     assert.equal(role.role, "BUYER")
+  }
+  if (phase === "enforce-checkout") {
+    assert.ok(keys.length === 1 && orgs.length === 1 && members.length === 1 && roles.length === 1)
+    assert.equal(orgs[0].status, "ACTIVE")
+    assert.equal(members[0].status, "ACTIVE")
+    assert.equal(process.env.BAOBAB_DEV07_DISPOSABLE_CHECKOUT_APPROVED_RUN, f.run_id)
+    assert.ok(
+      process.env.BAOBAB_DEPLOYMENT_ENV === undefined ||
+        process.env.BAOBAB_DEPLOYMENT_ENV === "development",
+    )
+    const reference = process.env.BAOBAB_DEV07_CHECKOUT_CHANGE_REFERENCE ?? ""
+    assert.ok(/^[A-Za-z0-9._:/-]{8,200}$/.test(reference))
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, statement_timeout: 3000 })
+    try {
+      const scope = [process.env.BAOBAB_DEV07_TEST_DB, `dev07:${f.run_id}:${reference}`]
+      // This operation is restricted to the existing isolated buyer-BFF
+      // fixture database and its single initial migration posture.
+      const result = await pool.query(
+        `UPDATE trade_commit_fence_enforcement
+            SET mode='ENFORCED', revision=revision+1, change_reference=$2
+          WHERE singleton AND mode='SHADOW' AND revision=1 AND current_database()=$1
+          RETURNING mode,revision`,
+        scope,
+      )
+      const observed =
+        result.rowCount === 1
+          ? result
+          : await pool.query(
+              `SELECT mode,revision FROM trade_commit_fence_enforcement
+          WHERE singleton AND mode='ENFORCED' AND revision=2
+            AND current_database()=$1 AND change_reference=$2`,
+              scope,
+            )
+      assert.deepEqual(observed.rows, [{ mode: "ENFORCED", revision: 2 }])
+    } finally {
+      await pool.end()
+    }
+    return
   }
   if (phase === "prepare") {
     assert.equal(keys.length, 0)

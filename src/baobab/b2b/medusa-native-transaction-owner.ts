@@ -301,6 +301,14 @@ export async function commitMedusaNativeBuyerOrder(
                 command,
                 db,
                 async (bounded) => {
+                  // Pin the governed posture until the native transaction
+                  // settles. A shadow decision cannot create a buyer order.
+                  const fence = await bounded.query(
+                    "SELECT mode FROM trade_commit_fence_enforcement WHERE singleton FOR SHARE",
+                  )
+                  if (fence.rowCount !== 1 || fence.rows[0].mode !== "ENFORCED") {
+                    throw new Error("NATIVE_BUYER_COMMIT_FENCE_NOT_ENFORCED")
+                  }
                   if (!currentAuthority || typeof deps.recheckAuthorityNow !== "function") {
                     throw new Error("CURRENT_NATIVE_COMMIT_AUTHORITY_NOT_PROVEN")
                   }

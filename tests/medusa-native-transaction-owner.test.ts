@@ -22,7 +22,7 @@ import {
  * native and ledger ports. It proves exception propagation and deadline
  * ordering only, never PostgreSQL rollback or current IAM/CP connectivity.
  */
-function ownerHarness() {
+function ownerHarness(fenceMode = "ENFORCED") {
   const original = syntheticCommitmentProof()
   let clock = NOW.getTime()
   const queries: string[] = []
@@ -62,6 +62,9 @@ function ownerHarness() {
         return { rows: [{ xid: "4294967301" }], rowCount: 1 }
       }
       if (sql.includes("SELECT xmin")) return { rows: [{ xid: "5" }], rowCount: 1 }
+      if (sql.includes("trade_commit_fence_enforcement")) {
+        return { rows: [{ mode: fenceMode }], rowCount: 1 }
+      }
       if (sql.includes("SELECT decimal_digits FROM currency")) {
         return { rows: [{ decimal_digits: 0 }], rowCount: 1 }
       }
@@ -146,6 +149,15 @@ function ownerHarness() {
 }
 
 describe("CAA-06b native Medusa transaction boundary", () => {
+  it("rolls back an attempted commit under SHADOW before native order or authority writes", async () => {
+    const harness = ownerHarness("SHADOW")
+    expect((await commitMedusaNativeBuyerOrder(harness.deps, request)).outcome).toBe("REFUSED")
+    expect(harness.settled).toEqual(["rollback"])
+    expect(harness.createOrders).not.toHaveBeenCalled()
+    expect(harness.deps.recheckAuthorityNow).not.toHaveBeenCalled()
+    expect(harness.queries.some((sql) => sql.includes("INSERT INTO"))).toBe(false)
+  })
+
   it("compares a 64-bit transaction to 32-bit PostgreSQL row xmin without truncating the source", () => {
     expect(nativeXid32("1")).toBe("1")
     expect(nativeXid32("4294967297")).toBe("1")

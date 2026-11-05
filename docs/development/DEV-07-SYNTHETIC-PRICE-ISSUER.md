@@ -71,3 +71,12 @@ unqualified. For the next gate, ERP #125 and Infrastructure #72 must join the
 **same** event and independently observe native iDempiere consequence, loss/
 replay recovery and the distributed export graph; each component's actual
 case failures must be retained instead of inferring success from dispatch.
+
+The native owner reads and locks the Decision 9 mode in the same PostgreSQL
+transaction as the buyer write. A SHADOW run refuses before creating an
+order. In the run-owned buyer-BFF database only, the existing fixture CLI's
+`enforce-checkout` phase can apply the disposable transition. It requires the
+exact prepared run ID in `BAOBAB_DEV07_DISPOSABLE_CHECKOUT_APPROVED_RUN` and an
+explicit `BAOBAB_DEV07_CHECKOUT_CHANGE_REFERENCE`. It accepts the initial
+SHADOW revision or reads back its own prior transition. Provision the
+approved price and buyer authority separately through their owners.
