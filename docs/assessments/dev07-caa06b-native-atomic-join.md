@@ -153,6 +153,35 @@ database/exported-trace observation. Reuse these components and their failure
 semantics. Do not promote this to accepted canonical buyer execution until the
 genuine non-draft origin and exact downstream event are independently proved.
 
+The read-only native-origin observer now independently requires the native
+order, item rows, line rows, buyer receipt, buyer consumption, seller commitment,
+spend conversion and original outbox event to share the original transaction.
+It joins the exact buyer hold, purchase/version/digest, amount/currency and
+correlation; a later plausible buyer receipt or native order cannot borrow an
+otherwise valid seller/event pair. Its 13 unit cases include complete
+SQL-shaped input and deliberately broken joins; these are not database or
+buyer-authority evidence. The existing synthetic receipt format and its strict
+`NATIVE_ORDER_ABSENT` negative are unchanged. Canonical commit context/receipt
+correlation and bounded evaluation times are also checked before spending.
+
+Connected activation still needs an actual approved commitment assurance policy
+and issuer session (the existing DEV-07 fixture configures only `aal1` discovery),
+and a CP-authorised `market:read` caller for the canonical Market read. The
+current development buyer validator's accepted scopes are exactly
+`context:resolve`, `identity:principal:resolve` and
+`estate:client-binding:resolve`; this implementation does not silently add a
+scope or promote an IAM/CP identity. The dedicated token provider for Market
+reads must be admitted through the existing owner/governance path. Real IAM
+normalises password/TOTP evidence as `pwd`, `otp`, `mfa`; a policy must use the
+issuer's actual canonical evidence, not an invented `totp` claim or a string
+copied from a fixture. These are genuine connected dependencies alongside the
+native pricing reader, not permission conferred by unit-test success.
+
+Local verification of this follow-through passes 1,074 Node tests across 124
+files, all 19 Python dispatcher/origin unit tests, strict TypeScript,
+zero-warning lint, repository formatting, the full Medusa build and standalone
+schema asset checks. Final-head native CI remains independently required.
+
 This PR now contains a pinned Medusa 2.21.2 `Order Module`
 transaction-owner adapter (`medusa-native-transaction-owner.ts`) and a
 disposable Medusa runtime qualification, but **the positive same-XID native

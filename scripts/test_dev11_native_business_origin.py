@@ -1,10 +1,12 @@
 """DEV-11 native source provenance is distinct from real broker success.
 
-Unit fixtures exercise only refusal semantics. The Actions workflow separately
+Unit fixtures exercise SQL-shaped joins and refusal semantics, not runtime proof.
+The Actions workflow separately
 runs the unmodified checker against the genuine migrated PostgreSQL 17 schema
 and requires the synthetic Medusa outbox event to be refused there as well.
 """
 import unittest
+from copy import deepcopy
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
@@ -60,6 +62,7 @@ class NativeOriginRefusalTests(unittest.TestCase):
             "source": EVENT_SOURCE, "type": EVENT_TYPE,
             "baobabscope": "tenant", "tenantid": "tn_synthetic",
             "idempotencykey": "some-immutable-key",
+            "correlationid": "11111111-1111-4111-8111-111111111111",
             "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
             "data": {
                 "commerce_order_id": self.order_id,
@@ -125,6 +128,84 @@ class NativeOriginRefusalTests(unittest.TestCase):
         for event in ("", "contains space", "../../sensitive"):
             with self.subTest(event=event):
                 self.assertFalse(assess_native_origin(ReadOnlyTxn([]), event).qualified)
+
+    def complete_unit_snapshot(self):
+        """SQL-shaped unit input only; no issuer, pricing or database proof."""
+        event = deepcopy(self.event)
+        event["envelope"]["data"]["lines"] = [{}]
+        payload = {
+            "receipt_id": "buyer-receipt", "tenant_id": "tn_synthetic",
+            "correlation_id": self.envelope["correlationid"],
+            "buyer_organisation_id": "b2borg_native", "buyer_membership_id": "b2bmem_native",
+            "resource_id": "cart_native", "resource_version": 1,
+            "operation": "trade.order.commit", "operation_reference": "operation-unit",
+            "spend_reservation_id": "reservation-unit", "seller_legal_entity_id": "LE-EXAMPLE",
+            "currency": "ZAR", "amount_minor": 12345, "spend_hold_revision": 1,
+            "transaction_digest": "sha256:" + "a" * 64,
+        }
+        dt = lambda text: datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return [
+            [], [event],
+            [{"id": self.order_id, "currency_code": "zar", "is_draft_order": False, "order_xid": "101"}],
+            [{"receipt_id": "seller-receipt", "subject_id": "cart_native", "subject_type": "cart",
+              "native_commit_xid": "101", "tenant_id": "tn_synthetic", "consumed_at": dt("2026-11-05T00:00:01Z"),
+              "outcome": "ALLOWED", "enforcement_mode": "ENFORCED", "commerce_model": "B2B",
+              "decision_xid": "101", "classification_status": "ACTIVE", "buyer_account_model": "BUYER_ORGANISATION",
+              "buyer_organisation_id": "b2borg_native", "buyer_membership_id": "b2bmem_native"}],
+            [{"receipt_id": "buyer-receipt", "payload": payload, "receipt_xid": "101", "consumption_xid": "101",
+              "seller_receipt_id": "seller-receipt", "spend_reservation_id": "reservation-unit",
+              "operation_reference": "operation-unit", "evaluated_at": dt("2026-11-05T00:00:00Z"),
+              "consumed_at": dt("2026-11-05T00:00:01Z"), "expires_at": dt("2026-11-05T00:00:30Z")}],
+            [{"item_xid": "101", "line_xid": "101"}],
+            [{"conversion_xid": "101", "reservation_id": "reservation-unit", "amount_minor": 12345,
+              "reserved_amount_minor": 12345, "membership_id": "b2bmem_native", "organisation_id": "b2borg_native",
+              "status": "COMMITTED", "tenant_id": "tn_synthetic", "purchase_reference": "cart_native",
+              "resource_version": 1, "transaction_digest": payload["transaction_digest"],
+              "currency_code": "ZAR", "hold_revision": 1}],
+        ]
+
+    def test_complete_unit_snapshot_is_only_source_sql_not_current_authority(self):
+        observed = _read_native_origin(Source(self.complete_unit_snapshot()), self.event_id)
+        self.assertEqual(observed.code, "NATIVE_ORIGIN_SQL_CONFIRMED")
+        self.assertTrue(observed.exact_commit_transaction)
+
+    def test_later_native_order_cannot_borrow_an_atomic_seller_event_pair(self):
+        rows = self.complete_unit_snapshot()
+        rows[2][0]["order_xid"] = "102"
+        with self.assertRaisesRegex(OriginRefusal, "NATIVE_OUTBOX_NOT_IN_ORDER_TRANSACTION"):
+            _read_native_origin(Source(rows), self.event_id)
+
+    def test_absent_buyer_consumption_never_qualifies_from_seller_and_spend_only(self):
+        rows = self.complete_unit_snapshot()
+        rows[4] = []
+        with self.assertRaisesRegex(OriginRefusal, "NATIVE_BUYER_CONSUMPTION_NOT_UNIQUE"):
+            _read_native_origin(Source(rows), self.event_id)
+
+    def test_buyer_receipt_and_consumption_cannot_be_added_later_or_borrowed(self):
+        for key, value in (("receipt_xid", "102"), ("consumption_xid", "102"),
+                           ("seller_receipt_id", "other-seller"), ("operation_reference", "other-operation"),
+                           ("spend_reservation_id", "other-reservation")):
+            rows = self.complete_unit_snapshot()
+            rows[4][0][key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(OriginRefusal, "NATIVE_BUYER_CONSUMPTION_NOT_ATOMIC"):
+                _read_native_origin(Source(rows), self.event_id)
+
+    def test_native_children_cannot_be_added_later_or_omitted_from_event(self):
+        for key in ("item_xid", "line_xid"):
+            rows = self.complete_unit_snapshot()
+            rows[5][0][key] = "102"
+            with self.subTest(key=key), self.assertRaisesRegex(OriginRefusal, "NATIVE_ORDER_LINES_NOT_IN_COMMIT_TRANSACTION"):
+                _read_native_origin(Source(rows), self.event_id)
+
+    def test_ledger_conversion_must_bind_the_consumed_buyer_hold_and_purchase(self):
+        for key, value in (("reservation_id", "other"), ("tenant_id", "other"),
+                           ("purchase_reference", "other"), ("resource_version", 2),
+                           ("transaction_digest", "sha256:" + "b" * 64),
+                           ("currency_code", "UGX"), ("hold_revision", 2), ("amount_minor", 12344)):
+            rows = self.complete_unit_snapshot()
+            rows[6][0][key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(OriginRefusal, "NATIVE_SPEND_CONVERSION_NOT_ATOMIC"):
+                _read_native_origin(Source(rows), self.event_id)
 
     def test_synthetic_selector_passes_actual_psycopg_parameter_parser(self):
         # This is an offline driver regression, not a PostgreSQL acceptance

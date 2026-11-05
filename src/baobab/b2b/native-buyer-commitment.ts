@@ -195,10 +195,15 @@ function requireCommitment(
     d.resourceVersion !== b.resource_version ||
     !(Date.parse(d.evaluatedAt) <= now && now < Date.parse(d.expiresAt)) ||
     !UUID.test(request.correlationId) ||
+    b.correlation_id !== request.correlationId ||
+    c.correlation_id !== request.correlationId ||
     !NATIVE_ID.test(request.nativeOrderId) ||
     !idempotency.test(request.idempotencyKey) ||
     !Number.isFinite(now) ||
     !(Date.parse(b.evaluated_at) <= now && now < Date.parse(b.expires_at)) ||
+    Date.parse(b.expires_at) - Date.parse(b.evaluated_at) > 60_000 ||
+    !(Date.parse(c.evaluated_at) <= now) ||
+    Date.parse(c.expires_at) - Date.parse(c.evaluated_at) > 60_000 ||
     !(now < Date.parse(c.expires_at)) ||
     !(now < Date.parse(s.lease_expires_at)) ||
     b.context_id !== c.context_id ||

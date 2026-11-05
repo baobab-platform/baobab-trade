@@ -283,7 +283,7 @@ describe("CAA-06b consequential buyer context (synthetic independent authority p
   const approved = () => {
     const profile = {
       accepted_acr_values: [SESSION_ACR],
-      required_methods: ["pwd", "totp"],
+      required_methods: ["pwd", "otp", "mfa"],
       step_up_required: true,
       max_authentication_age_seconds: 60,
     }
@@ -319,7 +319,7 @@ describe("CAA-06b consequential buyer context (synthetic independent authority p
           ...w.deps.tokens,
           verify: async (token: string) => ({
             ...(await verifier(token)),
-            amr: ["pwd", "totp"],
+            amr: ["pwd", "otp", "mfa"],
             authTime: new Date(NOW - 10_000),
           }),
         },

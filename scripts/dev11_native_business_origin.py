@@ -7,11 +7,12 @@ ACTUAL Medusa PostgreSQL records at one repeatable-read snapshot BEFORE broker
 dispatch. A signed CloudEvent, test fixture, span or broker confirmation cannot
 substitute for an ENFORCED B2B native commit plus consumption in one transaction.
 
-It is deliberately impossible for the current Trade SQL version to pass B2B:
-Migration20261023120000 still returns BUYER_AUTHORITY_ABSENT and ships SHADOW.
-The successor CAA-06b owner must implement native same-transaction buyer receipt,
-fully final valuation, spend conversion and ENFORCED gate before using this as
-positive source evidence. Do not revise these checks to make synthetic CI green.
+Migration20261104190000 adds CAA-06b buyer consumption but ships SHADOW.
+A positive source must independently expose native same-transaction order and
+lines, buyer receipt/consumption, seller commitment, spend and event, under an
+ENFORCED decision. This SQL proof still grants no current IAM/CP authority and
+does not establish complete pricing finality or downstream ERP execution.
+Do not revise these checks to make synthetic CI green.
 """
 from __future__ import annotations
 
@@ -31,9 +32,13 @@ EVENT_SOURCE = "urn:baobab-platform:service:baobab-trade"
 _ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{2,199}$")
 _TABLES = (
     'public."order"',
+    "public.order_item",
+    "public.order_line_item",
     "public.event_outbox",
     "public.trade_order_commitment",
     "public.trade_order_authority_receipt",
+    "public.trade_buyer_authority_receipt",
+    "public.trade_buyer_authority_consumption",
     "public.trade_commit_fence_decision",
     "public.trade_native_commitment_classification",
     "public.b2b_spend_ledger_entry",
@@ -80,6 +85,8 @@ def _normalised_envelope(envelope: Any, event_id: str, tenant_id: str,
         _refuse("EVENT_ORDER_REFERENCE_INVALID")
     if (not isinstance(data.get("legal_entity_id"), str)
             or not isinstance(data.get("currency"), str)
+            or not isinstance(envelope.get("correlationid"), str)
+            or not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", envelope["correlationid"])
             or not isinstance(envelope.get("traceparent"), str)
             or not re.fullmatch(r"00-(?!0{32})[0-9a-f]{32}-(?!0{16})[0-9a-f]{16}-0[01]", envelope["traceparent"])):
         _refuse("EVENT_BUSINESS_CONTEXT_NOT_PROVEN")
@@ -113,7 +120,7 @@ def _read_native_origin(db, event_id: str) -> OriginObservation:
         event["envelope"], event_id, event["tenant_id"], event["idempotency_key"],
     )
     native = db.execute(
-        """SELECT id, currency_code, is_draft_order
+        """SELECT id, currency_code, is_draft_order, xmin::text AS order_xid
            FROM "order" WHERE id=%s AND deleted_at IS NULL""", (order_id,),
     ).fetchall()
     # This is the expected denial for the current synthetic RabbitMQ fixture.
@@ -152,18 +159,69 @@ def _read_native_origin(db, event_id: str) -> OriginObservation:
     if (commitment["outcome"] != "ALLOWED"
             or commitment["commerce_model"] != "B2B"
             or commitment["enforcement_mode"] != "ENFORCED"):
-        # In the current accepted migration, B2B always refuses here.
+        # A SHADOW decision cannot qualify a native commitment.
         _refuse("NATIVE_B2B_ENFORCEMENT_NOT_QUALIFIED")
-    if (event["insert_xid"] != commitment["native_commit_xid"]
+    if (event["insert_xid"] != native[0]["order_xid"]
+            or event["insert_xid"] != commitment["native_commit_xid"]
             or event["insert_xid"] != commitment["decision_xid"]):
         # A second transaction that writes a plausible outbox row is NOT an
         # atomic native Medusa order/outbox source, regardless of signature.
         _refuse("NATIVE_OUTBOX_NOT_IN_ORDER_TRANSACTION")
 
+    # Observe the actual CAA-06b rows, not a claim that their trigger was
+    # installed. Receipt and consumption must have originated in the SAME
+    # native transaction, with the exact original event and seller receipt.
+    buyers = db.execute(
+        """SELECT b.receipt_id::text, b.payload, b.xmin::text AS receipt_xid,
+                  b.evaluated_at, b.expires_at,
+                  u.xmin::text AS consumption_xid, u.seller_receipt_id::text,
+                  u.spend_reservation_id, u.operation_reference, u.consumed_at
+           FROM trade_buyer_authority_consumption u
+           JOIN trade_buyer_authority_receipt b ON b.receipt_id=u.receipt_id
+           WHERE u.order_id=%s AND u.event_id=%s""", (order_id, event_id),
+    ).fetchall()
+    if len(buyers) != 1:
+        _refuse("NATIVE_BUYER_CONSUMPTION_NOT_UNIQUE")
+    buyer = buyers[0]
+    payload = buyer["payload"]
+    if (not isinstance(payload, dict)
+            or buyer["receipt_xid"] != event["insert_xid"]
+            or buyer["consumption_xid"] != event["insert_xid"]
+            or buyer["seller_receipt_id"] != commitment["receipt_id"]
+            or payload.get("receipt_id") != buyer["receipt_id"]
+            or payload.get("tenant_id") != event["tenant_id"]
+            or payload.get("correlation_id") != event["envelope"].get("correlationid")
+            or payload.get("buyer_organisation_id") != commitment["buyer_organisation_id"]
+            or payload.get("buyer_membership_id") != commitment["buyer_membership_id"]
+            or payload.get("resource_id") != commitment["subject_id"]
+            or payload.get("operation") != "trade.order.commit"
+            or commitment["subject_type"] != "cart"
+            or payload.get("operation_reference") != buyer["operation_reference"]
+            or payload.get("spend_reservation_id") != buyer["spend_reservation_id"]
+            or payload.get("seller_legal_entity_id") != event["envelope"]["data"]["legal_entity_id"]
+            or payload.get("currency") != event["envelope"]["data"]["currency"]
+            or not buyer["evaluated_at"] <= buyer["consumed_at"] < buyer["expires_at"]):
+        _refuse("NATIVE_BUYER_CONSUMPTION_NOT_ATOMIC")
+
+    lines = db.execute(
+        """SELECT i.xmin::text AS item_xid, l.xmin::text AS line_xid
+           FROM order_item i JOIN order_line_item l ON l.id=i.item_id
+           WHERE i.order_id=%s AND i.deleted_at IS NULL AND l.deleted_at IS NULL""",
+        (order_id,),
+    ).fetchall()
+    business_lines = event["envelope"]["data"].get("lines")
+    if (not isinstance(business_lines, list) or not business_lines
+            or len(lines) != len(business_lines)
+            or any(row["item_xid"] != event["insert_xid"]
+                   or row["line_xid"] != event["insert_xid"] for row in lines)):
+        _refuse("NATIVE_ORDER_LINES_NOT_IN_COMMIT_TRANSACTION")
+
     ledger = db.execute(
         """SELECT l.xmin::text AS conversion_xid, l.reservation_id,
                   l.amount_minor, s.amount_minor AS reserved_amount_minor,
-                  s.membership_id, s.organisation_id, s.status
+                  s.membership_id, s.organisation_id, s.status,
+                  s.tenant_id, s.purchase_reference, s.resource_version,
+                  s.transaction_digest, s.currency_code, s.hold_revision
            FROM b2b_spend_ledger_entry l
            JOIN b2b_spend_reservation s ON s.id=l.reservation_id
            WHERE l.commitment_reference=%s AND l.entry_kind='COMMIT'
@@ -175,6 +233,14 @@ def _read_native_origin(db, event_id: str) -> OriginObservation:
         or row["membership_id"] != commitment["buyer_membership_id"]
         or row["organisation_id"] != commitment["buyer_organisation_id"]
         or row["amount_minor"] != row["reserved_amount_minor"]
+        or row["reservation_id"] != buyer["spend_reservation_id"]
+        or row["tenant_id"] != payload.get("tenant_id")
+        or row["purchase_reference"] != payload.get("resource_id")
+        or row["resource_version"] != payload.get("resource_version")
+        or row["transaction_digest"] != payload.get("transaction_digest")
+        or row["currency_code"] != payload.get("currency")
+        or row["hold_revision"] != payload.get("spend_hold_revision")
+        or row["amount_minor"] != payload.get("amount_minor")
         or row["status"] != "COMMITTED" for row in ledger
     ):
         _refuse("NATIVE_SPEND_CONVERSION_NOT_ATOMIC")

@@ -108,6 +108,25 @@ describe("CAA-06b proposed owner transaction composition (source-only, not activ
     expect(h.commitWithMutation).not.toHaveBeenCalled()
   })
 
+  it.each(["receipt", "context"] as const)(
+    "binds %s correlation to the original request",
+    async (field) => {
+      const h = harness((p) => {
+        p[field].correlation_id = "33333333-3333-4333-8333-333333333333"
+      })
+      expect((await commitAuthorizedNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
+      expect(h.commitWithMutation).not.toHaveBeenCalled()
+    },
+  )
+
+  it("refuses a context with a future evaluation instant", async () => {
+    const h = harness((p) => {
+      p.context.evaluated_at = new Date(NOW.getTime() + 1).toISOString()
+    })
+    expect((await commitAuthorizedNativeBuyerOrder(h.deps, request)).outcome).toBe("REFUSED")
+    expect(h.commitWithMutation).not.toHaveBeenCalled()
+  })
+
   it("denies stale, mismatched and foreign buyer/seller proofs before touching spend", async () => {
     for (const mutate of [
       (p: AuthorizedCommitment) => {
