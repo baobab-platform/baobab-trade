@@ -31,3 +31,43 @@ Run the original read-only scripts/dev11_native_business_origin.py on a separate
 Dispatch that exact event ID via the existing confirmed RabbitMQ publisher; independently join its unchanged payload digest through ERP #125 durable inbox, JVM native effect, CP authority and exported OTel graph. Infrastructure #72 must independently retain run-owned source hashes, original artefacts, negative results and disposal. This doc and source tests do not prove a successful connected buyer order; absent issuer, IAM client, CP issuer approval or native test fixtures remain BLOCKED. ERP postings, supplier import docs, payments, transport and production admission remain separately qualified.
 
 Do not merge Trade #189, CP #465, Infrastructure #72, ERP #125, or companion PRs before platform-owner review.
+
+
+## Original persisted event handoff — added 5 November 2026
+
+After a real confidential ZuriBeans BFF buyer commitment has produced one
+verified order, **do not manufacture a new CloudEvent** or introduce another
+publisher. Find the existing outbox UUID through a separate read-only
+PostgreSQL query, and run the existing independent native-origin verifier:
+
+    NODE_ENV=test BAOBAB_ENVIRONMENT=development python -B scripts/dev11_native_business_origin.py \
+      --event-id "$ORIGINAL_OUTBOX_EVENT_ID" --output "$RUN_PRIVATE/native-origin.json"
+
+That verifier must return an independently confirmed, ENFORCED non-draft native
+order with seller and buyer receipts, spend COMMIT and outbox INSERT all
+sharing the original XID. A synthetic outbox fixture without a real buyer
+order continues to refuse, and the event is not eligible for dispatch.
+
+Only after the native origin is independently observed, use the existing
+RabbitMQ publisher, not a new messaging framework:
+
+    NODE_ENV=test BAOBAB_ENVIRONMENT=development \
+      BAOBAB_EVENT_DISPATCH_BACKEND=rabbitmq-confirmed \
+      python -B scripts/dev07_genuine_event_dispatch.py \
+      --event-id "$ORIGINAL_OUTBOX_EVENT_ID" --output "$RUN_PRIVATE/publisher-handoff.json"
+
+The dispatcher requires the existing database connection, RabbitMQ endpoint,
+Trade signing key and optional official OTel endpoint, all from protected
+run-private environment bindings. It calls the existing
+dev11_rabbit_dispatcher once, selecting the original outbox event ID,
+then independently rereads event UUID, XID, immutable digest, trace parent,
+publisher-confirmed state and bounded attempt count. It never creates an
+order, grants authority or reconstructs the event. Tests under
+scripts/test_dev07_genuine_event_dispatch.py are mutation vectors only.
+
+The publisher receipt deliberately keeps current IAM/CP independent custody,
+ERP native effect, exported trace, L4-OPS-01 and protected/production flags
+unqualified. For the next gate, ERP #125 and Infrastructure #72 must join the
+**same** event and independently observe native iDempiere consequence, loss/
+replay recovery and the distributed export graph; each component's actual
+case failures must be retained instead of inferring success from dispatch.
