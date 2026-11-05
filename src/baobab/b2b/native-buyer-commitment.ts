@@ -159,7 +159,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
  * More fractional digits than the native currency uses are acceptable ONLY
  * if all excess digits are zero. A missing native exponent is never guessed.
  */
-function exactMoneyMinor(amount: string, exponent: number): bigint | null {
+export function exactMoneyMinor(amount: string, exponent: number): bigint | null {
   if (!Number.isSafeInteger(exponent) || exponent < 0 || exponent > 9) return null
   if (!/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(amount)) return null
   const [units, fractional = ""] = amount.split(".")

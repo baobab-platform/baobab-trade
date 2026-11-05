@@ -515,3 +515,14 @@ not interchangeable; missing tax/freight/duty is not silently zero.
 
 These source-only tests and prior real Order Module transaction drills
 are not a positive buyer order and must never be reported as L4 acceptance.
+
+The native buyer route now uses its own persisted cart-to-order adapter for
+the Order Module DTO and ERP consequence. The initial profile supports native
+tax-exclusive merchandise and a single zero-cost shipping method. Charges
+outside merchandise and native tax must have a governed zero determination.
+An unsupported amount, promotion, inclusive tax, or fractional minor-unit tax
+refuses the transaction. Native order line and shipping rows must share the
+owning transaction ID. ERP receives the persisted Trade customer and variant
+IDs, which still require scoped ERP master mappings, and the Trade catalogue
+unit. The disposable PostgreSQL Order Module probe exercises this adapter in a
+rolled-back non-draft component order without creating spend or an event.

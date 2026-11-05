@@ -705,6 +705,7 @@ describe("TA-06 service boundary inventory", () => {
     }
     walk(root)
     expect(offenders).toEqual([
+      "baobab/b2b/medusa-native-order-source.ts: is_draft_order: false",
       "baobab/b2b/medusa-native-transaction-owner.ts: is_draft_order: false,.createOrders(",
     ])
   })
@@ -732,6 +733,7 @@ describe("TA-06 service boundary inventory", () => {
     expect(importers.sort()).toEqual([
       "api/store/b2b/buyer-commit/route.ts",
       "baobab/b2b/medusa-native-buyer-purchase-source.ts",
+      "baobab/b2b/medusa-native-order-source.ts",
       "scripts/regression-medusa-native-order-owner.ts",
     ])
   })

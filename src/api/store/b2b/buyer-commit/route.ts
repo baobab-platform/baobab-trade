@@ -9,10 +9,7 @@ import {
   CurrentNativeBuyerAuthority,
   type CurrentNativeBuyerAuthorityDependencies,
 } from "../../../../baobab/b2b/current-native-buyer-authority"
-import {
-  commitMedusaNativeBuyerOrder,
-  type NativeMedusaOrderSource,
-} from "../../../../baobab/b2b/medusa-native-transaction-owner"
+import { commitMedusaNativeBuyerOrder } from "../../../../baobab/b2b/medusa-native-transaction-owner"
 import { type AuthorizedCommitment } from "../../../../baobab/b2b/native-buyer-commitment"
 import { type PostgresSpendReservationCommands } from "../../../../baobab/b2b/spend-reservation-commands"
 import { getBaobabTradeEnvironment } from "../../../../baobab/config/environment"
@@ -32,6 +29,8 @@ import {
 } from "../../../../baobab/b2b/medusa-final-cart-pricing"
 import { tradeOrderAuthorityDependencies } from "../../../../baobab/orders/trade-a-runtime"
 import { resolveNativeCheckoutEnvironment } from "../../../../baobab/orders/native-cart-legal-seller"
+
+import { medusaNativeOrderFactsSource } from "../../../../baobab/b2b/medusa-native-order-source"
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const JWS = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
@@ -64,7 +63,6 @@ export type NativeBuyerCommitRuntime = Pick<
    * No runtime service may inject a fake readPurchase or readFinalCart.
    */
   verifyCurrentIssuer: CurrentPriceIssuerAuthority
-  source: Pick<NativeMedusaOrderSource, "orderInput" | "readFinal">
   resolveTenant(request: {
     callerToken: string
     subjectToken: string
@@ -186,8 +184,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
     const runtime = req.scope.resolve<NativeBuyerCommitRuntime>(NATIVE_BUYER_COMMIT_RUNTIME)
     if (
-      !runtime?.source?.readFinal ||
-      !runtime?.source?.orderInput ||
+      !runtime ||
       typeof runtime.verifyCurrentIssuer !== "function" ||
       !runtime?.spend ||
       typeof runtime.markets?.getMarket !== "function" ||
@@ -286,8 +283,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         spend: runtime.spend,
         source: {
           readFinalCart,
-          orderInput: (...args) => runtime.source.orderInput(...args),
-          readFinal: (...args) => runtime.source.readFinal(...args),
+          ...medusaNativeOrderFactsSource(),
         },
         authorizeNow: async (): Promise<AuthorizedCommitment> => {
           const fresh = await authority.authorizeNow()

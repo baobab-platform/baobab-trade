@@ -25,6 +25,8 @@ import {
   withNativeMedusaOrderTransaction,
 } from "../baobab/b2b/medusa-native-transaction-owner"
 
+import { medusaNativeOrderFactsSource } from "../baobab/b2b/medusa-native-order-source"
+import type { FinalNativeValuationFacts } from "../baobab/b2b/buyer-commitment-valuation"
 import { nativeMedusaCartPriceReadback } from "../baobab/b2b/medusa-final-cart-pricing"
 
 const ROLLBACK = "DEV07_NATIVE_OWNER_EXPECTED_ROLLBACK"
@@ -66,19 +68,35 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
   try {
     const version = await pool.query("SELECT current_setting('server_version_num')::int AS v")
     assert.equal(Math.floor(version.rows[0].v / 10000), 17)
+    const productId = "prod_" + randomUUID().replaceAll("-", "")
+    const site = { address_1: "Disposable Medusa Site", city: "Cape Town", country_code: "za" }
     const cart = await carts.createCarts({
+      email: "dev07-native-order@example.invalid",
+      region_id: "reg_dev07_native_probe",
+      sales_channel_id: "sc_dev07_native_probe",
+      shipping_address: site,
+      billing_address: site,
       currency_code: "ZAR",
       customer_id: "cus_" + randomUUID().replaceAll("-", ""),
       items: [
         {
           title: "Disposable native Cart Module price probe",
           variant_id: "variant_" + randomUUID().replaceAll("-", ""),
+          product_id: productId,
           quantity: 2,
           unit_price: 10.25,
+          tax_lines: [{ code: "DEV07_TAX_PROBE", rate: 20 }],
         },
       ],
     })
     cartId = cart.id
+    await carts.addShippingMethods(cart.id, [
+      {
+        name: "Disposable pickup",
+        amount: 0,
+        shipping_option_id: "so_dev07_native_probe",
+      },
+    ])
     const newRevision = "2026-11-05T08:00:00.182396Z"
     const nativeCartPrice = nativeMedusaCartPriceReadback(
       carts,
@@ -124,6 +142,65 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
     )
     const afterCart = await pool.query("SELECT updated_at FROM cart WHERE id=$1", [cart.id])
     assert.notEqual(afterCart.rows[0].updated_at.toISOString(), new Date(newRevision).toISOString())
+    // Component drill only. The pricing and CP checks above remain closed.
+    // Here a rollback-only native order proves the DTO/SQL compatibility
+    // against real Medusa tables without claiming IAM/CP authority or spend.
+    const componentOrderId = id()
+    const valuation: FinalNativeValuationFacts = {
+      resource_id: cart.id,
+      resource_version: 1,
+      transaction_digest: "sha256:" + "1".repeat(64),
+      currency: "ZAR",
+      basis: "FINAL_PRICED",
+      components: [
+        {
+          component_kind: "MERCHANDISE",
+          amount_minor: 2050,
+          determination: "FINAL",
+          source_reference: "native:component-merchandise",
+        },
+        {
+          component_kind: "TAX",
+          amount_minor: 410,
+          determination: "FINAL",
+          source_reference: "native:component-tax",
+        },
+      ],
+    }
+    const facts = {
+      receipt: {
+        resource_id: cart.id,
+        currency: "ZAR",
+        amount_minor: 2460,
+        market_id: "market_dev07_native_probe",
+      },
+      seller: { responsible_legal_entity_id: "LE-DEV07-NATIVE-PROBE" },
+      valuation,
+    }
+    const source = medusaNativeOrderFactsSource()
+    await assert.rejects(
+      withNativeMedusaOrderTransaction(orders, async ({ db, manager }) => {
+        await db.query(
+          `INSERT INTO b2b_product_trade_profile
+        (id,product_id,canonical_product_key,country_of_origin,hs_classification_reference,commodity_category,
+         trade_uom,net_weight_kg,gross_weight_kg,packaging,export_eligibility_reference,commodity_attributes)
+        VALUES ($1,$2,$2,'ZA','native-component-probe','component-probe','BAG',1,1,'BAG','component-probe','{}')`,
+          ["b2bprod_" + productId, productId],
+        )
+        const candidate = await source.orderInput(db, componentOrderId, facts)
+        const order = await orders.createOrders(candidate, { transactionManager: manager } as never)
+        assert.equal(order.id, componentOrderId)
+        const snapshot = await source.readFinal(db, componentOrderId, facts)
+        assert.equal(snapshot.erp.totals.grand_total.amount, "24.60")
+        assert.equal(snapshot.erp.totals.quoted_tax.amount, "4.10")
+        throw new Error(ROLLBACK)
+      }),
+      new RegExp(ROLLBACK),
+    )
+    assert.equal(
+      (await pool.query('SELECT 1 FROM "order" WHERE id=$1', [componentOrderId])).rowCount,
+      0,
+    )
     await carts.deleteCarts([cart.id])
     cartId = undefined
 
@@ -210,6 +287,7 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
           native_cart_totals_read_in_order_xid: true,
           absent_charge_evidence_refused: true,
           native_module_create_orders_executed: true,
+          native_order_facts_adapter_rolled_back: true,
           genuine_native_order_and_line_same_xid: true,
           rejected_native_order_rolled_back: true,
           independent_committed_native_order_readback: true,
