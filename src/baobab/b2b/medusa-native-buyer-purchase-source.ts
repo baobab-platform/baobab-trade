@@ -146,10 +146,14 @@ export function medusaNativeBuyerPurchaseSource(deps: NativeBuyerPurchaseSourceO
           !equal(reservation.currency_code, binding.currency_code) ||
           !equal(reservation.purchase_reference, cartId)) return refuse()
 
-      const [shipping, billing] = await Promise.all([
-        site(db, cartId, identity.buyer_organisation_id, String(binding.market_key), "SHIPPING"),
-        site(db, cartId, identity.buyer_organisation_id, String(binding.market_key), "BILLING"),
-      ])
+      // One native PostgreSQL connection is the ordering authority; run
+      // registered-site joins sequentially so the lock order is reproducible.
+      const shipping = await site(
+        db, cartId, identity.buyer_organisation_id, String(binding.market_key), "SHIPPING",
+      )
+      const billing = await site(
+        db, cartId, identity.buyer_organisation_id, String(binding.market_key), "BILLING",
+      )
       const price = await pricing(
         db, "READ_ONLY", {
           receipt: {
