@@ -5,18 +5,23 @@ import { Modules } from "@medusajs/framework/utils"
 import { BuyerTokenVerifier } from "../../../../baobab/auth/buyer-access-token"
 import { interimAssurancePolicy } from "../../../../baobab/auth/buyer-assurance"
 import { loadBuyerAssurancePolicy } from "../../../../baobab/auth/buyer-assurance-policy"
+import { CurrentNativeBuyerAuthority } from "../../../../baobab/b2b/current-native-buyer-authority"
 import {
-  CurrentNativeBuyerAuthority,
-  type CurrentNativeBuyerAuthorityDependencies,
-} from "../../../../baobab/b2b/current-native-buyer-authority"
+  resolveBuyerCommitIdentity,
+  type BuyerAuthorityDependencies,
+} from "../../../../baobab/b2b/buyer-authority"
+import { asValue } from "awilix"
+import {
+  NATIVE_BUYER_COMMIT_RUNTIME,
+  nativeBuyerCommitRuntime,
+} from "../../../../baobab/b2b/native-buyer-commit-runtime"
+export { NATIVE_BUYER_COMMIT_RUNTIME }
 import { commitMedusaNativeBuyerOrder } from "../../../../baobab/b2b/medusa-native-transaction-owner"
 import { type AuthorizedCommitment } from "../../../../baobab/b2b/native-buyer-commitment"
-import { type PostgresSpendReservationCommands } from "../../../../baobab/b2b/spend-reservation-commands"
 import { getBaobabTradeEnvironment } from "../../../../baobab/config/environment"
 import { getBuyerPrincipalResolver } from "../../../../baobab/control-plane/principal-resolution"
 import { getEstateBindingResolver } from "../../../../baobab/control-plane/estate-binding"
 import { getWorkloadTenantVerifier } from "../../../../baobab/control-plane/workload-tenant-verifier"
-import { type BaobabTenantContext } from "../../../../baobab/contracts/tenant-context"
 import { B2B_MODULE } from "../../../../modules/b2b"
 import type B2BModuleService from "../../../../modules/b2b/service"
 import { medusaB2BPolicyStore } from "../../../../baobab/b2b/medusa-b2b-policy-store"
@@ -48,31 +53,6 @@ const FIELDS = new Set([
 ])
 const TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 
-/** Trusted Medusa internal registry service, never an HTTP plugin result.
- * The concrete native/cart/policy/charge sources must be installed by the
- * owning engine. Missing issuer, tax, duty, freight, policy or native reader
- * is UNAVAILABLE, not an implicit zero/allow. No simulated fallback.
- */
-export const NATIVE_BUYER_COMMIT_RUNTIME = "baobab_native_buyer_commit_runtime"
-export type NativeBuyerCommitRuntime = Pick<
-  CurrentNativeBuyerAuthorityDependencies,
-  "markets" | "tokens"
-> & {
-  spend: PostgresSpendReservationCommands
-  /** The native Order and Cart Modules own the price and Site readback.
-   * No runtime service may inject a fake readPurchase or readFinalCart.
-   */
-  verifyCurrentIssuer: CurrentPriceIssuerAuthority
-  resolveTenant(request: {
-    callerToken: string
-    subjectToken: string
-    cartId: string
-    organisationId: string
-    countryCode: string
-    correlationId: string
-  }): Promise<BaobabTenantContext>
-  verifyReplay(tenant: BaobabTenantContext, nativeOrderId: string): Promise<boolean>
-}
 const send = (
   res: MedusaResponse,
   status: number,
@@ -161,12 +141,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     const principalResolver = getBuyerPrincipalResolver()
     const estateResolver = getEstateBindingResolver()
     const tenantVerifier = getWorkloadTenantVerifier()
-    if (
-      !principalResolver ||
-      !estateResolver ||
-      !tenantVerifier ||
-      !req.scope.hasRegistration?.(NATIVE_BUYER_COMMIT_RUNTIME)
-    ) {
+    if (!principalResolver || !estateResolver || !tenantVerifier) {
       return deny(res, correlation, 503)
     }
     // The BFF identity and human are independently verified here AND inside
@@ -182,24 +157,16 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     if (caller.clientId !== human.authorisedParty || caller.issuer !== human.issuer)
       return deny(res, correlation, 401)
 
-    const runtime = req.scope.resolve<NativeBuyerCommitRuntime>(NATIVE_BUYER_COMMIT_RUNTIME)
-    if (
-      !runtime ||
-      typeof runtime.verifyCurrentIssuer !== "function" ||
-      !runtime?.spend ||
-      typeof runtime.markets?.getMarket !== "function" ||
-      typeof runtime.tokens?.getAccessToken !== "function" ||
-      !runtime?.verifyReplay ||
-      !runtime?.resolveTenant
-    ) {
-      return deny(res, correlation, 503)
-    }
+    req.scope.register(NATIVE_BUYER_COMMIT_RUNTIME, asValue(nativeBuyerCommitRuntime()))
+    const runtime = req.scope.resolve<ReturnType<typeof nativeBuyerCommitRuntime>>(
+      NATIVE_BUYER_COMMIT_RUNTIME,
+    )
     const policies = medusaB2BPolicyStore(req.scope.resolve<B2BModuleService>(B2B_MODULE))
     const orders = req.scope.resolve<IOrderModuleService>(Modules.ORDER)
     const carts = req.scope.resolve<ICartModuleService>(Modules.CART)
     const nativeCart = carts as unknown as NativeCartModule
-    const verifyCurrentIssuer: NativeBuyerCommitRuntime["verifyCurrentIssuer"] = (check) =>
-      runtime.verifyCurrentIssuer(check)
+    const verifyCurrentIssuer: CurrentPriceIssuerAuthority = (check) =>
+      runtime.verifyCurrentIssuer(check, correlation)
     const readPurchase = medusaNativeBuyerPurchaseSource({
       orders,
       carts: nativeCart,
@@ -220,24 +187,25 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       requestedCountryCode: b.requested_country_code,
       correlationId: correlation,
     }
+    const buyer: BuyerAuthorityDependencies = {
+      tokens: tokenVerifier,
+      assurance:
+        env.buyerAssurancePolicyJson !== undefined
+          ? loadBuyerAssurancePolicy(env.buyerAssurancePolicyJson, env.buyerIamIssuer)
+          : interimAssurancePolicy({
+              issuer: env.buyerIamIssuer,
+              acceptedAcr: env.buyerAcceptedAcr,
+              approvalReference: env.buyerAssuranceApprovalReference,
+            }),
+      principals: principalResolver,
+      estates: estateResolver,
+      tenants: tenantVerifier,
+      b2b: req.scope.resolve<B2BModuleService>(B2B_MODULE),
+      engineInstanceId: env.tradeEngineInstanceId,
+    }
     const authority = new CurrentNativeBuyerAuthority(
       {
-        buyer: {
-          tokens: tokenVerifier,
-          assurance:
-            env.buyerAssurancePolicyJson !== undefined
-              ? loadBuyerAssurancePolicy(env.buyerAssurancePolicyJson, env.buyerIamIssuer)
-              : interimAssurancePolicy({
-                  issuer: env.buyerIamIssuer,
-                  acceptedAcr: env.buyerAcceptedAcr,
-                  approvalReference: env.buyerAssuranceApprovalReference,
-                }),
-          principals: principalResolver,
-          estates: estateResolver,
-          tenants: tenantVerifier,
-          b2b: req.scope.resolve<B2BModuleService>(B2B_MODULE),
-          engineInstanceId: env.tradeEngineInstanceId,
-        },
+        buyer,
         policies,
         markets: runtime.markets,
         tokens: runtime.tokens,
@@ -252,10 +220,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       request,
     )
     const tenant = await runtime.resolveTenant({
-      callerToken: bearer[1],
-      subjectToken: b.subject_token,
-      cartId: b.cart_id,
-      organisationId: b.requested_organisation_id,
+      cartId,
       countryCode: b.requested_country_code,
       correlationId: correlation,
     })
@@ -277,6 +242,18 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       b.cart_id,
       b.idempotency_key,
     ])
+    const verified = await resolveBuyerCommitIdentity(buyer, request)
+    if (verified.outcome !== "RESOLVED" || verified.identity.tenant_id !== tenant.tenantId)
+      return deny(res, correlation, 403)
+    const replayKey = b.idempotency_key
+    const replay = () => runtime.verifyReplay(tenant, orderId, cartId, replayKey, verified.identity)
+    if (await replay()) {
+      return send(res, 200, correlation, {
+        outcome: "REPLAYED",
+        order_id: orderId,
+        correlation_id: correlation,
+      })
+    }
     const result = await commitMedusaNativeBuyerOrder(
       {
         orderModule: orders,
@@ -311,7 +288,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         correlation_id: correlation,
       })
     }
-    if (result.outcome === "REPLAYED" && (await runtime.verifyReplay(tenant, orderId))) {
+    if (result.outcome === "REPLAYED" && (await replay())) {
       return send(res, 200, correlation, {
         outcome: "REPLAYED",
         order_id: orderId,

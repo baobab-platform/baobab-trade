@@ -3,8 +3,8 @@
 
 ADR-0014, ADR-0017, ADR-0036 and ADR-SHARED-042 Decisions 5–9.
 This verifier never emits or grants a buyer/ERP authority fact. It examines the
-ACTUAL Medusa PostgreSQL records at one repeatable-read snapshot BEFORE broker
-dispatch. A signed CloudEvent, test fixture, span or broker confirmation cannot
+ACTUAL Medusa PostgreSQL records at one repeatable-read snapshot. The original outbox insertion XID survives
+broker dispatch. A signed CloudEvent, test fixture, span or broker confirmation cannot
 substitute for an ENFORCED B2B native commit plus consumption in one transaction.
 
 Migration20261104190000 adds CAA-06b buyer consumption but ships SHADOW.
@@ -63,6 +63,7 @@ class OriginObservation:
     enforced_b2b_commit: bool = False
     exact_commit_transaction: bool = False
     spend_commit_same_transaction: bool = False
+    business_origin: dict[str, str] | None = None
 
 
 def _refuse(code: str) -> None:
@@ -107,7 +108,7 @@ def _read_native_origin(db, event_id: str) -> OriginObservation:
 
     events = db.execute(
         """SELECT event_id, event_type, tenant_id, idempotency_key, envelope,
-                  xmin::text AS insert_xid
+                  native_insert_xid AS insert_xid, envelope_digest
            FROM event_outbox WHERE event_id=%s AND deleted_at IS NULL""",
         (event_id,),
     ).fetchall()
@@ -161,7 +162,9 @@ def _read_native_origin(db, event_id: str) -> OriginObservation:
             or commitment["enforcement_mode"] != "ENFORCED"):
         # A SHADOW decision cannot qualify a native commitment.
         _refuse("NATIVE_B2B_ENFORCEMENT_NOT_QUALIFIED")
-    if (event["insert_xid"] != native[0]["order_xid"]
+    if (not event["insert_xid"]
+            or not re.fullmatch(r"[a-f0-9]{64}", event["envelope_digest"] or "")
+            or event["insert_xid"] != native[0]["order_xid"]
             or event["insert_xid"] != commitment["native_commit_xid"]
             or event["insert_xid"] != commitment["decision_xid"]):
         # A second transaction that writes a plausible outbox row is NOT an
@@ -248,6 +251,13 @@ def _read_native_origin(db, event_id: str) -> OriginObservation:
         qualified=True, code="NATIVE_ORIGIN_SQL_CONFIRMED",
         native_order_readback=True, enforced_b2b_commit=True,
         exact_commit_transaction=True, spend_commit_same_transaction=True,
+        business_origin={
+            "event_id": event_id,
+            "order_id": order_id,
+            "transaction_id": event["insert_xid"],
+            "persisted_envelope_digest": event["envelope_digest"],
+            "traceparent": event["envelope"]["traceparent"],
+        },
     )
 
 
@@ -317,6 +327,7 @@ def main() -> int:
             "native_erp_business_effect_qualified": False,
             "l4_ops_01": "BLOCKED",
             "production_authorized": False,
+            **({"business_origin": observed.business_origin} if observed.qualified else {}),
         }, indent=2, sort_keys=True) + "\n")
     if args.expect_synthetic_refusal:
         if observed.code != "NATIVE_ORDER_ABSENT":

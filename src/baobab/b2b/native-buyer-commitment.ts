@@ -364,8 +364,8 @@ export async function commitAuthorizedNativeBuyerOrder(
       // Medusa module transaction and cannot prove atomicity with this order.
       await db.query(
         `INSERT INTO event_outbox (id,event_id,event_type,subject,tenant_id,owner_legal_entity_id,
-         correlation_id,causation_id,idempotency_key,envelope_digest,envelope,status,attempt_count,next_attempt_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,'PENDING',0,clock_timestamp())`,
+         correlation_id,causation_id,idempotency_key,envelope_digest,envelope,native_insert_xid,status,attempt_count,next_attempt_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,(txid_current() % 4294967296)::text,'PENDING',0,clock_timestamp())`,
         [
           "evtout_" + randomUUID().replaceAll("-", ""),
           original.id,

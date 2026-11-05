@@ -5,6 +5,8 @@ on:
     paths:
       - "src/baobab/b2b/**"
       - "src/modules/b2b/**"
+      - "src/modules/event-outbox/**"
+      - "scripts/*dev11_native_business_origin.py"
       - "src/modules/legal-seller-checkout/**"
       - "src/scripts/regression-spend-reservation-commands.ts"
       - "src/scripts/regression-native-buyer-guard.ts"
@@ -76,6 +78,32 @@ jobs:
           node -e 'const {Client}=require("pg");(async()=>{const db=new Client({connectionString:process.env.DATABASE_URL});try{await db.connect();const r=await db.query("SHOW server_version_num");if(Number(r.rows[0].server_version_num)<170000||Number(r.rows[0].server_version_num)>=180000)throw Error("PostgreSQL 17 required")}finally{await db.end()}})().catch(()=>process.exit(1))'
       - name: Apply actual Medusa 2.21 migrations
         run: npm run migrate
+      - name: Verify governed outbox immutability on PostgreSQL
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          BEGIN;
+          INSERT INTO event_outbox (id,event_id,event_type,subject,correlation_id,idempotency_key,
+            envelope,envelope_digest,native_insert_xid,next_attempt_at)
+          VALUES ('native-outbox-guard-test','native-outbox-guard-test',
+            'com.baobab-platform.trade.order.placed.v1','test','test','native-outbox-guard-test',
+            '{}',repeat('a',64),'client-supplied',now());
+          UPDATE event_outbox SET status='PUBLISHED', published_at=now()
+            WHERE id='native-outbox-guard-test';
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM event_outbox WHERE id='native-outbox-guard-test'
+               AND status='PUBLISHED' AND native_insert_xid=(txid_current()%4294967296)::text) THEN
+              RAISE EXCEPTION 'Insertion XID was not preserved';
+            END IF;
+            BEGIN
+              UPDATE event_outbox SET envelope='{"changed":true}' WHERE id='native-outbox-guard-test';
+              RAISE EXCEPTION 'Mutation unexpectedly passed';
+            EXCEPTION WHEN raise_exception THEN
+              IF SQLERRM <> 'Governed Trade outbox event is immutable' THEN RAISE; END IF;
+            END;
+          END $$;
+          ROLLBACK;
+          SQL
       - name: Real native spend owner transaction, rollback, concurrency, replay
         run: npm run regression:spend-reservation-commands
       - name: Real native CAA-06b buyer-origin security negatives

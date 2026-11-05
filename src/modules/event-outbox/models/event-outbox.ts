@@ -11,6 +11,7 @@ const EventOutbox = model.define(
     digital_estate: model.text().index().nullable(),
     market_key: model.text().index().nullable(),
     envelope_digest: model.text().nullable(),
+    native_insert_xid: model.text().nullable(),
     correlation_id: model.text().index(),
     causation_id: model.text().nullable(),
     idempotency_key: model.text().unique(),

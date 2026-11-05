@@ -526,3 +526,29 @@ owning transaction ID. ERP receives the persisted Trade customer and variant
 IDs, which still require scoped ERP master mappings, and the Trade catalogue
 unit. The disposable PostgreSQL Order Module probe exercises this adapter in a
 rolled-back non-draft component order without creating spend or an event.
+
+### Development runtime and independent readback
+
+Enable `BAOBAB_NATIVE_BUYER_COMMIT_ENABLED=true` only in a disposable
+development or integration environment. Set the CP and IAM workload token URLs
+and use separate registered workload credentials for the Trade order authority
+(`BAOBAB_IAM_WORKLOAD_*`), Market reads (`BAOBAB_NATIVE_BUYER_MARKET_*`) and
+tenant context (`BAOBAB_NATIVE_BUYER_TENANT_*`). CP must admit the Trade
+workload and have an effective issuer approval for the exact Ed25519 public key,
+seller binding version and Market. The approval records separate CP proposer and
+approver principals and the evidence reference. The price provider must issue
+the signed charge package for the bound cart.
+
+Set `BAOBAB_NATIVE_PRICE_ISSUER_ENDPOINT`, `BAOBAB_NATIVE_PRICE_ISSUER_PUBLIC_KEY_PEM`,
+and `BAOBAB_NATIVE_PRICE_PROVIDER_{CLIENT_ID,CLIENT_SECRET,AUDIENCE}` for the
+issuer acquisition command. With an eligible cart in `BAOBAB_NATIVE_PRICE_CART_ID`,
+run `npx medusa exec ./src/scripts/issue-native-cart-charges.ts` before the
+confidential buyer BFF submits the commitment. Trade redeems the original CP
+decision against current authority during the buyer transaction.
+
+With a separate read-only database connection, run
+`NODE_ENV=test python scripts/dev11_native_business_origin.py --event-id <id> --output <receipt>`
+against the same disposable database. The positive receipt carries the event,
+order, insertion transaction ID, stored envelope digest and trace parent
+for the independent trace join. The SQL proof remains source evidence and does
+not qualify downstream ERP or fresh identity on its own.

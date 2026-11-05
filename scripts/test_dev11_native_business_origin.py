@@ -74,7 +74,7 @@ class NativeOriginRefusalTests(unittest.TestCase):
             "event_id": self.event_id, "event_type": EVENT_TYPE,
             "tenant_id": "tn_synthetic",
             "idempotency_key": "some-immutable-key",
-            "envelope": self.envelope, "insert_xid": "101",
+            "envelope": self.envelope, "insert_xid": "101", "envelope_digest": "a" * 64,
         }
 
     def test_refuse_noncanonical_envelope(self):
@@ -168,6 +168,8 @@ class NativeOriginRefusalTests(unittest.TestCase):
         observed = _read_native_origin(Source(self.complete_unit_snapshot()), self.event_id)
         self.assertEqual(observed.code, "NATIVE_ORIGIN_SQL_CONFIRMED")
         self.assertTrue(observed.exact_commit_transaction)
+        self.assertEqual(observed.business_origin["event_id"], self.event_id)
+        self.assertEqual(observed.business_origin["transaction_id"], "101")
 
     def test_later_native_order_cannot_borrow_an_atomic_seller_event_pair(self):
         rows = self.complete_unit_snapshot()
