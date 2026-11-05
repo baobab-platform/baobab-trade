@@ -448,3 +448,70 @@ the previous revision. The Cart Module reader must compute valid totals on
 the uncommitted revision before refusing the absent governed charge package.
 The drill then rolls back the revision and removes the disposable cart. This
 qualifies the transaction boundary independently of an issuer or buyer.
+
+## 5 November — authenticated BFF to current native buyer source
+
+**Implementation status: source code integrated, protected activation blocked.**
+ZuriBeans #156 exposes a separately opted-in, CSRF-checked confidential
+`/api/buyer/commit` route. The browser supplies only cart, selected buyer
+Organisation, country and retry key; the BFF obtains independent current
+human and workload IAM credentials. It forwards neither total, tax, duty,
+seller mandate nor authority receipt. A lost result retries using the same key.
+
+Trade #189 exposes the consequential `/store/b2b/buyer-commit` route in
+development/integration only, with workload/human JWT checks, exact BFF azp
+binding, server-generated native order ID, current Principal/estate/Market
+and CP seller readback, plus the existing same-XID Medusa Order Module owner.
+**No custom checkout state machine or duplicate messaging path** was added.
+
+The route no longer accepts injectable `policies`, `readPurchase` or
+`readFinalCart` sources. Its policy source is the actual B2B module;
+its purchase source reads one ACTIVE seller binding, exactly one active
+Principal-owned spend reservation for that cart/organisation/membership,
+and uniquely resolved shipping/billing registered B2B delivery sites
+matched to actual Medusa cart addresses. The native Cart Module produces
+final valuation on the real Order-owned transaction. A valid source must
+carry a complete seven-charge signed package and fresh CP issuer readback.
+A missing Site, wrong tenant, wrong Principal, stale/changed cart, absent
+charge class, absent source, or inconsistent amount fails closed.
+
+The Currency Module's actual persisted `currency.decimal_digits` is now
+the source of integer precision in the owner transaction. No issuer or
+runtime plugin can assert a different exponent. The owner also checks the
+ERP consequence's currency against that native value. Unit negatives
+cover unavailable or ambiguous currency and a false exponent in an
+otherwise plausible native snapshot.
+
+The price issuer adapter accepts only a bounded Ed25519-signed package from
+an authenticated HTTPS issuer, requires CP approval of that exact
+issuer/tenant/Market/legal entity/policy, and immutably retains the full
+package, signature, key fingerprint, individual explicit charge reasons
+and original cart microsecond timestamp. The native owner independently
+re-verifies the original signature and current CP mandate at BOTH
+cart reads. Zero-rated, exempt and not-applicable reasons are distinct,
+not interchangeable; missing tax/freight/duty is not silently zero.
+
+### Required before a genuine positive is qualified
+
+- Register a **real**, independently approved final-price issuer and CP
+  mandate/current issuer-verification adapter. Provide genuine tax, freight,
+  duty and incidental-charge sources for each selected market/corridor. No
+  fixture/assumed waiver counts as a legal determination.
+- Supply and qualify the runtime's native order-input builder and genuine
+  persisted order/ERP-consequence readback, plus CP-authorised tenant
+  resolution and independent durable replay verification.
+- Prepare a legitimate buyer cart with signed current final price, selected
+  registered delivery sites, an actual Principal-owned ACTIVE spend hold,
+  adequate budget and a current consequential IAM/CP approval. The ordinary
+  buyer-context discovery ALLOW is insufficient.
+- Independently read back one non-draft Medusa order, matching native
+  seller/buyer consumptions, spend COMMIT and original canonical outbox
+  event with the same PostgreSQL transaction ID, and then connect that exact
+  event to RabbitMQ, ERP JVM and exported W3C spans.
+- Run **final-head** full CI, PostgreSQL migrations, security and all required
+  negative cases before changing the Decision 9 SHADOW posture or L4-OPS-01
+  verdict. Development may provision/tests; staging/production remain
+  separately approved and disabled.
+
+These source-only tests and prior real Order Module transaction drills
+are not a positive buyer order and must never be reported as L4 acceptance.
