@@ -271,7 +271,7 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
     "SELECT d.charge_kind,d.resolution,d.amount_minor,d.currency,d.source_reference," +
     "d.evaluated_at,d.expires_at,d.resource_version,a.issuer_id," +
     "a.attestation_id::text AS attestation_id,a.cp_decision_id::text AS cp_decision_id," +
-    "a.source_digest,a.policy_reference " +
+    "a.source_digest,a.policy_reference,a.cart_updated_at_exact " +
     "FROM trade_native_cart_charge_determination d " +
     "JOIN trade_native_cart_charge_authority a USING " +
     "(tenant_id,cart_id,market_id,seller_legal_entity_id,resource_version,charge_kind) " +
@@ -292,6 +292,7 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
         date(row.evaluated_at) > now.getTime() ||
         date(row.expires_at) <= now.getTime() ||
         typeof row.source_reference !== "string" || !REF.test(row.source_reference) ||
+        row.cart_updated_at_exact !== locked.updatedAtExact ||
         typeof row.issuer_id !== "string" || !REF.test(row.issuer_id) ||
         typeof row.attestation_id !== "string" ||
         !/^[0-9a-f-]{36}$/i.test(row.attestation_id) ||
@@ -316,7 +317,7 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
     references[kind] = row.source_reference
     proofs.push([kind, row.resolution, value, row.source_reference, date(row.expires_at),
       row.issuer_id, row.attestation_id, row.cp_decision_id,
-      row.source_digest, row.policy_reference])
+      row.source_digest, row.policy_reference, row.cart_updated_at_exact])
   }
   // One coherent signed price package and CP decision; mixing multiple
   // issuers' separate answers would bypass whole-cart governance.
