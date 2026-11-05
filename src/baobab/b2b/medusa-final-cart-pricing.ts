@@ -147,6 +147,41 @@ function assertSameIds(actual: RecordValue[], native: RecordValue[], code: strin
   if (JSON.stringify(a) !== JSON.stringify(b)) refuse(code)
 }
 
+/**
+ * Ready-to-compose native Cart Module boundary. A caller can register this
+ * function as its NativeMedusaOrderSource.readFinalCart implementation, but
+ * the caller must still provide genuine native order/ERP readers and fresh
+ * IAM/CP operation authority. No endpoint or provider is activated here.
+ */
+export function nativeMedusaCartPriceReadback(
+  cartModule: NativeCartModule,
+  currencyExponent: (db: Query, currency: string) => Promise<number>,
+) {
+  return async (
+    db: Query,
+    _nativeOrderId: string,
+    authority: { receipt: {
+      resource_id: string; tenant_id: string; market_id: string;
+      seller_legal_entity_id: string; currency: string
+    } },
+    manager: unknown,
+  ): Promise<NativeFinalCartPrice> => {
+    if (typeof currencyExponent !== "function" ||
+        !authority?.receipt?.resource_id || !authority?.receipt?.tenant_id ||
+        !authority.receipt.market_id || !authority.receipt.seller_legal_entity_id) {
+      return refuse("READER_UNAVAILABLE")
+    }
+    return readMedusaFinalCartPrice({
+      db, transactionManager: manager, cartModule,
+      cartId: authority.receipt.resource_id,
+      tenantId: authority.receipt.tenant_id,
+      marketId: authority.receipt.market_id,
+      sellerLegalEntityId: authority.receipt.seller_legal_entity_id,
+      currencyExponent: await currencyExponent(db, authority.receipt.currency),
+    })
+  }
+}
+
 export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Promise<NativeFinalCartPrice> {
   const now = scope.now ?? new Date()
   if (!Number.isSafeInteger(scope.currencyExponent) ||
@@ -262,7 +297,7 @@ export async function readMedusaFinalCartPrice(scope: NativeCartPriceScope): Pro
   if (cost.TAX !== tax || cost.FREIGHT !== freight) {
     return refuse("TAX_OR_FREIGHT_MISMATCH")
   }
-  proofs.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b), "en"))
+  proofs.sort((a, b) => JSON.stringify(a) < JSON.stringify(b) ? -1 : JSON.stringify(a) > JSON.stringify(b) ? 1 : 0)
   const components = [
     ...lineComponents,
     component("ORDER_DISCOUNT", -discount, "native:cart-discount:" + scope.cartId),
