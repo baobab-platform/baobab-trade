@@ -128,6 +128,22 @@ describe("DEV-07 genuine source-owned final charge issuer (source-only)", () => 
     nonzero.charges[2].amountMinor = "3"
     await denied(nonzero)
   })
+  it("will not relabel tax exemption as an Incoterm not-applicable finding", async () => {
+    const wrong = evidence()
+    const tax = wrong.charges.find((line) => line.kind === "TAX")!
+    tax.resolution = "EXEMPT"
+    tax.amountMinor = "0"
+    tax.zeroReason = "NOT_APPLICABLE_PER_INCOTERM"
+    await denied(wrong)
+    const valid = evidence()
+    const taxed = valid.charges.find((line) => line.kind === "TAX")!
+    taxed.resolution = "ZERO_RATED"
+    taxed.amountMinor = "0"
+    taxed.zeroReason = "ZERO_RATE_AUTHORISED"
+    await expect(
+      verifyGovernedChargeEvidence(signed(valid), cp, keys.publicKey, now),
+    ).resolves.toMatchObject({ evidence: valid })
+  })
   it("refuses false provider signatures, expired mandate and wrong seller", async () => {
     const envelope = signed(evidence())
     envelope.signature = "A".repeat(86)
