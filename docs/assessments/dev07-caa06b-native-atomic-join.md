@@ -355,3 +355,53 @@ It does not implement the missing governed native cart reader or qualify the
 live buyer operation provider, and cannot qualify the non-draft CAA-06b buyer positive or
 L4-OPS-01. The future genuine buyer event uses the same immutable handoff and
 publisher/consumer path without another transport implementation.
+
+
+## 5 November 2026 — final native cart pricing and change-detection boundary
+
+**SOURCE IMPLEMENTED; CONNECTED COMMITMENT AND L4 HELD.** The Order Module
+owner now requires a priced native cart read before createOrders and re-reads
+it after its order/spend/outbox mutation, still within the same owner transaction.
+An absent or changed price, scope, version, determination, line, shipping
+method or source fingerprint throws out of that transaction. No partial order,
+buyer consumption, spend conversion or canonical event may commit.
+
+The concrete Medusa Cart Module reader is in
+src/baobab/b2b/medusa-final-cart-pricing.ts. Native cart rows do not contain
+calculated totals: this reader locks actual native cart/item/shipping and
+linked tax/adjustment records, then explicitly requests computed native
+item, shipping, tax, discount and grand totals through the Cart Module with
+the owning transactionManager. It checks complete item and shipping ID
+sets, exact money conversion and all subtotal arithmetic. Credit lines and
+gift-card tender cannot silently reduce the buyer obligation.
+
+Migration20261105043000 creates immutable, scope/version-specific,
+time-bounded determinations for TAX, FREIGHT, DUTY, HANDLING, INSURANCE,
+SERVICE_CHARGE and REFUNDABLE_DEPOSIT. All seven records are required.
+Missing tax, freight or duty is a refusal, never an implicit zero.
+A zero must have an explicit source reference and an applicable
+ZERO_RATED, EXEMPT or NOT_APPLICABLE determination. Positive charges must
+be CHARGED. Tax and freight must agree with Medusa's native computed totals.
+The full cart including product variants, quantities, shipping IDs, raw
+PostgreSQL cart revision timestamp, source references, charge reasons and
+expiration is cryptographically bound into the price transaction digest.
+The resource version is the native cart updated_at epoch-millisecond value;
+the exact timestamp remains in the hash to detect submillisecond changes.
+At commit, both the valuation digest and source fingerprint must match the
+buyer-authorised version/amount and the original in-transaction read.
+
+Regression tests cover missing fee determinations, unjustified zero,
+nonzero exemption, missing computed totals, stale/foreign provenance,
+same-total variant/source substitution, changed shipping, prewrite refusal
+and precommit rollback. The native PostgreSQL 17 guard drill checks actual
+immutability and charge constraints. These do not certify the real Medusa
+Cart Module provider or legal source of a quote.
+
+**Remaining non-waivable owner tasks:** connect an IAM/CP-governed issuer
+that writes the determination rows from genuine tax, freight and regulatory
+sources; qualify the source adapter against pinned Medusa 2.21.2 native
+amounts and relations in real runtime; issue the buyer authority/valuation
+from exactly this source fingerprint; then qualify genuine non-draft
+same-XID buyer/seller/spend/order/outbox COMMIT, the same event in ERP and
+independently exported lineage. An unprivileged row insert is not authority.
+Decision 9 remains SHADOW, checkout stays disabled and L4-OPS-01 is BLOCKED.
