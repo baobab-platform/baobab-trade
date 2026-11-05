@@ -184,6 +184,7 @@ export const PROTECTED_ORDER_PREFIXES = [
   "/admin/reservations",
   "/store/carts",
   "/store/orders",
+  "/store/b2b/buyer-commit",
   "/store/returns",
   "/store/payment-collections",
 ] as const
@@ -198,6 +199,10 @@ type Classified = { method: string; path: RegExp } & (
 
 /** The explicit allowlist: the only mutations under the prefixes that are not denied. */
 const CLASSIFIED: readonly Classified[] = [
+  // Only this exact confidential operation is routed to the CAA-06b native
+  // Order Module transaction owner. It is never a generic B2B mutation pass.
+  { method: "POST", path: route("/store/b2b/buyer-commit"), decision: "trade-a",
+    operationClass: "trade.order.commit", enforcedBy: "workflow" },
   {
     method: "POST",
     path: route("/store/carts/:id/complete"),
