@@ -1,47 +1,41 @@
+# BA-SEC-DEP-001 — Approved dependency/security maintenance policy v1.0.
+# Actual Trade inputs: npm@10/11 package-lock.json (per current main),
+# root runtime/DEV-07/DEV-11 Dockerfiles, root docker-compose.yml and Actions.
+# Security patches are advisory-driven, never delayed for the Monday cadence.
+# Do not invent default-branch overrides or bypass the existing CAA-06b holds.
 version: 2
-
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Africa/Johannesburg"
+    schedule: {interval: "weekly", day: "monday", time: "06:00", timezone: "Africa/Johannesburg"}
     open-pull-requests-limit: 5
     labels: ["dependencies", "github-actions"]
-    commit-message:
-      prefix: "chore"
-      prefix-development: "chore"
-      include: "scope"
-    target-branch: "main"
+    commit-message: {prefix: "chore", include: "scope"}
+    groups:
+      actions-routine:
+        applies-to: "version-updates"
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
+  # Keep Medusa, SDK and runtime dependencies independently reviewable;
+  # CAA-06b native buyer/price/commitment negatives are mandatory.
   - package-ecosystem: "npm"
     directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:30"
-      timezone: "Africa/Johannesburg"
+    schedule: {interval: "weekly", day: "monday", time: "06:20", timezone: "Africa/Johannesburg"}
     open-pull-requests-limit: 5
     labels: ["dependencies", "javascript"]
-    commit-message:
-      prefix: "chore"
-      prefix-development: "chore"
-      include: "scope"
-    target-branch: "main"
+    commit-message: {prefix: "chore", include: "scope"}
 
   - package-ecosystem: "docker"
     directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "07:00"
-      timezone: "Africa/Johannesburg"
+    schedule: {interval: "weekly", day: "monday", time: "06:40", timezone: "Africa/Johannesburg"}
     open-pull-requests-limit: 5
     labels: ["dependencies", "container"]
-    commit-message:
-      prefix: "chore"
-      prefix-development: "chore"
-      include: "scope"
-    target-branch: "main"
+    commit-message: {prefix: "chore", include: "scope"}
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule: {interval: "weekly", day: "monday", time: "07:00", timezone: "Africa/Johannesburg"}
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "container"]
+    commit-message: {prefix: "chore", include: "scope"}

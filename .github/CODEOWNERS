@@ -6,3 +6,8 @@
 /src/ @baobab-platform/platform-engineering
 /contracts.lock.yaml @baobab-platform/platform-engineering
 /SECURITY.md @baobab-platform/security
+/docs/security/dependency-maintenance.md @baobab-platform/platform-engineering @baobab-platform/security
+/tests/unit/test_dependency_maintenance.py @baobab-platform/platform-engineering @baobab-platform/security
+/.baobab/repository.yaml @baobab-platform/platform-engineering @baobab-platform/security
+/docker-compose.yml @baobab-platform/platform-engineering @baobab-platform/security
+/package-lock.json @baobab-platform/platform-engineering @baobab-platform/security
