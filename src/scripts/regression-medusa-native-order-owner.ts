@@ -65,6 +65,7 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
   const carts = container.resolve<ICartModuleService>(Modules.CART)
   let cartId: string | undefined
   let committedId: string | undefined
+  let ownedProfile: { id: string; productId: string } | undefined
   try {
     const version = await pool.query("SELECT current_setting('server_version_num')::int AS v")
     assert.equal(Math.floor(version.rows[0].v / 10000), 17)
@@ -208,6 +209,8 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
     // Those belong to the separately authorised connected buyer transaction.
     const nonDraftId = id()
     const profileId = "b2bprod_" + productId
+    committedId = nonDraftId
+    ownedProfile = { id: profileId, productId }
     const committedNonDraft = await withNativeMedusaOrderTransaction(
       orders,
       async ({ db, manager, xid }) => {
@@ -271,6 +274,7 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
       profileId,
       productId,
     ])
+    ownedProfile = undefined
     await carts.deleteCarts([cart.id])
     cartId = undefined
 
@@ -378,6 +382,13 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
     // Only disposable records named by this run may be cleaned.
     if (cartId) await carts.deleteCarts([cartId]).catch(() => undefined)
     if (committedId) await orders.deleteOrders([committedId]).catch(() => undefined)
+    if (ownedProfile)
+      await pool
+        .query("DELETE FROM b2b_product_trade_profile WHERE id=$1 AND product_id=$2", [
+          ownedProfile.id,
+          ownedProfile.productId,
+        ])
+        .catch(() => undefined)
     await pool.end()
   }
 }
