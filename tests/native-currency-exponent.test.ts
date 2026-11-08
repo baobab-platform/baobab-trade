@@ -19,7 +19,7 @@ describe("DEV-07 actual Medusa Currency precision", () => {
       )
     }
   })
-  it.each([
+  const invalidNativePrecision: { rows: Record<string, unknown>[] }[] = [
     { rows: [] },
     { rows: [{ decimal_digits: 2 }, { decimal_digits: 2 }] },
     { rows: [{ decimal_digits: null }] },
@@ -27,11 +27,15 @@ describe("DEV-07 actual Medusa Currency precision", () => {
     { rows: [{ decimal_digits: "2.0" }] },
     { rows: [{ decimal_digits: -1 }] },
     { rows: [{ decimal_digits: 10 }] },
-  ])("rejects unavailable, ambiguous or invalid native precision %j", async ({ rows }) => {
+  ]
+  it.each(invalidNativePrecision)(
+    "rejects unavailable, ambiguous or invalid native precision %j",
+    async ({ rows }) => {
     await expect(readNativeCurrencyExponent(db(rows), "ZAR")).rejects.toThrow(
       "NATIVE_CURRENCY_METADATA_UNAVAILABLE",
     )
-  })
+    },
+  )
   it("does not accept untrusted currency identifiers or SQL errors", async () => {
     const source = db([{ decimal_digits: 2 }])
     await expect(readNativeCurrencyExponent(source, "zar")).rejects.toThrow()
