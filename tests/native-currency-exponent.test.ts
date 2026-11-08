@@ -31,9 +31,9 @@ describe("DEV-07 actual Medusa Currency precision", () => {
   it.each(invalidNativePrecision)(
     "rejects unavailable, ambiguous or invalid native precision %j",
     async ({ rows }) => {
-    await expect(readNativeCurrencyExponent(db(rows), "ZAR")).rejects.toThrow(
-      "NATIVE_CURRENCY_METADATA_UNAVAILABLE",
-    )
+      await expect(readNativeCurrencyExponent(db(rows), "ZAR")).rejects.toThrow(
+        "NATIVE_CURRENCY_METADATA_UNAVAILABLE",
+      )
     },
   )
   it("does not accept untrusted currency identifiers or SQL errors", async () => {
