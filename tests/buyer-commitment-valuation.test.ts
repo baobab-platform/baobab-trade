@@ -78,6 +78,42 @@ describe("CAA-06b final buyer obligation (non-binding source kernel)", () => {
     }
   })
 
+  it("accepts a safe final amount regardless of intermediate BigInt subtotal or component order", () => {
+    const components: FinalNativeValuationFacts["components"] = [
+      {
+        component_kind: "MERCHANDISE",
+        amount_minor: Number.MAX_SAFE_INTEGER,
+        determination: "FINAL",
+        source_reference: "line_exact_safe",
+      },
+      {
+        component_kind: "SHIPPING",
+        amount_minor: 1,
+        determination: "FINAL",
+        source_reference: "shipping_exact_plus",
+      },
+      {
+        component_kind: "ORDER_DISCOUNT",
+        amount_minor: -1,
+        determination: "FINAL",
+        source_reference: "discount_exact_minus",
+      },
+    ]
+    const orders = [
+      components,
+      [...components].reverse(),
+      [components[0], components[2], components[1]],
+    ]
+    const fingerprints = new Set<string>()
+    for (const ordered of orders) {
+      const result = val({ ...REFERENCE, components: ordered })
+      expect(result.buyer_commitment_amount_minor).toBe(Number.MAX_SAFE_INTEGER)
+      expect(buyerCommitmentValuationSchema(result)).toBe(true)
+      fingerprints.add(result.valuation_digest)
+    }
+    expect(fingerprints.size).toBe(1)
+  })
+
   it("rejects invalid Unicode and clocks that cannot produce the canonical date-time", () => {
     for (const resource_id of ["\ud800", "cart_\udfff", "🌍".repeat(129)]) {
       expect(() => val({ ...REFERENCE, resource_id })).toThrow("VALUATION_INVALID")
