@@ -26,7 +26,7 @@ jobs:
       - name: DEV-07 bounded formatter source readback (CI diagnostic only)
         if: failure()
         run: |
-          npx --no-install prettier --write src/api/store/b2b/buyer-commit/route.ts src/baobab/b2b/governed-cart-charge-issuer.ts src/baobab/b2b/medusa-final-cart-pricing.ts src/modules/legal-seller-checkout/migrations/Migration20261105063000.ts tests/governed-cart-charge-issuer.test.ts
+          npx --no-install prettier --write src/api/store/b2b/buyer-commit/route.ts src/baobab/b2b/governed-cart-charge-issuer.ts src/baobab/b2b/medusa-final-cart-pricing.ts src/modules/legal-seller-checkout/migrations/Migration20261105063000.ts tests/governed-cart-charge-issuer.test.ts tests/native-currency-exponent.test.ts src/scripts/regression-medusa-native-order-owner.ts docs/development/DEV-07-SYNTHETIC-PRICE-ISSUER.md
           node - <<'NODE'
           const {readFileSync} = require('node:fs')
           const files = [
@@ -35,6 +35,9 @@ jobs:
             'src/baobab/b2b/medusa-final-cart-pricing.ts',
             'src/modules/legal-seller-checkout/migrations/Migration20261105063000.ts',
             'tests/governed-cart-charge-issuer.test.ts',
+            'tests/native-currency-exponent.test.ts',
+            'src/scripts/regression-medusa-native-order-owner.ts',
+            'docs/development/DEV-07-SYNTHETIC-PRICE-ISSUER.md',
           ]
           for (const file of files) {
             console.log('DEV07_FORMATTED_SOURCE ' + file + ' ' + readFileSync(file).toString('base64'))
