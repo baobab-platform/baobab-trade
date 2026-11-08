@@ -201,6 +201,76 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
       (await pool.query('SELECT 1 FROM "order" WHERE id=$1', [componentOrderId])).rowCount,
       0,
     )
+
+    // Positive native *component* witness: persist the exact non-draft Order
+    // Module business DTO and original line items through the same owner XID.
+    // There is intentionally no buyer receipt, budget ledger or event here.
+    // Those belong to the separately authorised connected buyer transaction.
+    const nonDraftId = id()
+    const profileId = "b2bprod_" + productId
+    const committedNonDraft = await withNativeMedusaOrderTransaction(
+      orders,
+      async ({ db, manager, xid }) => {
+        await db.query(
+          `INSERT INTO b2b_product_trade_profile
+        (id,product_id,canonical_product_key,country_of_origin,hs_classification_reference,commodity_category,
+         trade_uom,net_weight_kg,gross_weight_kg,packaging,export_eligibility_reference,commodity_attributes)
+        VALUES ($1,$2,$2,'ZA','native-component-probe','component-probe','BAG',1,1,'BAG','component-probe','{}')`,
+          [profileId, productId],
+        )
+        const candidate = await source.orderInput(db, nonDraftId, facts)
+        assert.equal(candidate.is_draft_order, false)
+        assert.equal(candidate.status, "pending")
+        const created = await orders.createOrders(candidate, {
+          transactionManager: manager,
+        } as never)
+        assert.equal(created.id, nonDraftId)
+        const row = await db.query(
+          'SELECT xmin::text AS xid, is_draft_order,status FROM "order" WHERE id=$1 AND deleted_at IS NULL',
+          [nonDraftId],
+        )
+        assert.equal(row.rowCount, 1)
+        assert.equal(row.rows[0].xid, nativeXid32(xid))
+        assert.equal(row.rows[0].is_draft_order, false)
+        assert.equal(row.rows[0].status, "pending")
+        const snapshot = await source.readFinal(db, nonDraftId, facts)
+        assert.equal(snapshot.erp.totals.grand_total.amount, "24.60")
+        assert.equal(snapshot.erp.totals.quoted_tax.amount, "4.10")
+        const items = await db.query(
+          `SELECT oi.xmin::text AS item_xid, li.xmin::text AS line_xid
+           FROM order_item oi JOIN order_line_item li ON li.id=oi.item_id
+           WHERE oi.order_id=$1 AND oi.deleted_at IS NULL AND li.deleted_at IS NULL`,
+          [nonDraftId],
+        )
+        assert.equal(items.rowCount, 1)
+        assert.equal(items.rows[0].item_xid, nativeXid32(xid))
+        assert.equal(items.rows[0].line_xid, nativeXid32(xid))
+        return { xid: nativeXid32(xid), total: snapshot.erp.totals.grand_total.amount }
+      },
+    )
+    committedId = nonDraftId
+    const persistedNonDraft = await pool.query(
+      'SELECT xmin::text AS xid,is_draft_order,status FROM "order" WHERE id=$1 AND deleted_at IS NULL',
+      [nonDraftId],
+    )
+    assert.equal(persistedNonDraft.rowCount, 1)
+    assert.equal(persistedNonDraft.rows[0].xid, committedNonDraft.xid)
+    assert.equal(persistedNonDraft.rows[0].is_draft_order, false)
+    assert.equal(persistedNonDraft.rows[0].status, "pending")
+    assert.equal(committedNonDraft.total, "24.60")
+    await orders.deleteOrders([nonDraftId])
+    assert.equal(
+      (await pool.query('SELECT 1 FROM "order" WHERE id=$1 AND deleted_at IS NULL', [nonDraftId]))
+        .rowCount,
+      0,
+    )
+    committedId = undefined
+    // Custom trade-profile fixture is test-owned; delete by the exact random
+    // product key and profile ID, never by tenant/global wildcard.
+    await pool.query("DELETE FROM b2b_product_trade_profile WHERE id=$1 AND product_id=$2", [
+      profileId,
+      productId,
+    ])
     await carts.deleteCarts([cart.id])
     cartId = undefined
 
@@ -288,6 +358,8 @@ export default async function qualifyNativeOrderModule({ container }: ExecArgs) 
           absent_charge_evidence_refused: true,
           native_module_create_orders_executed: true,
           native_order_facts_adapter_rolled_back: true,
+          independent_non_draft_native_order_and_lines_committed: true,
+          native_non_draft_order_deleted_by_order_module: true,
           genuine_native_order_and_line_same_xid: true,
           rejected_native_order_rolled_back: true,
           independent_committed_native_order_readback: true,
