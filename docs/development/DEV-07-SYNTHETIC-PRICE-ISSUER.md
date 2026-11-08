@@ -30,8 +30,7 @@ Run the original read-only scripts/dev11_native_business_origin.py on a separate
 
 Dispatch that exact event ID via the existing confirmed RabbitMQ publisher; independently join its unchanged payload digest through ERP #125 durable inbox, JVM native effect, CP authority and exported OTel graph. Infrastructure #72 must independently retain run-owned source hashes, original artefacts, negative results and disposal. This doc and source tests do not prove a successful connected buyer order; absent issuer, IAM client, CP issuer approval or native test fixtures remain BLOCKED. ERP postings, supplier import docs, payments, transport and production admission remain separately qualified.
 
-Do not merge Trade #189, CP #465, Infrastructure #72, ERP #125, or companion PRs before platform-owner review.
-
+ERP #125 has merged with its independently verified **synthetic-origin JVM** acceptance; that evidence does not qualify the original genuine buyer order. Trade #189, CP #465 and Infrastructure #72 remain unmerged and subject to final development acceptance.
 
 ## Original persisted event handoff — added 5 November 2026
 

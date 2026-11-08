@@ -10,8 +10,8 @@ export class Migration20261105043000 extends Migration {
   async up(): Promise<void> {
     this.addSql(
       "CREATE TABLE trade_native_cart_charge_determination (" +
-        "tenant_id text NOT NULL, cart_id text NOT NULL, market_id text NOT NULL," +
-        "seller_legal_entity_id text NOT NULL, resource_version bigint NOT NULL," +
+        "tenant_id text NOT NULL, cart_id text NOT NULL, market_id text NOT NULL, " +
+        "seller_legal_entity_id text NOT NULL, resource_version bigint NOT NULL, " +
         "charge_kind text NOT NULL CHECK (charge_kind IN (" +
         "'TAX','FREIGHT','DUTY','HANDLING','INSURANCE','SERVICE_CHARGE','REFUNDABLE_DEPOSIT'))," +
         "resolution text NOT NULL CHECK (resolution IN (" +
@@ -20,7 +20,7 @@ export class Migration20261105043000 extends Migration {
         "AND amount_minor <= 9007199254740991)," +
         "currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$')," +
         "source_reference text NOT NULL CHECK (length(source_reference) BETWEEN 8 AND 200)," +
-        "evaluated_at timestamptz NOT NULL, expires_at timestamptz NOT NULL," +
+        "evaluated_at timestamptz NOT NULL, expires_at timestamptz NOT NULL, " +
         "recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()," +
         "PRIMARY KEY(tenant_id,cart_id,market_id,seller_legal_entity_id,resource_version,charge_kind)," +
         "CHECK (resource_version > 0)," +
