@@ -1,0 +1,34 @@
+name: ADR-0008 Development Conformance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  startup-and-boundaries:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install reproducible dependencies
+        run: npm ci
+      - name: Check ADR-0008 implementation formatting
+        run: |
+          npx prettier --check \
+            medusa-config.ts src/baobab/config/environment.ts src/baobab/config/startup-validation.ts \
+            tests/adr-0008-startup-validation.test.ts tests/adr-0008-architecture-boundaries.test.ts \
+            docs/operations/adr-0008-runtime-configuration.md .github/workflows/adr-0008-development-conformance.yml
+      - name: Execute ADR-0008 development contract tests
+        run: |
+          npx vitest run \
+            tests/adr-0008-startup-validation.test.ts \
+            tests/adr-0008-architecture-boundaries.test.ts
