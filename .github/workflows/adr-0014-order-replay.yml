@@ -1,0 +1,21 @@
+name: ADR-0014 Order Replay Development Conformance
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  immutable-purchase:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Replay substitution and order port regressions
+        run: npx vitest run tests/order-orchestration.test.ts tests/adr-0014-order-replay.test.ts
+      - name: Format check
+        run: npx prettier --check src/baobab/orders/orchestration-port.ts tests/adr-0014-order-replay.test.ts docs/development/ADR-0014-2026-11-09-implementation-audit.md
