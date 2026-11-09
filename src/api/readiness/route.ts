@@ -1,10 +1,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { getBaobabTradeEnvironment } from "../../baobab/config/environment"
-import {
-  checkTradeReadiness,
-  type TradeDatabaseProbe,
-} from "../../baobab/health/readiness"
+import { checkTradeReadiness, type TradeDatabaseProbe } from "../../baobab/health/readiness"
 
 /**
  * ADR-0007 §47: this is a traffic-admission probe, not a liveness probe.
