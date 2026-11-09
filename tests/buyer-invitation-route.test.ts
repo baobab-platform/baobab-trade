@@ -42,13 +42,20 @@ describe("buyer organisation invitations", () => {
   it("lists members without evaluating invitation-only request fields", async () => {
     const b2b = {
       retrieveB2BOrganisation: vi.fn(async () => ({
-        id: "b2borg_1", tenant_id: "tn_zuribeans", status: "ACTIVE",
+        id: "b2borg_1",
+        tenant_id: "tn_zuribeans",
+        status: "ACTIVE",
       })),
       listBuyerMemberships: vi
         .fn()
-        .mockResolvedValueOnce([{
-          id: "b2bmem_admin", organisation_id: "b2borg_1", customer_id: "cus_admin", status: "ACTIVE",
-        }])
+        .mockResolvedValueOnce([
+          {
+            id: "b2bmem_admin",
+            organisation_id: "b2borg_1",
+            customer_id: "cus_admin",
+            status: "ACTIVE",
+          },
+        ])
         .mockResolvedValueOnce([
           {
             id: "b2bmem_invited",
