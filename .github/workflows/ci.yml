@@ -381,7 +381,7 @@ jobs:
       NODE_ENV: production
       BAOBAB_ENVIRONMENT: development
       BAOBAB_TRADE_ENGINE_ID: baobab-trade
-      BAOBAB_TRADE_ENGINE_INSTANCE_ID: ei_ci_fixture01
+      BAOBAB_TRADE_ENGINE_INSTANCE_ID: ei_cifixture01
       BAOBAB_REGION: local
       BAOBAB_DEPLOYMENT_REVISION: ${{ github.sha }}
       DATABASE_URL: postgres://baobab_trade:baobab_trade@localhost:5432/baobab_trade_production_test
