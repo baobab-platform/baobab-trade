@@ -79,7 +79,9 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   await requireLegacyTenantOrganisation(b2b, organisationId)
   await requireActiveMember(b2b, organisationId, customerId)
 
-  const sites = await b2b.listDeliverySites({ organisation_id: organisationId })
+  const sites = (await b2b.listDeliverySites({ organisation_id: organisationId })).filter(
+    (site) => site.organisation_id === organisationId,
+  )
 
   res.status(200).json({
     delivery_sites: sites.map((s) => ({
