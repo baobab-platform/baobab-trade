@@ -148,6 +148,8 @@ export function resolveCommercialPrice(
     deny("customer margin policy belongs to another buyer")
   for (const value of [cost.sourceReference, cost.version, policy.policyReference, policy.version])
     if (!validId(value)) deny("missing or invalid cost/policy provenance")
+  if (!["ACTUAL_LANDED", "ESTIMATED_LANDED", "WEIGHTED_AVERAGE", "STANDARD", "REPLACEMENT"].includes(cost.costBasisType))
+    deny("unknown cost-basis type")
   if (cost.sourceSystem !== "ERP" && cost.sourceSystem !== "GOVERNED_ESTIMATE")
     deny("unknown cost evidence source")
   if (cost.costBasisType !== "ESTIMATED_LANDED" && cost.costBasisType !== "REPLACEMENT" &&
