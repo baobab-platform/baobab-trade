@@ -97,6 +97,38 @@ describe("ZB-04 buyer KYB evidence", () => {
     expect(b2b.createBuyerApplicationEvidences).not.toHaveBeenCalled()
   })
 
+  it("refuses future-issued, malformed or unproven KYB documents even if marked VERIFIED", async () => {
+    const good = (evidence_type: string) => ({
+      evidence_type,
+      canonical_document_id: "doc-" + evidence_type,
+      document_version: "v1",
+      content_sha256: "a".repeat(64),
+      issued_at: new Date("2026-01-01T00:00:00Z"),
+      expires_at: new Date("2099-01-01T00:00:00Z"),
+    })
+    const b2b = {
+      listBuyerApplicationEvidences: vi.fn(async () => [
+        good("COMPANY_REGISTRATION"),
+        good("TAX_REGISTRATION"),
+        { ...good("AUTHORIZED_REPRESENTATIVE"), issued_at: new Date("2099-01-01T00:00:00Z") },
+      ]),
+    }
+    await expect(assertVerifiedBuyerKybPackage(b2b as never, "app-1", "tenant-1"))
+      .rejects.toThrow("AUTHORIZED_REPRESENTATIVE")
+    b2b.listBuyerApplicationEvidences.mockResolvedValueOnce([
+      good("COMPANY_REGISTRATION"),
+      { ...good("TAX_REGISTRATION"), content_sha256: "bad" },
+      good("AUTHORIZED_REPRESENTATIVE"),
+    ])
+    await expect(assertVerifiedBuyerKybPackage(b2b as never, "app-1", "tenant-1"))
+      .rejects.toThrow("TAX_REGISTRATION")
+    b2b.listBuyerApplicationEvidences.mockResolvedValueOnce([
+      good("COMPANY_REGISTRATION"),good("TAX_REGISTRATION"),good("AUTHORIZED_REPRESENTATIVE"),
+    ])
+    await expect(assertVerifiedBuyerKybPackage(b2b as never, "app-1", "tenant-1"))
+      .resolves.toBeUndefined()
+  })
+
   it("blocks review when the verified baseline package is incomplete", async () => {
     const b2b = {
       listBuyerApplicationEvidences: vi.fn(async () => [{ evidence_type: "COMPANY_REGISTRATION" }]),
