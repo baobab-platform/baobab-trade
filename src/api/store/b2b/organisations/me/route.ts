@@ -36,41 +36,44 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
 
   res.status(200).json({
     applications: applications
-      .filter((application) => application.tenant_id === tenantId && application.applicant_customer_id === customerId)
+      .filter(
+        (application) =>
+          application.tenant_id === tenantId && application.applicant_customer_id === customerId,
+      )
       .map((application) => ({
-      id: application.id,
-      status: application.status,
-      legal_name: application.legal_name,
-      trading_name: application.trading_name,
-      registration_number: application.registration_number,
-      country_of_registration: application.country_of_registration,
-      requested_market_keys: application.requested_market_keys,
-      submitted_at: application.submitted_at,
-      revision: application.revision,
-    })),
+        id: application.id,
+        status: application.status,
+        legal_name: application.legal_name,
+        trading_name: application.trading_name,
+        registration_number: application.registration_number,
+        country_of_registration: application.country_of_registration,
+        requested_market_keys: application.requested_market_keys,
+        submitted_at: application.submitted_at,
+        revision: application.revision,
+      })),
     organisations: ownedMemberships
       .filter((membership) => orgById.has(membership.organisation_id))
       .map((membership) => {
-      const organisation = orgById.get(membership.organisation_id)
-      return {
-        organisation: organisation
-          ? {
-              id: organisation.id,
-              legal_name: organisation.legal_name,
-              trading_name: organisation.trading_name,
-              registration_number: organisation.registration_number,
-              status: organisation.status,
-              tenant_id: organisation.tenant_id,
-              default_market_key: organisation.default_market_key,
-              canonical_organisation_id: organisation.canonical_organisation_id,
-            }
-          : null,
-        membership: {
-          id: membership.id,
-          status: membership.status,
-          customer_id: membership.customer_id,
-        },
-      }
+        const organisation = orgById.get(membership.organisation_id)
+        return {
+          organisation: organisation
+            ? {
+                id: organisation.id,
+                legal_name: organisation.legal_name,
+                trading_name: organisation.trading_name,
+                registration_number: organisation.registration_number,
+                status: organisation.status,
+                tenant_id: organisation.tenant_id,
+                default_market_key: organisation.default_market_key,
+                canonical_organisation_id: organisation.canonical_organisation_id,
+              }
+            : null,
+          membership: {
+            id: membership.id,
+            status: membership.status,
+            customer_id: membership.customer_id,
+          },
+        }
       }),
   })
 }
