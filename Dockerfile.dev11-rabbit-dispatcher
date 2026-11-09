@@ -1,6 +1,6 @@
 # Owned by baobab-trade; processes only its existing Medusa PostgreSQL outbox.
 # This worker makes no direct ERP/iDempiere business mutation.
-FROM python:3.14.0-slim
+FROM python:3.15.0-slim
 WORKDIR /opt/baobab-trade
 COPY scripts/dev11-rabbit-requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --disable-pip-version-check -r /tmp/requirements.txt
