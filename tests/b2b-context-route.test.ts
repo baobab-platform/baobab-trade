@@ -95,7 +95,9 @@ const buildResponse = () => {
 }
 
 const originalTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
-beforeEach(() => { process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tn_1" })
+beforeEach(() => {
+  process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tn_1"
+})
 afterEach(() => {
   if (originalTenant === undefined) delete process.env.BAOBAB_ZURIBEANS_TENANT_ID
   else process.env.BAOBAB_ZURIBEANS_TENANT_ID = originalTenant
