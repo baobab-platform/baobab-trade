@@ -125,9 +125,7 @@ describe("ADR-0008 §§72–74, 84 feature gates", () => {
       NODE_ENV: "development",
       BAOBAB_BUYER_IDENTITY_ENABLED: "true",
     }
-    expect(() => validateTradeStartupConfiguration(env)).toThrow(
-      "BAOBAB_CONTROL_PLANE_BASE_URL",
-    )
+    expect(() => validateTradeStartupConfiguration(env)).toThrow("BAOBAB_CONTROL_PLANE_BASE_URL")
 
     const enabled = {
       ...production(),
