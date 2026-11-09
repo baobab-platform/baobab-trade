@@ -98,6 +98,13 @@ describe("Baobab commerce context isolation", () => {
 
     expect(context.tenant.tenantId).toBe("tn_zuribeans")
     expect(context.legalSellerCanonicalId).toBe("ZURIBEANS-ZA")
+    expect(context.marketAuthority).toMatchObject({
+      marketId: market.market_id,
+      contextId: storedContext.context_id,
+      legalSellerCanonicalId: "ZURIBEANS-ZA",
+      transactionCurrency: "ZAR",
+      countryCode: "ZA",
+    })
     expect(context.digitalEstateCanonicalId).toBe("estate:zuribeans-b2b")
     expect(context.externalReferences.market.external_reference_id).toMatch(/^ref_/)
     expect(client.resolveMapping).toHaveBeenCalledTimes(3)
@@ -208,4 +215,50 @@ describe("Baobab commerce context isolation", () => {
       ),
     ).rejects.toThrow("not a Medusa object")
   })
+  it("rejects the CP primary market being absent, even when the country and seller look right", async () => {
+    const client = clientFor(market, { ...storedContext, market_id: undefined })
+    await expect(resolveCommerceContext(client, selection, "access-token", "corr-1")).rejects.toThrow(
+      "did not authorise this exact Market",
+    )
+    expect(client.resolveMapping).not.toHaveBeenCalled()
+  })
+
+  it("does not treat two Markets with the same country/currency as interchangeable", async () => {
+    const retailMarket = { ...market, market_id: "zuribeans_za_retail", canonical_key: "zuribeans.za.retail" }
+    const client = clientFor(retailMarket, storedContext)
+    await expect(resolveCommerceContext(
+      client,
+      { ...selection, marketId: retailMarket.market_id },
+      "access-token",
+      "corr-1",
+    )).rejects.toThrow("not the Market of the Control Plane's resolved context")
+    expect(client.resolveMapping).not.toHaveBeenCalled()
+  })
+
+  it("refuses CP currency drift, out-of-country participation and expired market windows", async () => {
+    const cases = [
+      { selected: market, stored: { ...storedContext, currency_code: "UGX" } },
+      { selected: market, stored: { ...storedContext, country_code: "UG" } },
+      { selected: { ...market, effective_to: "2026-10-01T00:00:00Z" }, stored: storedContext },
+    ]
+    for (const item of cases) {
+      const client = clientFor(item.selected, item.stored)
+      await expect(resolveCommerceContext(client, selection, "access-token", "corr-1")).rejects.toThrow()
+      expect(client.resolveMapping).not.toHaveBeenCalled()
+    }
+  })
+
+  it("refuses mappings that echo a different context or canonical entity even with the same tenant", async () => {
+    for (const override of [
+      { context_id: "different-context-id" },
+      { canonical_entity_id: "entity:another-market" },
+      { status: "SUSPENDED" },
+    ]) {
+      const client = clientFor(market, storedContext, override)
+      await expect(resolveCommerceContext(client, selection, "access-token", "corr-1")).rejects.toThrow(
+        "Mapping resolution does not match",
+      )
+    }
+  })
+
 })
