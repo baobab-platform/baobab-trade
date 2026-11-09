@@ -31,7 +31,7 @@ describe("ADR-0017 explicit B2B organisation selection",()=>{
     const actual=await resolveSelectedOrganisationCapability(db as never,cp,args,now)
     expect(actual).toEqual({organisationId:"org_a",status:"ACTIVE"})
     expect(cp.verifyOrganisationTenant).toHaveBeenCalledWith(
-      "tn_za",org.canonical_organisation_id,"corr-1",undefined,
+      "tn_za",org.canonical_organisation_id,"corr-1",
     )
   })
   it.each([
