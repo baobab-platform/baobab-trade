@@ -375,14 +375,22 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
+      # Exercise Medusa's production providers with a disposable development
+      # deployment identity. These synthetic values are NOT CP registration
+      # or staging/production conformance evidence (ADR-0008 §§9, 84).
       NODE_ENV: production
+      BAOBAB_ENVIRONMENT: development
+      BAOBAB_TRADE_ENGINE_ID: baobab-trade
+      BAOBAB_TRADE_ENGINE_INSTANCE_ID: ei_cifixture01
+      BAOBAB_REGION: local
+      BAOBAB_DEPLOYMENT_REVISION: ${{ github.sha }}
       DATABASE_URL: postgres://baobab_trade:baobab_trade@localhost:5432/baobab_trade_production_test
       REDIS_URL: redis://localhost:6379
       MEDUSA_FF_CACHING: true
-      JWT_SECRET: gate-2-integration-jwt-secret
-      COOKIE_SECRET: gate-2-integration-cookie-secret
-      BAOBAB_CONTROL_PLANE_BASE_URL: http://localhost:8080
-      BAOBAB_WEBHOOK_SIGNING_SECRET: gate-2-integration-webhook-secret
+      JWT_SECRET: gate-2-integration-jwt-secret-long-enough
+      COOKIE_SECRET: gate-2-integration-cookie-secret-long-enough
+      BAOBAB_CONTROL_PLANE_BASE_URL: https://control-plane.example.invalid
+      BAOBAB_WEBHOOK_SIGNING_SECRET: gate-2-integration-webhook-secret-long-enough
       S3_FILE_URL: https://assets.example.invalid/baobab-trade
       S3_REGION: auto
       S3_BUCKET: baobab-trade-test
