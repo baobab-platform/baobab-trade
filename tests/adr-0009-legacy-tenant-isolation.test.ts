@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { MedusaError } from "@medusajs/framework/utils"
+import { MedusaError, Modules } from "@medusajs/framework/utils"
+import { B2B_MODULE } from "../src/modules/b2b"
 import { GET as getMe } from "../src/api/store/b2b/organisations/me/route"
 import {
   GET as getMembers,
@@ -161,7 +162,8 @@ describe("ADR-0009 TEN-COM-007/008/009/017 legacy B2B tenant boundaries", () => 
     const req = {
       ...baseRequest(service),
       scope: {
-        resolve: (key: string) => key === "b2b" ? service : customer,
+        resolve: (key: string) =>
+          key === B2B_MODULE ? service : key === Modules.CUSTOMER ? customer : null,
       },
     }
     // The handler verifies customer email before the organisation guard, but
