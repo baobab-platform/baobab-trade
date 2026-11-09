@@ -210,11 +210,14 @@ describe("ControlPlaneResourceAssignmentResolver", () => {
       "https://cp.example.test/?tenant=another",
       "https://cp.example.test/#fragment",
     ]) {
-      expect(() => new ControlPlaneResourceAssignmentResolver({
-        baseUrl,
-        engineInstanceId: "ei_trade01",
-        tokenProvider,
-      })).toThrow()
+      expect(
+        () =>
+          new ControlPlaneResourceAssignmentResolver({
+            baseUrl,
+            engineInstanceId: "ei_trade01",
+            tokenProvider,
+          }),
+      ).toThrow()
     }
   })
 
