@@ -66,7 +66,10 @@ export class ProjectedTradeComplianceAdapter implements TradeCompliancePort {
           : "No effective trade lane policy",
       )
     const policy = policies[0]
-    const reasons: string[] = []
+    // A configured trade lane and verified product classification are not a
+    // customs clearance, sanctions screen, licence or regulatory decision.
+    // This projected adapter must never independently authorise execution.
+    const reasons: string[] = ["REGULATORY_PROVIDER_DECISION_REQUIRED"]
     if (!policy.permittedIncoterms.includes(transaction.incoterm))
       reasons.push("INCOTERM_REVIEW_REQUIRED")
     if (transaction.lines.some((line) => !policy.permittedTradeUoms.includes(line.tradeUom)))
