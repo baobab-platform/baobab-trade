@@ -1,3 +1,5 @@
+import { readTradeFeatureFlag } from "./startup-validation"
+
 export type BaobabTradeEnvironment = {
   engineId: string
   controlPlaneBaseUrl?: string
@@ -72,8 +74,14 @@ export const getBaobabTradeEnvironment = (): BaobabTradeEnvironment => ({
   iamWorkloadTokenUrl: process.env.BAOBAB_IAM_WORKLOAD_TOKEN_URL,
   iamWorkloadClientId: process.env.BAOBAB_IAM_WORKLOAD_CLIENT_ID || "baobab-trade-workload",
   iamWorkloadClientSecret: process.env.BAOBAB_IAM_WORKLOAD_CLIENT_SECRET,
-  buyerIdentityEnabled: process.env.BAOBAB_BUYER_IDENTITY_ENABLED === "true",
-  resourceAssignmentEnabled: process.env.BAOBAB_RESOURCE_ASSIGNMENT_ENABLED === "true",
+  buyerIdentityEnabled: readTradeFeatureFlag(
+    process.env.BAOBAB_BUYER_IDENTITY_ENABLED,
+    "BAOBAB_BUYER_IDENTITY_ENABLED",
+  ),
+  resourceAssignmentEnabled: readTradeFeatureFlag(
+    process.env.BAOBAB_RESOURCE_ASSIGNMENT_ENABLED,
+    "BAOBAB_RESOURCE_ASSIGNMENT_ENABLED",
+  ),
   buyerIamIssuer: process.env.BAOBAB_IAM_BUYER_ISSUER,
   buyerAuthorisedParties: (process.env.BAOBAB_IAM_BUYER_AUTHORISED_PARTIES ?? "")
     .split(",")
