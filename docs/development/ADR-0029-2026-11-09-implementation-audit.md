@@ -12,11 +12,11 @@ The ERP event consumer verifies an HMAC and ERP source, checks tenant, lifecycle
 
 ## Corrective increment
 
-Reject profile as_of more than five minutes ahead of the server clock before any persistence, activation or outbox work. Add regression demonstrating a validly signed future ERP event is denied with no side effects. Existing signed-JWT tests for ZB-03.7 remain applicable and require no production middleware replacement.
+Reject profile as_of more than five minutes ahead of the server clock before any persistence, activation or outbox work. Before adopting a new signed ERP profile, read the latest current profile in the same tenant/buyer/LegalEntity context and refuse a non-increasing ERP observation timestamp. Negative regressions demonstrate future-dated and out-of-order signed events cannot produce a profile, buyer activation or outbox. This sequential check is not a substitute for a transactionally locked native inbox. Existing signed-JWT tests for ZB-03.7 remain applicable and require no production middleware replacement.
 
 ## HELD
 
-This does not qualify real IAM token issuance, actual ERP signed event provenance, posted credit/limit ownership, CP LegalEntity mapping, concurrent exactly-once projection and durable inbox/outbox crash replay. Existing compensating deletes cannot prove atomic distributed effects. These remain ADR-0029 ZB-03.10/ZB-04 connected obligations.
+This does not qualify real IAM token issuance, actual ERP signed event provenance, posted credit/limit ownership, CP LegalEntity mapping, concurrent race-safe timestamp ordering, exactly-once projection and durable inbox/outbox crash replay. Existing compensating deletes cannot prove atomic distributed effects. These remain ADR-0029 ZB-03.10/ZB-04 connected obligations.
 
 Validation:
 
