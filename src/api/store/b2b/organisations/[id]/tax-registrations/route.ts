@@ -67,9 +67,11 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   await requireLegacyTenantOrganisation(b2b, organisationId)
   await requireMember(b2b, organisationId, customerId)
 
-  const registrations = (await b2b.listTaxRegistrations({
-    organisation_id: organisationId,
-  })).filter((registration) => registration.organisation_id === organisationId)
+  const registrations = (
+    await b2b.listTaxRegistrations({
+      organisation_id: organisationId,
+    })
+  ).filter((registration) => registration.organisation_id === organisationId)
 
   res.status(200).json({
     tax_registrations: registrations.map((r) => ({
