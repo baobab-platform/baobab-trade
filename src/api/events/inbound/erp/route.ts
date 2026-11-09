@@ -93,6 +93,11 @@ const normalize = (body: unknown) => {
   if (Number.isNaN(observedAt.valueOf())) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "as_of must be an ISO timestamp")
   }
+  // The ERP projection is a historical attestation, never a future grant.
+  // Permit bounded clock skew; do not activate buyers on a signed future state.
+  if (observedAt.getTime() > Date.now() + 5 * 60 * 1000) {
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "future-dated ERP commercial profile")
+  }
   const tenantId = requiredText(event.tenantid ?? event.tenant_id ?? data.tenant_id, "tenantid")
   const legalEntityId = requiredText(
     event.entityid ?? event.entity_id ?? data.legal_entity_id,
@@ -154,6 +159,25 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       MedusaError.Types.NOT_ALLOWED,
       "buyer organisation is not eligible for ERP projection",
     )
+  }
+
+  // Signed, individually unique events can still arrive out of order.
+  // A superseded ERP observation is not current commercial approval and
+  // must never activate a PENDING buyer. This is a sequential safeguard;
+  // native inbox/locking is still needed for concurrent broker delivery.
+  const [latest] = await erp.listBuyerCommercialProfileProjections(
+    {
+      buyer_organisation_id: organisation.id,
+      tenant_id: configuredTenant,
+      legal_entity_id: input.legalEntityId,
+    },
+    { take: 1, order: { observed_at: "DESC" } },
+  )
+  if (latest) {
+    const previousAt = new Date(latest.observed_at).getTime()
+    if (!Number.isFinite(previousAt) || previousAt >= input.observedAt.getTime()) {
+      throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "stale ERP commercial profile")
+    }
   }
 
   const projection = await erp.createBuyerCommercialProfileProjections({
