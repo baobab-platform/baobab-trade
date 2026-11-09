@@ -21,7 +21,9 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     b2b.listBuyerApplications({ tenant_id: tenantId, applicant_customer_id: customerId }),
   ])
 
-  const organisationIds = [...new Set(memberships.map((m) => m.organisation_id))]
+  // Never treat a filter result as proof that the customer owns every row.
+  const ownedMemberships = memberships.filter((membership) => membership.customer_id === customerId)
+  const organisationIds = [...new Set(ownedMemberships.map((m) => m.organisation_id))]
   // Native membership is not a tenant assertion. Scope the organisation read
   // AND check the returned owner, even if a source ignores its filter.
   const organisations =
@@ -46,7 +48,7 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
       submitted_at: application.submitted_at,
       revision: application.revision,
     })),
-    organisations: memberships
+    organisations: ownedMemberships
       .filter((membership) => orgById.has(membership.organisation_id))
       .map((membership) => {
       const organisation = orgById.get(membership.organisation_id)
