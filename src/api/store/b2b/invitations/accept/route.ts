@@ -54,7 +54,12 @@ export const POST = async (req: AuthenticatedMedusaRequest<AcceptBody>, res: Med
     throw new MedusaError(MedusaError.Types.NOT_FOUND, "invitation is invalid or already used")
   }
 
-  if (membership.invitation_expires_at && new Date(membership.invitation_expires_at) < new Date()) {
+  // A missing or unparseable expiry is not an infinite-lived invitation.
+  // Refuse equality at the deadline as well as expired invitations.
+  const expiry = membership.invitation_expires_at
+    ? new Date(membership.invitation_expires_at).getTime()
+    : Number.NaN
+  if (!Number.isFinite(expiry) || expiry <= Date.now()) {
     throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "invitation has expired")
   }
 
