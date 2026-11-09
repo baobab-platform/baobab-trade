@@ -35,9 +35,7 @@ export async function checkTradeReadiness(options: {
   const database = options.database
   if (database && typeof database.raw === "function") {
     const timeoutMs =
-      options.timeoutMs !== undefined &&
-      Number.isFinite(options.timeoutMs) &&
-      options.timeoutMs > 0
+      options.timeoutMs !== undefined && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
         ? options.timeoutMs
         : DEFAULT_READINESS_TIMEOUT_MS
 
