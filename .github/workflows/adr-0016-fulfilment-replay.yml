@@ -1,0 +1,19 @@
+name: ADR-0016 Fulfilment Development Conformance
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  shipment-idempotency:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run tests/fulfilment-port.test.ts tests/adr-0016-fulfilment-replay.test.ts tests/fulfilment-reconciliation.test.ts
+      - run: npx prettier --check src/baobab/fulfilment/fulfilment-port.ts src/baobab/fulfilment/record-adapter.ts tests/fulfilment-port.test.ts tests/adr-0016-fulfilment-replay.test.ts docs/development/ADR-0016-2026-11-09-implementation-audit.md
