@@ -32,7 +32,8 @@ export async function checkTradeReadiness(options: {
   }
 
   // Do not start a query when the Medusa connection is not registered.
-  if (options.database && typeof options.database.raw === "function") {
+  const database = options.database
+  if (database && typeof database.raw === "function") {
     const timeoutMs =
       options.timeoutMs !== undefined &&
       Number.isFinite(options.timeoutMs) &&
@@ -45,7 +46,7 @@ export async function checkTradeReadiness(options: {
       // A bound on the *entire* probe includes waiting for a connection
       // from the pool, not merely PostgreSQL's query execution time.
       await Promise.race([
-        Promise.resolve().then(() => options.database!.raw("SELECT 1")),
+        Promise.resolve().then(() => database.raw("SELECT 1")),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error("readiness deadline exceeded")), timeoutMs)
         }),
