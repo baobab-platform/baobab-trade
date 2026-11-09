@@ -1,0 +1,42 @@
+name: ADR-0011 Product Catalogue Development Conformance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  restricted-catalogue:
+    name: B2B product enumeration and Market mutation negatives (development)
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Verify changed ADR-0011 source formatting
+        run: |
+          npx prettier --check 'src/baobab/catalogue/visibility-authority.ts' 'src/api/store/b2b/assortment/route.ts' 'src/baobab/b2b/product-assortment-admin-validation.ts' 'src/api/admin/b2b/market-product-eligibility/route.ts' 'tests/dev07-current-assortment.test.ts' 'tests/adr-0011-catalogue-access.test.ts' 'tests/adr-0011-admin-eligibility.test.ts' 'docs/development/ADR-0011-2026-11-09-implementation-audit.md'
+      - name: Run ADR-0011 source-level adversarial conformance
+        run: |
+          npx vitest run tests/adr-0011-catalogue-access.test.ts tests/adr-0011-admin-eligibility.test.ts tests/dev07-current-assortment.test.ts src/baobab/b2b/product-assortment-policy.test.ts src/baobab/b2b/product-assortment-admin-validation.test.ts tests/catalogue-config.test.ts
+      - name: Check TypeScript contracts excluding documented broken main checkout test
+        # tests/native-buyer-commit-route.test.ts on main imports an absent
+        # Trade #189 route. The full repository CI still runs and reports this
+        # failure independently; this gate typechecks every other source.
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs")
+          const config = JSON.parse(fs.readFileSync("tsconfig.json", "utf8"))
+          config.exclude = [...new Set([...(config.exclude ?? []), "tests/native-buyer-commit-route.test.ts"])]
+          fs.writeFileSync("tsconfig.adr-0011-ci.json", JSON.stringify(config))
+          NODE
+          npx tsc --noEmit -p tsconfig.adr-0011-ci.json

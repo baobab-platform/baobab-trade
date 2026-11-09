@@ -133,6 +133,50 @@ export const validateMarketEligibilityBody = (
     regulatory = body.regulatory_eligibility as RegulatoryEligibility
   }
 
+  // Store eligibility is temporal policy, not an arbitrarily parseable
+  // JavaScript Date. Unqualified/reversed windows must never be activated.
+  const boundaries: Record<string, Date | null> = {}
+  for (const field of ["effective_from", "effective_until"]) {
+    const value = body[field]
+    if (value === null || value === undefined) {
+      boundaries[field] = null
+      continue
+    }
+    if (
+      typeof value !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
+      !Number.isFinite(Date.parse(value))
+    ) {
+      return {
+        ok: false,
+        error: { field, message: `${field} must be an ISO 8601 timestamp with timezone` },
+      }
+    }
+    boundaries[field] = new Date(value)
+  }
+
+  if (
+    boundaries.effective_from &&
+    boundaries.effective_until &&
+    boundaries.effective_from.getTime() >= boundaries.effective_until.getTime()
+  ) {
+    return {
+      ok: false,
+      error: { field: "effective_until", message: "effective_until must follow effective_from" },
+    }
+  }
+
+  if (
+    body.policy_reference !== undefined &&
+    body.policy_reference !== null &&
+    (typeof body.policy_reference !== "string" || !body.policy_reference.trim())
+  ) {
+    return {
+      ok: false,
+      error: { field: "policy_reference", message: "policy_reference must be a non-empty string" },
+    }
+  }
+
   return {
     ok: true,
     data: {
@@ -140,6 +184,10 @@ export const validateMarketEligibilityBody = (
       market_key: String(body.market_key).trim(),
       status,
       regulatory_eligibility: regulatory,
+      policy_reference:
+        typeof body.policy_reference === "string" ? body.policy_reference.trim() : null,
+      effective_from: boundaries.effective_from,
+      effective_until: boundaries.effective_until,
     },
   }
 }
