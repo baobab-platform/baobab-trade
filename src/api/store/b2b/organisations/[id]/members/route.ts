@@ -39,10 +39,11 @@ const activeAdmin = async (b2b: B2BModuleService, organisationId: string, custom
     memberships[0].organisation_id !== organisationId ||
     memberships[0].customer_id !== customerId ||
     memberships[0].status !== "ACTIVE"
-  ) return false
+  )
+    return false
   const roles = await b2b.listBuyerRoles({ membership_id: memberships[0].id })
-  return roles.some((role) =>
-    role.membership_id === memberships[0].id && role.role === "ACCOUNT_ADMIN",
+  return roles.some(
+    (role) => role.membership_id === memberships[0].id && role.role === "ACCOUNT_ADMIN",
   )
 }
 
