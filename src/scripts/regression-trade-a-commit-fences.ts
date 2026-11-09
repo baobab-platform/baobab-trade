@@ -482,8 +482,10 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
     "SHADOW",
     "the fence must ship behind an inactive gate",
   )
-  await gate("ENFORCED", "regression:ta07-enforced")
   try {
+    // Include the gate switch itself inside the protected scope: a transport
+    // failure after DB commit must not bypass the SHADOW recovery.
+    await gate("ENFORCED", "regression:ta07-enforced")
     // Setup is SANDBOX posture (the migration ran under the test profile).
     assert.equal(
       (await one<{ posture: string }>("SELECT posture FROM trade_a_persistence_posture")).posture,
@@ -889,13 +891,29 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
       "Trade-A TA-07: native commit fences on real completeCartWorkflow/convertDraftOrderWorkflow (single consumption, cart binding, replay, concurrency, content binding at COMMIT, ambiguity, lease expiry, unattributed cart, draft finalisation, Decision 8 classification regime, forged and rewritten evidence, posture) passed with synthetic CP/IAM; LOCAL_TESTED, not EA Gate D, not L4",
     )
   } finally {
-    if (!eligible)
-      await thamani
-        .listMarketProductEligibilities({
-          product_id: product.id,
-          policy_reference: POLICY_REFERENCE,
-        })
-        .then((rows) => thamani.deleteMarketProductEligibilities(rows.map((row) => row.id)))
-    await pool.end()
+    // ADR-0036: the disposable acceptance harness must not strand its native
+    // gate in ENFORCED if any earlier scenario throws. The old SHADOW restore
+    // inside scenario 10 was too late to protect failures in scenarios 1-9.
+    // Update only when ENFORCED to avoid unnecessary gate revision churn.
+    try {
+      await pool.query(
+        `UPDATE trade_commit_fence_enforcement
+           SET mode = 'SHADOW', revision = revision + 1, change_reference = $1
+         WHERE singleton = true AND mode = 'ENFORCED'`,
+        [`regression:ta07-finally-shadow:${randomUUID()}`],
+      )
+    } finally {
+      try {
+        if (!eligible)
+          await thamani
+            .listMarketProductEligibilities({
+              product_id: product.id,
+              policy_reference: POLICY_REFERENCE,
+            })
+            .then((rows) => thamani.deleteMarketProductEligibilities(rows.map((row) => row.id)))
+      } finally {
+        await pool.end()
+      }
+    }
   }
 }
