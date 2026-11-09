@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Modules } from "@medusajs/framework/utils"
 import { POST as acceptInvitation } from "../src/api/store/b2b/invitations/accept/route"
 import {
@@ -9,10 +9,16 @@ import { B2B_MODULE } from "../src/modules/b2b"
 
 const originalPublicUrl = process.env.ZURIBEANS_PUBLIC_URL
 const originalTemplate = process.env.BAOBAB_BUYER_INVITATION_TEMPLATE
+const originalTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
+beforeEach(() => {
+  process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tn_zuribeans"
+})
 // Test replay discriminators, not provider API keys or bearer secrets.
 const syntheticInvitationReplayId = (suffix: string) => ["invitation", "test", suffix].join("-")
 afterEach(() => {
   vi.restoreAllMocks()
+  if (originalTenant === undefined) delete process.env.BAOBAB_ZURIBEANS_TENANT_ID
+  else process.env.BAOBAB_ZURIBEANS_TENANT_ID = originalTenant
   if (originalPublicUrl === undefined) delete process.env.ZURIBEANS_PUBLIC_URL
   else process.env.ZURIBEANS_PUBLIC_URL = originalPublicUrl
   if (originalTemplate === undefined) delete process.env.BAOBAB_BUYER_INVITATION_TEMPLATE
@@ -35,9 +41,14 @@ const response = () => {
 describe("buyer organisation invitations", () => {
   it("lists members without evaluating invitation-only request fields", async () => {
     const b2b = {
+      retrieveB2BOrganisation: vi.fn(async () => ({
+        id: "b2borg_1", tenant_id: "tn_zuribeans", status: "ACTIVE",
+      })),
       listBuyerMemberships: vi
         .fn()
-        .mockResolvedValueOnce([{ id: "b2bmem_admin", status: "ACTIVE" }])
+        .mockResolvedValueOnce([{
+          id: "b2bmem_admin", organisation_id: "b2borg_1", customer_id: "cus_admin", status: "ACTIVE",
+        }])
         .mockResolvedValueOnce([
           {
             id: "b2bmem_invited",
@@ -93,6 +104,7 @@ describe("buyer organisation invitations", () => {
     const b2b = {
       retrieveB2BOrganisation: vi.fn(async () => ({
         id: "b2borg_1",
+        tenant_id: "tn_zuribeans",
         status: "ACTIVE",
         legal_name: "Acme",
       })),
@@ -162,7 +174,7 @@ describe("buyer organisation invitations", () => {
         .mockResolvedValueOnce([{ id: "b2bmem_admin", status: "ACTIVE" }])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]),
-      listBuyerRoles: vi.fn(async () => [{ role: "ACCOUNT_ADMIN" }]),
+      listBuyerRoles: vi.fn(async () => [{ membership_id: "b2bmem_admin", role: "ACCOUNT_ADMIN" }]),
       createBuyerMemberships: vi.fn(async (input) => ({
         id: "b2bmem_invite",
         ...input,
