@@ -86,6 +86,35 @@ export const selectEffectiveRule = (
   return matches[0]
 }
 
+/**
+ * ADR-0018 TAX-COM-017/018: round a non-negative exact integer ratio
+ * half-up in integer minor units, never via imprecise Number multiplication.
+ */
+export function roundTaxMinorUnits(
+  taxableBasisMinor: number,
+  rateBasisPoints: number,
+  taxInclusive: boolean,
+): number {
+  if (!Number.isSafeInteger(taxableBasisMinor) || taxableBasisMinor < 0) {
+    throw new Error("Taxable basis must be an exact non-negative minor-unit integer")
+  }
+  if (
+    !Number.isSafeInteger(rateBasisPoints) ||
+    rateBasisPoints < 0 ||
+    rateBasisPoints > 100_000
+  ) {
+    throw new Error("Tax rate basis points are invalid")
+  }
+  const basis = BigInt(taxableBasisMinor)
+  const rate = BigInt(rateBasisPoints)
+  const denominator = taxInclusive ? 10_000n + rate : 10_000n
+  const rounded = (basis * rate + denominator / 2n) / denominator
+  if (rounded > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Tax calculation exceeds exact minor-unit precision")
+  }
+  return Number(rounded)
+}
+
 export class EffectiveDatedTaxProviderAdapter implements TaxDeterminationPort {
   constructor(private readonly provider: EffectiveTaxRuleProvider) {}
   async determine(request: TaxDeterminationRequest): Promise<TaxDetermination> {
@@ -93,6 +122,17 @@ export class EffectiveDatedTaxProviderAdapter implements TaxDeterminationPort {
       throw new Error("Exactly one tax subject is required")
     if (!Number.isSafeInteger(request.taxableBasisMinor) || request.taxableBasisMinor < 0)
       throw new Error("Taxable basis must be a non-negative integer in minor units")
+    if (
+      !request.legalSellerKey ||
+      !request.sellerRegistrationReference ||
+      !request.jurisdictionKey ||
+      !request.productTaxClassification ||
+      !/^[A-Z]{3}$/.test(request.currency) ||
+      !(request.effectiveAt instanceof Date) ||
+      !Number.isFinite(request.effectiveAt.getTime())
+    ) {
+      throw new Error("Tax requires authoritative seller, registration, jurisdiction and tax point")
+    }
     // A ZuriBeans (B2B) request always carries organisationId, a Thamani (B2C) request always
     // carries customerReference — the XOR check above already guarantees exactly one. Rules
     // belonging to the other Digital Estate must never match here, even when jurisdiction,
@@ -114,20 +154,35 @@ export class EffectiveDatedTaxProviderAdapter implements TaxDeterminationPort {
       throw new Error("Tax provider returned a rule outside the requested context")
     if (["ZERO_RATED", "EXEMPT", "REVERSE_CHARGE"].includes(rule.treatment) && !rule.legalReason)
       throw new Error("Protected zero-tax treatment requires legal reason provenance")
+    if (
+      !rule.ruleReference ||
+      !rule.ruleVersion ||
+      !rule.sourceAuthority ||
+      !(rule.sourceRetrievedAt instanceof Date) ||
+      !Number.isFinite(rule.sourceRetrievedAt.getTime())
+    ) {
+      throw new Error("Tax decision lacks authoritative rule provenance")
+    }
     const priceDisplayMode = request.priceDisplayMode
-    const taxAmountMinor =
-      rule.treatment !== "STANDARD"
-        ? 0
-        : priceDisplayMode === "TAX_INCLUSIVE"
-          ? Math.round(
-              (request.taxableBasisMinor * rule.rateBasisPoints) / (10_000 + rule.rateBasisPoints),
-            )
-          : Math.round((request.taxableBasisMinor * rule.rateBasisPoints) / 10_000)
+    // A nonstandard treatment still validates the rule rate. An invalid
+    // projection must never become a silent zero-tax decision.
+    const standardTax = roundTaxMinorUnits(
+      request.taxableBasisMinor,
+      rule.rateBasisPoints,
+      priceDisplayMode === "TAX_INCLUSIVE",
+    )
+    const taxAmountMinor = rule.treatment === "STANDARD" ? standardTax : 0
     const netAmountMinor =
       priceDisplayMode === "TAX_INCLUSIVE"
         ? request.taxableBasisMinor - taxAmountMinor
         : request.taxableBasisMinor
     const grossAmountMinor = netAmountMinor + taxAmountMinor
+    if (
+      !Number.isSafeInteger(netAmountMinor) ||
+      !Number.isSafeInteger(grossAmountMinor)
+    ) {
+      throw new Error("Tax totals exceed exact minor-unit precision")
+    }
     return {
       ...request,
       ruleReference: rule.ruleReference,
