@@ -1,6 +1,6 @@
 # ADR-0027 implementation audit — 9 November 2026
 
-**ADR status:** Proposed — Normative Trade Architecture. No unilateral acceptance.
+**Architecture status:** Accepted by Platform Owner directive, 9 November 2026, under higher accepted Shared/CP/IAM decisions. The implementation remains a draft and its outstanding runtime qualification gates are HELD; architecture acceptance is not production certification.
 
 ## Audited risk and bounded implementation
 
