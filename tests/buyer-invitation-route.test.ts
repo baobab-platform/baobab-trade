@@ -118,7 +118,14 @@ describe("buyer organisation invitations", () => {
       })),
       listBuyerMemberships: vi
         .fn()
-        .mockResolvedValueOnce([{ id: "b2bmem_admin", organisation_id: "b2borg_1", customer_id: "cus_admin", status: "ACTIVE" }])
+        .mockResolvedValueOnce([
+          {
+            id: "b2bmem_admin",
+            organisation_id: "b2borg_1",
+            customer_id: "cus_admin",
+            status: "ACTIVE",
+          },
+        ])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]),
       listBuyerRoles: vi.fn(async () => [{ membership_id: "b2bmem_admin", role: "ACCOUNT_ADMIN" }]),
@@ -180,7 +187,14 @@ describe("buyer organisation invitations", () => {
       })),
       listBuyerMemberships: vi
         .fn()
-        .mockResolvedValueOnce([{ id: "b2bmem_admin", organisation_id: "b2borg_1", customer_id: "cus_admin", status: "ACTIVE" }])
+        .mockResolvedValueOnce([
+          {
+            id: "b2bmem_admin",
+            organisation_id: "b2borg_1",
+            customer_id: "cus_admin",
+            status: "ACTIVE",
+          },
+        ])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]),
       listBuyerRoles: vi.fn(async () => [{ membership_id: "b2bmem_admin", role: "ACCOUNT_ADMIN" }]),
