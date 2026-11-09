@@ -24,7 +24,12 @@ import {
 } from "../src/baobab/b2b/legacy-tenant-scope"
 
 const local = { id: "org-a", tenant_id: "tenant-a", status: "ACTIVE", legal_name: "Local buyer" }
-const foreign = { id: "org-b", tenant_id: "tenant-b", status: "ACTIVE", legal_name: "Foreign buyer" }
+const foreign = {
+  id: "org-b",
+  tenant_id: "tenant-b",
+  status: "ACTIVE",
+  legal_name: "Foreign buyer",
+}
 const principal = { actor_id: "cus-1", app_metadata: { baobab_principal_id: "principal-1" } }
 const originalTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
 const originalUrl = process.env.ZURIBEANS_PUBLIC_URL
@@ -82,17 +87,25 @@ describe("ADR-0009 TEN-COM-007/008/009/017 legacy B2B tenant boundaries", () => 
   it("rejects a cross-tenant organisation by ID regardless of any membership record", async () => {
     const service = {
       retrieveB2BOrganisation: vi.fn(async () => foreign),
-      listBuyerMemberships: vi.fn(async () => [{ organisation_id: foreign.id, customer_id: "cus-1", status: "ACTIVE" }]),
+      listBuyerMemberships: vi.fn(async () => [
+        { organisation_id: foreign.id, customer_id: "cus-1", status: "ACTIVE" },
+      ]),
     }
-    await expect(requireLegacyTenantOrganisation(service as never, foreign.id)).rejects.toMatchObject({
+    await expect(
+      requireLegacyTenantOrganisation(service as never, foreign.id),
+    ).rejects.toMatchObject({
       type: MedusaError.Types.NOT_FOUND,
     })
     expect(service.listBuyerMemberships).not.toHaveBeenCalled()
   })
 
   it("refuses a lookup whose data source returns an unrelated or unowned organisation", () => {
-    expect(() => assertLegacyTenantOwnership(foreign, foreign.id)).toThrow("buyer organisation was not found")
-    expect(() => assertLegacyTenantOwnership(local, foreign.id)).toThrow("buyer organisation was not found")
+    expect(() => assertLegacyTenantOwnership(foreign, foreign.id)).toThrow(
+      "buyer organisation was not found",
+    )
+    expect(() => assertLegacyTenantOwnership(local, foreign.id)).toThrow(
+      "buyer organisation was not found",
+    )
     expect(() => assertLegacyTenantOwnership({ ...local, tenant_id: "" }, local.id)).toThrow(
       "buyer organisation was not found",
     )
@@ -152,7 +165,14 @@ describe("ADR-0009 TEN-COM-007/008/009/017 legacy B2B tenant boundaries", () => 
     const service = {
       listBuyerMemberships: vi.fn(async (filter: Record<string, unknown>) =>
         "invitation_token_hash" in filter
-          ? [{ id: "member-b", organisation_id: foreign.id, invited_email: "victim@example.test", status: "INVITED" }]
+          ? [
+              {
+                id: "member-b",
+                organisation_id: foreign.id,
+                invited_email: "victim@example.test",
+                status: "INVITED",
+              },
+            ]
           : [],
       ),
       retrieveB2BOrganisation: vi.fn(async () => foreign),
@@ -192,7 +212,10 @@ describe("ADR-0009 TEN-COM-007/008/009/017 legacy B2B tenant boundaries", () => 
       id: [local.id, foreign.id],
       tenant_id: "tenant-a",
     })
-    const body = res.body as { organisations: Array<{ organisation: { id: string } }>; applications: Array<{ id: string }> }
+    const body = res.body as {
+      organisations: Array<{ organisation: { id: string } }>
+      applications: Array<{ id: string }>
+    }
     expect(body.organisations.map(({ organisation }) => organisation.id)).toEqual([local.id])
     expect(body.applications.map(({ id }) => id)).toEqual(["app-a"])
     expect(JSON.stringify(body)).not.toContain("tenant-b")
@@ -201,11 +224,15 @@ describe("ADR-0009 TEN-COM-007/008/009/017 legacy B2B tenant boundaries", () => 
 
   it("does not resolve a foreign tenant through legacy canonical buyer-context even with a valid local membership", async () => {
     const service = {
-      listB2BOrganisations: vi.fn(async () => [{ ...foreign, canonical_organisation_id: "canon-foreign" }]),
+      listB2BOrganisations: vi.fn(async () => [
+        { ...foreign, canonical_organisation_id: "canon-foreign" },
+      ]),
       listBuyerMemberships: vi.fn(),
       listBuyerRoles: vi.fn(),
     }
-    await expect(legacyContext(baseRequest(service) as never, response() as never)).rejects.toMatchObject({
+    await expect(
+      legacyContext(baseRequest(service) as never, response() as never),
+    ).rejects.toMatchObject({
       type: MedusaError.Types.NOT_FOUND,
     })
     expect(service.listBuyerMemberships).not.toHaveBeenCalled()
