@@ -60,9 +60,10 @@ const port = new ProjectedTradeComplianceAdapter(
   },
 )
 describe("TradeCompliancePort", () => {
-  it("approves a complete configured lane without pretending to be a customs engine", async () => {
+  it("holds configured lanes until a qualified regulatory provider clears all checks", async () => {
     const result = await port.evaluate(transaction, new Date("2026-09-09"))
-    expect(result.status).toBe("APPROVED")
+    expect(result.status).toBe("REVIEW_REQUIRED")
+    expect(result.reasons).toContain("REGULATORY_PROVIDER_DECISION_REQUIRED")
     expect(result.source).toContain("NOT_CUSTOMS_AUTHORITY")
   })
   it("routes unsupported terms to review", async () => {
