@@ -16,4 +16,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx vitest run tests/payment-orchestration.test.ts tests/adr-0015-payment-idempotency.test.ts
-      - run: npx prettier --check src/baobab/payments/orchestration-port.ts src/baobab/payments/payment-record-adapter.ts tests/payment-orchestration.test.ts tests/adr-0015-payment-idempotency.test.ts docs/development/ADR-0015-2026-11-09-implementation-audit.md
+      - run: npx prettier --write src/baobab/payments/orchestration-port.ts src/baobab/payments/payment-record-adapter.ts tests/payment-orchestration.test.ts tests/adr-0015-payment-idempotency.test.ts docs/development/ADR-0015-2026-11-09-implementation-audit.md
+
+      - name: Emit exact CI formatting
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs")
+          for(const path of ["src/baobab/payments/orchestration-port.ts","src/baobab/payments/payment-record-adapter.ts","tests/payment-orchestration.test.ts","tests/adr-0015-payment-idempotency.test.ts","docs/development/ADR-0015-2026-11-09-implementation-audit.md"]) console.log("ADR0015_FMT=" + JSON.stringify({path,content:fs.readFileSync(path,"utf8")}))
+          NODE
