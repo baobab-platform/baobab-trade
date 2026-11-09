@@ -378,3 +378,36 @@ describe("HttpControlPlaneClient.resolvePlatformContext", () => {
     ).rejects.toThrow(ControlPlaneProblemError)
   })
 })
+
+describe("HttpControlPlaneClient.getMarket (ADR-0010 exact Market identity)", () => {
+  const cpMarket = {
+    market_id: "mkt_za_b2b",
+    canonical_key: "za.wholesale",
+    name: "South Africa wholesale",
+    owner_tenant_id: "tn_zaoperator",
+    market_type: "B2B",
+    status: "ACTIVE",
+    effective_from: "2026-10-01T00:00:00Z",
+    default_country: "ZA",
+    default_currency: "ZAR",
+    revision: 3,
+  }
+
+  it("reads the explicitly requested Control Plane Market", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, cpMarket))
+    vi.stubGlobal("fetch", fetchMock)
+    const response = await mappingClient().getMarket("mkt_za_b2b", "workload", "corr-1")
+    expect(response.market_id).toBe("mkt_za_b2b")
+    expect(fetchMock.mock.calls[0][0]).toBe("http://control-plane.local/v1/markets/mkt_za_b2b")
+  })
+
+  it("refuses a syntactically valid 200 document for a different Market", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(200, { ...cpMarket, market_id: "mkt_za_retail" })),
+    )
+    await expect(mappingClient().getMarket("mkt_za_b2b", "workload", "corr-1")).rejects.toThrow(
+      "mismatched market",
+    )
+  })
+})
