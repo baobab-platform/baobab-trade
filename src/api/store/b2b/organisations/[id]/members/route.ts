@@ -71,7 +71,9 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     )
   }
 
-  const memberships = await b2b.listBuyerMemberships({ organisation_id: organisationId })
+  const memberships = (await b2b.listBuyerMemberships({ organisation_id: organisationId })).filter(
+    (membership) => membership.organisation_id === organisationId,
+  )
   const membershipIds = memberships.map((membership) => membership.id)
   const roles =
     membershipIds.length > 0 ? await b2b.listBuyerRoles({ membership_id: membershipIds }) : []
