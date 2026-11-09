@@ -161,6 +161,25 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     )
   }
 
+  // Signed, individually unique events can still arrive out of order.
+  // A superseded ERP observation is not current commercial approval and
+  // must never activate a PENDING buyer. This is a sequential safeguard;
+  // native inbox/locking is still needed for concurrent broker delivery.
+  const [latest] = await erp.listBuyerCommercialProfileProjections(
+    {
+      buyer_organisation_id: organisation.id,
+      tenant_id: configuredTenant,
+      legal_entity_id: input.legalEntityId,
+    },
+    { take: 1, order: { observed_at: "DESC" } },
+  )
+  if (latest) {
+    const previousAt = new Date(latest.observed_at).getTime()
+    if (!Number.isFinite(previousAt) || previousAt >= input.observedAt.getTime()) {
+      throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "stale ERP commercial profile")
+    }
+  }
+
   const projection = await erp.createBuyerCommercialProfileProjections({
     buyer_organisation_id: organisation.id,
     tenant_id: configuredTenant,
