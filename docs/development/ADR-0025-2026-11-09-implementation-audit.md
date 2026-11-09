@@ -1,6 +1,6 @@
 # ADR-0025 implementation audit — 9 November 2026
 
-**Status of ADR-0025 in source:** Proposed — Normative Trade Architecture. This draft does not change its status.
+**Architecture status:** Accepted by Platform Owner directive, 9 November 2026, under higher accepted Shared/CP/IAM decisions. The implementation remains a draft and its outstanding runtime qualification gates are HELD; architecture acceptance is not production certification.
 
 ## Gap and change
 
