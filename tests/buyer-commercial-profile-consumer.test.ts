@@ -124,6 +124,17 @@ describe("ZB-04 ERP commercial profile consumer", () => {
     expect(fixture.events.createEventOutboxes).not.toHaveBeenCalled()
   })
 
+  it("does not activate a buyer on an ERP projection whose observation is in the future", async () => {
+    const signedFuture = event("APPROVED")
+    signedFuture.data.as_of = "2099-01-01T00:00:00.000Z"
+    const fixture = request(signedFuture)
+    await expect(POST(fixture.req as never, response())).rejects.toThrow(
+      "future-dated ERP commercial profile",
+    )
+    expect(fixture.erp.createBuyerCommercialProfileProjections).not.toHaveBeenCalled()
+    expect(fixture.b2b.updateB2BOrganisations).not.toHaveBeenCalled()
+  })
+
   it("rejects an invalid signature before applying effects", async () => {
     const fixture = request(event())
     fixture.req.headers["x-baobab-signature"] = "sha256=" + "0".repeat(64)
