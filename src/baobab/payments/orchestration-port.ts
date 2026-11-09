@@ -72,9 +72,18 @@ const TRANSITIONS: Record<PaymentStatus, readonly PaymentStatus[]> = {
  * payment attempt to adopt the original provider transaction.
  */
 const REPLAY_FIELDS = [
-  "paymentReference", "orderReference", "organisationId",
-  "customerReference", "marketKey", "legalSellerKey", "method",
-  "terms", "providerKey", "currency", "amountMinor", "idempotencyKey",
+  "paymentReference",
+  "orderReference",
+  "organisationId",
+  "customerReference",
+  "marketKey",
+  "legalSellerKey",
+  "method",
+  "terms",
+  "providerKey",
+  "currency",
+  "amountMinor",
+  "idempotencyKey",
 ] as const
 
 export const assertSamePaymentAttempt = (
