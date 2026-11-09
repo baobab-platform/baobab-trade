@@ -22,9 +22,15 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   ])
 
   const organisationIds = [...new Set(memberships.map((m) => m.organisation_id))]
+  // Native membership is not a tenant assertion. Scope the organisation read
+  // AND check the returned owner, even if a source ignores its filter.
   const organisations =
-    organisationIds.length > 0 ? await b2b.listB2BOrganisations({ id: organisationIds }) : []
-  const orgById = new Map(organisations.map((o) => [o.id, o]))
+    organisationIds.length > 0
+      ? await b2b.listB2BOrganisations({ id: organisationIds, tenant_id: tenantId })
+      : []
+  const orgById = new Map(
+    organisations.filter((o) => o.tenant_id === tenantId).map((o) => [o.id, o]),
+  )
 
   res.status(200).json({
     applications: applications.map((application) => ({
@@ -38,7 +44,9 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
       submitted_at: application.submitted_at,
       revision: application.revision,
     })),
-    organisations: memberships.map((membership) => {
+    organisations: memberships
+      .filter((membership) => orgById.has(membership.organisation_id))
+      .map((membership) => {
       const organisation = orgById.get(membership.organisation_id)
       return {
         organisation: organisation
@@ -59,6 +67,6 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
           customer_id: membership.customer_id,
         },
       }
-    }),
+      }),
   })
 }
