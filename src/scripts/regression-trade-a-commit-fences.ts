@@ -482,8 +482,10 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
     "SHADOW",
     "the fence must ship behind an inactive gate",
   )
-  await gate("ENFORCED", "regression:ta07-enforced")
   try {
+    // Include the gate switch itself inside the protected scope: a transport
+    // failure after DB commit must not bypass the SHADOW recovery.
+    await gate("ENFORCED", "regression:ta07-enforced")
     // Setup is SANDBOX posture (the migration ran under the test profile).
     assert.equal(
       (await one<{ posture: string }>("SELECT posture FROM trade_a_persistence_posture")).posture,
