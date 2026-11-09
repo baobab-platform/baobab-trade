@@ -103,6 +103,9 @@ export const validateTradeStartupConfiguration = (
     throw new Error("BAOBAB_ENVIRONMENT must identify a supported deployment environment")
   }
   const environment = deploymentEnvironment as TradeDeploymentEnvironment | undefined
+  if (environment === "production" && env.NODE_ENV !== "production") {
+    throw new Error("NODE_ENV must be production for a production deployment")
+  }
   const region = env.BAOBAB_REGION?.trim() || undefined
   if (region && !REGION.test(region)) {
     throw new Error("BAOBAB_REGION must be a stable deployment region identifier")
@@ -117,6 +120,7 @@ export const validateTradeStartupConfiguration = (
     "BAOBAB_ERP_API_BASE_URL",
     "BAOBAB_PULSE_API_BASE_URL",
     "BAOBAB_IAM_WORKLOAD_TOKEN_URL",
+    "BAOBAB_IAM_BUYER_ISSUER",
   ]) {
     validateServiceUrl(env, key, productionRuntime)
   }
@@ -137,6 +141,15 @@ export const validateTradeStartupConfiguration = (
       required(env, key)
     }
     validateDatabaseUrl(env)
+    let redisProtocol: string
+    try {
+      redisProtocol = new URL(required(env, "REDIS_URL")).protocol
+    } catch {
+      throw new Error("REDIS_URL must be a Redis connection URL")
+    }
+    if (!["redis:", "rediss:"].includes(redisProtocol)) {
+      throw new Error("REDIS_URL must be a Redis connection URL")
+    }
     for (const key of ["JWT_SECRET", "COOKIE_SECRET", "BAOBAB_WEBHOOK_SIGNING_SECRET"]) {
       const value = required(env, key)
       if (value.length < 32 || /^(?:change-me|development-|example|test-)/i.test(value)) {
@@ -161,7 +174,10 @@ export const validateTradeStartupConfiguration = (
   }
   if (buyerEnabled) {
     required(env, "BAOBAB_IAM_BUYER_ISSUER")
-    required(env, "BAOBAB_IAM_BUYER_AUTHORISED_PARTIES")
+    const parties = required(env, "BAOBAB_IAM_BUYER_AUTHORISED_PARTIES")
+    if (!parties.split(",").some((party) => party.trim().length > 0)) {
+      throw new Error("BAOBAB_IAM_BUYER_AUTHORISED_PARTIES must include a client identifier")
+    }
   }
   if (resourceAssignmentEnabled && environment === "production") {
     throw new Error("BAOBAB_RESOURCE_ASSIGNMENT_ENABLED is not approved for production")
