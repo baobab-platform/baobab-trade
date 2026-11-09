@@ -48,7 +48,9 @@ const contextFor = async (
  * Passing these tests is not joined IAM/CP identity or INT-05 qualification.
  */
 const originalTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
-beforeEach(() => { process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tenant-1" })
+beforeEach(() => {
+  process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tenant-1"
+})
 afterEach(() => {
   if (originalTenant === undefined) delete process.env.BAOBAB_ZURIBEANS_TENANT_ID
   else process.env.BAOBAB_ZURIBEANS_TENANT_ID = originalTenant
