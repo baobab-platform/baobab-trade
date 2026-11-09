@@ -100,8 +100,8 @@ describe("buyer invitation lifecycle", () => {
 
   it("revokes an invitation and clears bearer-token authority", async () => {
     const b2b = {
-      listBuyerMemberships: vi.fn(async () => [{ id: "b2bmem_admin" }]),
-      listBuyerRoles: vi.fn(async () => [{ role: "ACCOUNT_ADMIN" }]),
+      listBuyerMemberships: vi.fn(async () => [{ id: "b2bmem_admin", organisation_id: "b2borg_1", customer_id: "cus_admin", status: "ACTIVE" }]),
+      listBuyerRoles: vi.fn(async () => [{ membership_id: "b2bmem_admin", role: "ACCOUNT_ADMIN" }]),
       retrieveBuyerMembership: vi.fn(async () => ({
         id: "b2bmem_invite",
         organisation_id: "b2borg_1",
