@@ -1,0 +1,19 @@
+name: ADR-0015 Financial Idempotency Development
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  financial-isolation:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run tests/payment-orchestration.test.ts tests/adr-0015-payment-idempotency.test.ts
+      - run: npx prettier --check src/baobab/payments/orchestration-port.ts src/baobab/payments/payment-record-adapter.ts tests/payment-orchestration.test.ts tests/adr-0015-payment-idempotency.test.ts docs/development/ADR-0015-2026-11-09-implementation-audit.md
