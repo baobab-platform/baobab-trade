@@ -13,3 +13,28 @@ Each of the five domains named in the completion plan — payments, stock (inven
 Operational diagnostics contain status and counts, not secrets, PII, payload bodies or database details. The deployment platform owns collectors, retention, alert routing, dashboard provisioning and reconciliation-sweep scheduling; this repository owns instrumentation names, diagnostic semantics and the sweep/SLO logic itself.
 
 See `docs/operations/runbooks/` for the operational runbooks a domain's alert should link to (payments today, per ADR-0015 §153's explicit list).
+
+## ADR-0007 health and readiness
+
+`GET /health` is a process-liveness signal. It deliberately does not depend on
+PostgreSQL or remote services: an unhealthy dependency is not a crashed process.
+
+`GET /readiness` is a traffic-admission signal and implements ADR-0007 §47:
+
+- It resolves Medusa's own PostgreSQL connection from the request container
+  and runs `SELECT 1`, with a 1.5-second maximum wait. Missing connection,
+  failed query or timeout returns HTTP 503 rather than a misleading HTTP 200.
+- Missing required Control Plane configuration also returns 503. The
+  `control_plane: configured` field means **configuration is present**, not
+  that a remote Control Plane health check or authorization succeeded.
+- Successful PostgreSQL probing **and** present Control Plane configuration
+  return HTTP 200. Responses use `Cache-Control: no-store` and expose only
+  bounded dependency labels, never connection strings or exception messages.
+- A database failure does not change `/health` liveness. Remote Control Plane
+  unavailability is handled by each governed operation's own fail-closed
+  authority checks; this endpoint must not be cited as deployed CP conformance.
+
+The local Vitest pack `tests/adr-0007-readiness.test.ts` covers successful,
+failed, absent and timed-out database connections, missing configuration, and
+the HTTP 200/503 response boundary. Deployment-level readiness and failover
+remain separately qualified under the protected environment gates.
