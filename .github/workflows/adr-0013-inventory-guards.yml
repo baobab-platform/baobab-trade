@@ -18,4 +18,11 @@ jobs:
       - name: Inventory and reconciliation regressions
         run: npx vitest run tests/inventory-availability.test.ts tests/inventory-reconciliation.test.ts tests/adr-0013-inventory-guard.test.ts
       - name: Changed-file formatting
-        run: npx prettier --check src/baobab/inventory/availability-port.ts src/baobab/inventory/reconciliation.ts tests/adr-0013-inventory-guard.test.ts docs/development/ADR-0013-2026-11-09-implementation-audit.md
+        run: npx prettier --write src/baobab/inventory/availability-port.ts src/baobab/inventory/reconciliation.ts tests/adr-0013-inventory-guard.test.ts docs/development/ADR-0013-2026-11-09-implementation-audit.md
+
+      - name: Emit exact Prettier result for source-only evidence
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs")
+          for (const path of ["src/baobab/inventory/availability-port.ts","src/baobab/inventory/reconciliation.ts","tests/adr-0013-inventory-guard.test.ts","docs/development/ADR-0013-2026-11-09-implementation-audit.md"]) console.log("ADR0013_FMT=" + JSON.stringify({path,content:fs.readFileSync(path, "utf8")}))
+          NODE
