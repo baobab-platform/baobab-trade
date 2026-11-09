@@ -71,9 +71,10 @@ export function assertAuthorisedMarketExecution(
   }
 
   const from = timestamp(market.effective_from, "Market effective_from")
-  const until = market.effective_to == null
-    ? Number.POSITIVE_INFINITY
-    : timestamp(market.effective_to, "Market effective_to")
+  const until =
+    market.effective_to == null
+      ? Number.POSITIVE_INFINITY
+      : timestamp(market.effective_to, "Market effective_to")
   if (from > nowMs || until <= from || nowMs >= until) {
     throw new Error("ADR-0010: Market is outside its effective window")
   }

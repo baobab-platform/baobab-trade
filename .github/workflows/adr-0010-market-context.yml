@@ -24,7 +24,7 @@ jobs:
         run: npm ci
       - name: Verify ADR-0010 file formatting
         run: |
-          npx prettier --write \
+          npx prettier --check \
             src/baobab/market/execution-authority.ts \
             src/baobab/context/resolver.ts \
             src/baobab/control-plane/client.ts \
@@ -32,11 +32,6 @@ jobs:
             tests/commerce-context.test.ts \
             tests/control-plane-client.test.ts \
             docs/development/ADR-0010-2026-11-09-implementation-audit.md
-          node - <<'NODE'
-          const fs = require("node:fs")
-          const files = ["docs/development/ADR-0010-2026-11-09-implementation-audit.md","src/baobab/context/resolver.ts","src/baobab/market/execution-authority.ts","tests/adr-0010-market-execution.test.ts","tests/commerce-context.test.ts","tests/control-plane-client.test.ts"]
-          for (const path of files) console.log("ADR0010_FMT_FILE=" + JSON.stringify({path, content: fs.readFileSync(path, "utf8")}))
-          NODE
       - name: Test CP Market currency and mapping boundaries
         run: |
           npx vitest run \

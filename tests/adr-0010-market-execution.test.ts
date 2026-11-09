@@ -113,9 +113,7 @@ describe("ADR-0010 §105 CP Market transaction-scope conformance", () => {
 
   it("seller identity must be a canonical legal entity, not tenant or Medusa region inference", () => {
     for (const value of ["", "x", null, undefined]) {
-      expect(() => verify({ ...market, legal_entity_id: value })).toThrow(
-        "canonical Legal Seller",
-      )
+      expect(() => verify({ ...market, legal_entity_id: value })).toThrow("canonical Legal Seller")
     }
   })
 

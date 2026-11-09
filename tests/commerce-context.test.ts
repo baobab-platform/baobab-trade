@@ -217,21 +217,27 @@ describe("Baobab commerce context isolation", () => {
   })
   it("rejects the CP primary market being absent, even when the country and seller look right", async () => {
     const client = clientFor(market, { ...storedContext, market_id: undefined })
-    await expect(resolveCommerceContext(client, selection, "access-token", "corr-1")).rejects.toThrow(
-      "did not authorise this exact Market",
-    )
+    await expect(
+      resolveCommerceContext(client, selection, "access-token", "corr-1"),
+    ).rejects.toThrow("did not authorise this exact Market")
     expect(client.resolveMapping).not.toHaveBeenCalled()
   })
 
   it("does not treat two Markets with the same country/currency as interchangeable", async () => {
-    const retailMarket = { ...market, market_id: "zuribeans_za_retail", canonical_key: "zuribeans.za.retail" }
+    const retailMarket = {
+      ...market,
+      market_id: "zuribeans_za_retail",
+      canonical_key: "zuribeans.za.retail",
+    }
     const client = clientFor(retailMarket, storedContext)
-    await expect(resolveCommerceContext(
-      client,
-      { ...selection, marketId: retailMarket.market_id },
-      "access-token",
-      "corr-1",
-    )).rejects.toThrow("not the Market of the Control Plane's resolved context")
+    await expect(
+      resolveCommerceContext(
+        client,
+        { ...selection, marketId: retailMarket.market_id },
+        "access-token",
+        "corr-1",
+      ),
+    ).rejects.toThrow("not the Market of the Control Plane's resolved context")
     expect(client.resolveMapping).not.toHaveBeenCalled()
   })
 
@@ -243,7 +249,9 @@ describe("Baobab commerce context isolation", () => {
     ]
     for (const item of cases) {
       const client = clientFor(item.selected, item.stored)
-      await expect(resolveCommerceContext(client, selection, "access-token", "corr-1")).rejects.toThrow()
+      await expect(
+        resolveCommerceContext(client, selection, "access-token", "corr-1"),
+      ).rejects.toThrow()
       expect(client.resolveMapping).not.toHaveBeenCalled()
     }
   })
@@ -255,10 +263,9 @@ describe("Baobab commerce context isolation", () => {
       { status: "SUSPENDED" },
     ]) {
       const client = clientFor(market, storedContext, override)
-      await expect(resolveCommerceContext(client, selection, "access-token", "corr-1")).rejects.toThrow(
-        "Mapping resolution does not match",
-      )
+      await expect(
+        resolveCommerceContext(client, selection, "access-token", "corr-1"),
+      ).rejects.toThrow("Mapping resolution does not match")
     }
   })
-
 })

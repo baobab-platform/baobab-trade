@@ -8,7 +8,7 @@
 
 ## Why this implementation tranche
 
-Native Medusa order restrictions and Medusa-specific projections already exist in Trade, but an all-native cart/order/customer/price/search/PSP/carrier protection claim requires *joined* IAM identity, Control Plane Context and capability/estate binding, Medusa persistence boundaries, real provider credentials and independently exported multi-tenant evidence. The reviewed repository does not establish all of those. This tranche therefore follows the requested **ADR-0010 fallback**, without weakening the native Trade-A guard or duplicating in-flight #189.
+Native Medusa order restrictions and Medusa-specific projections already exist in Trade, but an all-native cart/order/customer/price/search/PSP/carrier protection claim requires _joined_ IAM identity, Control Plane Context and capability/estate binding, Medusa persistence boundaries, real provider credentials and independently exported multi-tenant evidence. The reviewed repository does not establish all of those. This tranche therefore follows the requested **ADR-0010 fallback**, without weakening the native Trade-A guard or duplicating in-flight #189.
 
 ### Concrete failure mode found
 
@@ -24,24 +24,24 @@ These are **authority-consistency** gaps. Two Markets can share a country, curre
 - `tests/adr-0010-market-execution.test.ts`: negative tests for same-country/same-currency Market substitution, foreign tenant and stored contexts, market lifecycle/effective-time failures, wrong/missing seller, currency and participation mismatch, expired contexts, invalid revisions and positive multi-country scope.
 - `tests/commerce-context.test.ts` and `tests/control-plane-client.test.ts`: exercise the actual composed resolver and HTTP adapter with consistent fixtures and adversarial responses.
 
-**Important scope distinction:** The guard validates **consistency of CP responses already obtained by a trusted Trade workload**. It is *not* itself IAM authentication, a buyer entitlement, a seller operating-binding activation, an independently attested estate-Market capability binding, or a live transaction commit fence. A resolved `marketAuthority` must not be serialized as a customer bearer credential.
+**Important scope distinction:** The guard validates **consistency of CP responses already obtained by a trusted Trade workload**. It is _not_ itself IAM authentication, a buyer entitlement, a seller operating-binding activation, an independently attested estate-Market capability binding, or a live transaction commit fence. A resolved `marketAuthority` must not be serialized as a customer bearer credential.
 
 ## Requirement assessment (ADR-0010 §105)
 
-| Requirement groups | Evidence assessed | Status |
-| --- | --- | --- |
-| Market distinct from tenant/country/region/currency/channel/estate/instance (§§2–26, MKT-COM-001–009) | CP domain contracts; `market-config.ts`, `mapping.ts`, `context/resolver.ts` | **Structural implementation; cardinality not fully qualified** |
-| Active Market, country participation, exact seller and currency (§§6–7, 27, 62–64; #5–7, #13–16) | New guard, existing CP client, composition tests | **Development-consumer guards implemented**; no actual funded order acceptance claim |
-| Two same-country Markets and a multijurisdiction Market (#1–4, #18, #24) | Adversarial Market/Context tests; CP contract permits cardinality | **Source-level negatives**, not a real multitenant CP provisioning proof |
-| Cart Market switch rebuilds prices/taxes/payment/fulfilment (#9–12) | Not connected to a certified native Medusa cart-rebuild gate in this tranche | **OUTSTANDING** |
-| Seller/transaction currency persisted immutably on real native order (#13–14, §48) | Separate in-progress Trade #189 native order/outbox transaction | **OUTSTANDING connected qualification** |
-| Provider/customer/search/cache isolation (#17–20) | Provider adapters and search exist, but no complete connected cross-market negatives here | **OUTSTANDING** |
-| Idempotent Market projection, native Region mapping and migration (#21–24) | Existing bootstrap/mapping source; no real duplicated/protected migration witness here | **PARTIAL** |
-| ERP seller/currency context (#25) | Existing boundary contracts and Trade #189/ERP integration work | **OUTSTANDING final connected proof** |
+| Requirement groups                                                                                    | Evidence assessed                                                                         | Status                                                                               |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Market distinct from tenant/country/region/currency/channel/estate/instance (§§2–26, MKT-COM-001–009) | CP domain contracts; `market-config.ts`, `mapping.ts`, `context/resolver.ts`              | **Structural implementation; cardinality not fully qualified**                       |
+| Active Market, country participation, exact seller and currency (§§6–7, 27, 62–64; #5–7, #13–16)      | New guard, existing CP client, composition tests                                          | **Development-consumer guards implemented**; no actual funded order acceptance claim |
+| Two same-country Markets and a multijurisdiction Market (#1–4, #18, #24)                              | Adversarial Market/Context tests; CP contract permits cardinality                         | **Source-level negatives**, not a real multitenant CP provisioning proof             |
+| Cart Market switch rebuilds prices/taxes/payment/fulfilment (#9–12)                                   | Not connected to a certified native Medusa cart-rebuild gate in this tranche              | **OUTSTANDING**                                                                      |
+| Seller/transaction currency persisted immutably on real native order (#13–14, §48)                    | Separate in-progress Trade #189 native order/outbox transaction                           | **OUTSTANDING connected qualification**                                              |
+| Provider/customer/search/cache isolation (#17–20)                                                     | Provider adapters and search exist, but no complete connected cross-market negatives here | **OUTSTANDING**                                                                      |
+| Idempotent Market projection, native Region mapping and migration (#21–24)                            | Existing bootstrap/mapping source; no real duplicated/protected migration witness here    | **PARTIAL**                                                                          |
+| ERP seller/currency context (#25)                                                                     | Existing boundary contracts and Trade #189/ERP integration work                           | **OUTSTANDING final connected proof**                                                |
 
 ## What still must happen
 
-1. **CP authority:** prove estate-Market eligibility and capability binding under genuine workload + subject identities. The CP country-participation *primary* Market is insufficient authority for another B2B/B2C Market within the same country; extend the CP contract if secondary Market admission is required rather than guessing from Region or Sales Channel.
+1. **CP authority:** prove estate-Market eligibility and capability binding under genuine workload + subject identities. The CP country-participation _primary_ Market is insufficient authority for another B2B/B2C Market within the same country; extend the CP contract if secondary Market admission is required rather than guessing from Region or Sales Channel.
 2. **Native operation PEPs:** bind this CP Market/currency/seller decision to actual native Medusa cart creation/update, repricing, payment, fulfilment and checkout, including all negative/unknown outcomes. Do not trust HTTP request body, currency symbol, buyer-selected `region_id` or sales channel.
 3. **Historical evidence:** persist immutable Market, seller, currency, legal/price/tax snapshot and provider authority within the actual order/commit transaction, then independently read back durable results and outbox evidence.
 4. **Provider and projections:** test tenant/Market-scoped merchant accounts, carrier adapters, tax, pricing, search and cache keys. Demonstrate one Market cannot borrow another's provider even when a Medusa Region is shared.

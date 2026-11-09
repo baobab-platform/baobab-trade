@@ -5,7 +5,10 @@ import {
   type ExternalReferenceResolution,
 } from "../contracts/canonical-mapping"
 import { assertMarketTransactable, type BaobabMarket } from "../contracts/market"
-import { assertAuthorisedMarketExecution, type AuthorisedMarketExecution } from "../market/execution-authority"
+import {
+  assertAuthorisedMarketExecution,
+  type AuthorisedMarketExecution,
+} from "../market/execution-authority"
 import type { BaobabTenantContext } from "../contracts/tenant-context"
 
 /**
@@ -64,7 +67,9 @@ const resolveExternalReference = async (
     resolution.canonical_entity_id !== canonicalEntityId ||
     resolution.status !== "ACTIVE"
   ) {
-    throw new Error("Mapping resolution does not match the authenticated tenant, context and entity")
+    throw new Error(
+      "Mapping resolution does not match the authenticated tenant, context and entity",
+    )
   }
   if (!isExternalReferenceResolution(resolution)) {
     throw new Error(
@@ -125,7 +130,10 @@ export const resolveCommerceContext = async (
   // country. Only an exact, current Market+currency+seller participation is
   // sufficient to continue to native mapping resolution.
   const marketAuthority = assertAuthorisedMarketExecution(
-    tenant, market, stored, selection.marketId,
+    tenant,
+    market,
+    stored,
+    selection.marketId,
   )
 
   const [marketReference, legalSellerReference, digitalEstateReference] = await Promise.all([
