@@ -86,10 +86,10 @@ export const selectPrice = (
       candidate.variantId !== request.variantId ||
       candidate.marketKey !== request.marketKey ||
       candidate.currencyCode.toLowerCase() !== request.currencyCode.toLowerCase()
-    ) continue
+    )
+      continue
 
-    const privateKind =
-      candidate.kind === "CONTRACT" || candidate.kind === "CUSTOMER_SPECIFIC"
+    const privateKind = candidate.kind === "CONTRACT" || candidate.kind === "CUSTOMER_SPECIFIC"
     // An unscoped PRIVATE price is a disclosure, not a public list price.
     if (privateKind && !candidate.organisationId) continue
     if (candidate.organisationId && candidate.organisationId !== request.organisationId) continue
@@ -111,7 +111,8 @@ export const selectPrice = (
     if (
       request.quantity < (candidate.minQuantity ?? 1) ||
       (candidate.maxQuantity !== undefined && request.quantity > candidate.maxQuantity)
-    ) continue
+    )
+      continue
     if (!Object.hasOwn(precedence, candidate.kind)) {
       throw new Error("Unknown price precedence")
     }
