@@ -67,6 +67,7 @@ const request = (body: ReturnType<typeof event>, organisationStatus = "PENDING")
     updateB2BOrganisations: vi.fn(async (patch) => ({ id: "b2borg_1", ...patch })),
   }
   const erp = {
+    listBuyerCommercialProfileProjections: vi.fn(async () => [] as Array<{ observed_at: Date }>),
     createBuyerCommercialProfileProjections: vi.fn(async (input) => ({ id: "erpbcp_1", ...input })),
     deleteBuyerCommercialProfileProjections: vi.fn(),
   }
@@ -133,6 +134,19 @@ describe("ZB-04 ERP commercial profile consumer", () => {
     )
     expect(fixture.erp.createBuyerCommercialProfileProjections).not.toHaveBeenCalled()
     expect(fixture.b2b.updateB2BOrganisations).not.toHaveBeenCalled()
+  })
+
+  it("rejects an out-of-order signed ERP profile before activation or projection", async () => {
+    const fixture = request(event("APPROVED"))
+    fixture.erp.listBuyerCommercialProfileProjections.mockResolvedValueOnce([
+      { observed_at: new Date("2026-10-01T00:00:00.000Z") },
+    ])
+    await expect(POST(fixture.req as never, response())).rejects.toThrow(
+      "stale ERP commercial profile",
+    )
+    expect(fixture.erp.createBuyerCommercialProfileProjections).not.toHaveBeenCalled()
+    expect(fixture.b2b.updateB2BOrganisations).not.toHaveBeenCalled()
+    expect(fixture.events.createEventOutboxes).not.toHaveBeenCalled()
   })
 
   it("rejects an invalid signature before applying effects", async () => {
