@@ -202,6 +202,49 @@ describe("buyer organisation invitations", () => {
     expect(deleteBuyerRoles).not.toHaveBeenCalled()
     expect(deleteBuyerMemberships).not.toHaveBeenCalled()
   })
+  it("refuses missing, malformed and overlong invitation leases before activating membership", async () => {
+    const b2b = {
+      listBuyerMemberships: vi.fn(async () => [{
+        id: "membership-1",
+        organisation_id: "org-1",
+        invited_email: "buyer@example.com",
+        status: "INVITED",
+        invitation_expires_at: null as Date | string | null,
+      }]),
+      updateBuyerMemberships: vi.fn(),
+    }
+    const req = {
+      auth_context: {
+        actor_id: "cus-buyer",
+        app_metadata: { baobab_principal_id: "prn-buyer" },
+      },
+      body: { invitation_token: "test-token" },
+      scope: {
+        resolve: (key: string) =>
+          key === B2B_MODULE ? b2b : {
+            retrieveCustomer: vi.fn(async () => ({ email: "buyer@example.com" })),
+          },
+      },
+    }
+    for (const expires of [
+      null,
+      "not-a-date",
+      new Date(Date.now() - 1000),
+      new Date(Date.now() + 72 * 60 * 60 * 1000),
+    ]) {
+      b2b.listBuyerMemberships.mockResolvedValueOnce([{
+        id: "membership-1",
+        organisation_id: "org-1",
+        invited_email: "buyer@example.com",
+        status: "INVITED",
+        invitation_expires_at: expires,
+      }])
+      await expect(acceptInvitation(req as never, response() as never))
+        .rejects.toThrow("expired or is invalid")
+    }
+    expect(b2b.updateBuyerMemberships).not.toHaveBeenCalled()
+  })
+
   it("binds acceptance to the authenticated customer email", async () => {
     const b2b = {
       listBuyerMemberships: vi.fn(async () => [
