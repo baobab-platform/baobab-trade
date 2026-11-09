@@ -42,7 +42,7 @@ describe("DEV-07 current public assortment", () => {
             query: { market_key: "zuribeans_ug", require_regulatory_clearance: value },
             scope: { resolve },
           } as never,
-          {} as never,
+          { setHeader: vi.fn() } as never,
         ),
       ).rejects.toThrow(/clearance is mandatory/)
       expect(resolve).not.toHaveBeenCalled()
