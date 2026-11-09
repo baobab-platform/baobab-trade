@@ -110,11 +110,26 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   const tenantId = resolveBuyerTenantId()
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
 
+  // Authenticate the application owner before replay lookup: an idempotency
+  // key cannot become an access token for another buyer's KYB evidence.
+  const application = await b2b.retrieveBuyerApplication(req.params.id)
+  if (application.tenant_id !== tenantId || application.applicant_customer_id !== customerId) {
+    throw new MedusaError(MedusaError.Types.NOT_FOUND, "buyer application was not found")
+  }
+
   const replay = await b2b.listBuyerApplicationEvidences({
     tenant_id: tenantId,
     idempotency_key: idempotencyKey,
   })
   if (replay.length) {
+    if (
+      replay.length !== 1 ||
+      replay[0].tenant_id !== tenantId ||
+      replay[0].application_id !== req.params.id ||
+      replay[0].submitted_by_customer_id !== customerId
+    ) {
+      throw new MedusaError(MedusaError.Types.NOT_FOUND, "buyer application evidence was not found")
+    }
     if (replay[0].request_hash !== requestHash) {
       throw new MedusaError(MedusaError.Types.DUPLICATE_ERROR, "Idempotency-Key payload mismatch")
     }
@@ -122,10 +137,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     return
   }
 
-  const application = await b2b.retrieveBuyerApplication(req.params.id)
-  if (application.tenant_id !== tenantId || application.applicant_customer_id !== customerId) {
-    throw new MedusaError(MedusaError.Types.NOT_FOUND, "buyer application was not found")
-  }
   if (!["SUBMITTED", "INFORMATION_REQUIRED"].includes(application.status)) {
     throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "application is not accepting evidence")
   }
