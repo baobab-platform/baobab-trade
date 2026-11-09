@@ -1,0 +1,46 @@
+name: ADR-0009 Legacy Tenant Isolation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tenant-isolation-development:
+    name: Legacy B2B tenant and applicant IDOR negatives (development only)
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install reproducible dependencies
+        run: npm ci
+      - name: Format isolation implementation
+        run: |
+          npx prettier --check \
+            src/baobab/b2b/legacy-tenant-scope.ts \
+            'src/api/store/b2b/organisations/**/*.ts' \
+            'src/api/store/b2b/applications/**/*.ts' \
+            'src/api/store/b2b/invitations/**/*.ts' \
+            src/api/store/b2b/context/route.ts \
+            tests/adr-0009-legacy-tenant-isolation.test.ts \
+            tests/adr-0009-idempotency-scope.test.ts \
+            docs/development/ADR-0009-2026-11-09-implementation-audit.md
+      - name: Adversarial tenant and per-buyer replay scenarios
+        run: |
+          npx vitest run \
+            tests/adr-0009-legacy-tenant-isolation.test.ts \
+            tests/adr-0009-idempotency-scope.test.ts \
+            tests/buyer-invitation-route.test.ts \
+            tests/buyer-invitation-lifecycle.test.ts \
+            tests/b2b-context-route.test.ts \
+            tests/dev07-legacy-buyer-context-safety.test.ts \
+            tests/buyer-application-route.test.ts \
+            tests/buyer-kyb-evidence.test.ts
