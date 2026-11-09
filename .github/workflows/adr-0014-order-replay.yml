@@ -18,11 +18,5 @@ jobs:
       - name: Replay substitution and order port regressions
         run: npx vitest run tests/order-orchestration.test.ts tests/adr-0014-order-replay.test.ts
       - name: Format check
-        run: npx prettier --write src/baobab/orders/orchestration-port.ts tests/adr-0014-order-replay.test.ts docs/development/ADR-0014-2026-11-09-implementation-audit.md
+        run: npx prettier --check src/baobab/orders/orchestration-port.ts tests/adr-0014-order-replay.test.ts docs/development/ADR-0014-2026-11-09-implementation-audit.md
 
-      - name: Emit exact CI formatting
-        run: |
-          node - <<'NODE'
-          const fs = require("node:fs")
-          for(const path of ["src/baobab/orders/orchestration-port.ts","tests/adr-0014-order-replay.test.ts","docs/development/ADR-0014-2026-11-09-implementation-audit.md"]) console.log("ADR0014_FMT=" + JSON.stringify({path,content:fs.readFileSync(path,"utf8")}))
-          NODE

@@ -30,8 +30,13 @@ export interface OrderOrchestrationPort {
 }
 
 const BOUND_FIELDS = [
-  "orderReference", "organisationId", "marketKey",
-  "legalSellerKey", "currencyCode", "totalMinor", "idempotencyKey",
+  "orderReference",
+  "organisationId",
+  "marketKey",
+  "legalSellerKey",
+  "currencyCode",
+  "totalMinor",
+  "idempotencyKey",
 ] as const
 
 const REFERENCE = /^[A-Za-z0-9][A-Za-z0-9_:.-]{0,199}$/
@@ -40,11 +45,7 @@ export const assertUnchangedOrderAttempt = (
   command: OrderCommand,
   stored: OrderSnapshot,
 ): OrderSnapshot => {
-  if (
-    !stored ||
-    !stored.id ||
-    BOUND_FIELDS.some((field) => stored[field] !== command[field])
-  ) {
+  if (!stored || !stored.id || BOUND_FIELDS.some((field) => stored[field] !== command[field])) {
     throw new Error("Checkout replay refused: the idempotency key belongs to a different purchase")
   }
   return stored
@@ -61,8 +62,12 @@ export class MedusaOrderOrchestrationAdapter implements OrderOrchestrationPort {
       throw new Error("Order currency must use an uppercase ISO 4217 code")
     }
     for (const field of [
-      "orderReference", "organisationId", "marketKey",
-      "legalSellerKey", "idempotencyKey", "correlationId",
+      "orderReference",
+      "organisationId",
+      "marketKey",
+      "legalSellerKey",
+      "idempotencyKey",
+      "correlationId",
     ] as const) {
       if (!REFERENCE.test(command[field] ?? "")) {
         throw new Error("Checkout requires nonempty and bounded authority identifiers")
