@@ -11,13 +11,13 @@
 
 When `NODE_ENV=production`, these values must be supplied explicitly:
 
-| Category | Environment keys | Validation |
-| --- | --- | --- |
-| Engine identity | `BAOBAB_TRADE_ENGINE_ID`, `BAOBAB_TRADE_ENGINE_INSTANCE_ID` | Nonblank registered engine identifier; instance format `ei_<id>` (CP minted) |
-| Deployment identity | `BAOBAB_ENVIRONMENT`, `BAOBAB_REGION`, `BAOBAB_DEPLOYMENT_REVISION` | Recognised environment, stable region and non-placeholder revision; **never** derive the instance from a replica hostname |
-| Required persistence | `DATABASE_URL`, `REDIS_URL` | PostgreSQL and Redis URL protocols; credentials and values never included in validation errors |
-| Runtime credentials | `JWT_SECRET`, `COOKIE_SECRET`, `BAOBAB_WEBHOOK_SIGNING_SECRET` | Explicit non-placeholder secrets of at least 32 characters |
-| Platform authority endpoint | `BAOBAB_CONTROL_PLANE_BASE_URL` | Valid HTTPS service URL without embedded credentials or query/fragment |
+| Category                    | Environment keys                                                    | Validation                                                                                                                |
+| --------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Engine identity             | `BAOBAB_TRADE_ENGINE_ID`, `BAOBAB_TRADE_ENGINE_INSTANCE_ID`         | Nonblank registered engine identifier; instance format `ei_<id>` (CP minted)                                              |
+| Deployment identity         | `BAOBAB_ENVIRONMENT`, `BAOBAB_REGION`, `BAOBAB_DEPLOYMENT_REVISION` | Recognised environment, stable region and non-placeholder revision; **never** derive the instance from a replica hostname |
+| Required persistence        | `DATABASE_URL`, `REDIS_URL`                                         | PostgreSQL and Redis URL protocols; credentials and values never included in validation errors                            |
+| Runtime credentials         | `JWT_SECRET`, `COOKIE_SECRET`, `BAOBAB_WEBHOOK_SIGNING_SECRET`      | Explicit non-placeholder secrets of at least 32 characters                                                                |
+| Platform authority endpoint | `BAOBAB_CONTROL_PLANE_BASE_URL`                                     | Valid HTTPS service URL without embedded credentials or query/fragment                                                    |
 
 Optional configured ERP, Pulse, IAM token and IAM issuer URLs are also validated. Service URLs require HTTPS under `NODE_ENV=production`; local development may use plain HTTP, as supplied by the DevContainer or disposable harness.
 
