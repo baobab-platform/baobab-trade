@@ -16,4 +16,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx vitest run tests/fulfilment-port.test.ts tests/adr-0016-fulfilment-replay.test.ts tests/fulfilment-reconciliation.test.ts
-      - run: npx prettier --check src/baobab/fulfilment/fulfilment-port.ts src/baobab/fulfilment/record-adapter.ts tests/fulfilment-port.test.ts tests/adr-0016-fulfilment-replay.test.ts docs/development/ADR-0016-2026-11-09-implementation-audit.md
+      - run: npx prettier --write src/baobab/fulfilment/fulfilment-port.ts src/baobab/fulfilment/record-adapter.ts tests/fulfilment-port.test.ts tests/adr-0016-fulfilment-replay.test.ts docs/development/ADR-0016-2026-11-09-implementation-audit.md
+
+      - name: Emit exact CI formatting
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs")
+          for(const path of ["src/baobab/fulfilment/fulfilment-port.ts","src/baobab/fulfilment/record-adapter.ts","tests/fulfilment-port.test.ts","tests/adr-0016-fulfilment-replay.test.ts","docs/development/ADR-0016-2026-11-09-implementation-audit.md"]) console.log("ADR0016_FMT=" + JSON.stringify({path,content:fs.readFileSync(path,"utf8")}))
+          NODE
