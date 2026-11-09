@@ -213,7 +213,7 @@ jobs:
           rm -f artifacts/dev11-rabbit/source-trace.private
       - name: Preserve safe provider boundary observations only
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.7.5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.7.5
         with:
           name: dev11-real-rabbit-erp-inbox
           path: |
