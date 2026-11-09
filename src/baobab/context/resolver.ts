@@ -5,6 +5,7 @@ import {
   type ExternalReferenceResolution,
 } from "../contracts/canonical-mapping"
 import { assertMarketTransactable, type BaobabMarket } from "../contracts/market"
+import { assertAuthorisedMarketExecution, type AuthorisedMarketExecution } from "../market/execution-authority"
 import type { BaobabTenantContext } from "../contracts/tenant-context"
 
 /**
@@ -29,6 +30,8 @@ export type BaobabCommerceContext = {
   /** The stored Control Plane context every mapping below was resolved in (ADR-SHARED-014). */
   contextId: string
   market: BaobabMarket
+  /** Trade-consumed CP context; not an independent capability/estate grant. */
+  marketAuthority: AuthorisedMarketExecution
   legalSellerCanonicalId: string
   digitalEstateCanonicalId: string
   externalReferences: {
@@ -55,8 +58,13 @@ const resolveExternalReference = async (
     accessToken,
     correlationId,
   )
-  if (resolution.tenant_id !== tenantId) {
-    throw new Error("Mapping resolved in a tenant other than the authenticated tenant")
+  if (
+    resolution.tenant_id !== tenantId ||
+    resolution.context_id !== contextId ||
+    resolution.canonical_entity_id !== canonicalEntityId ||
+    resolution.status !== "ACTIVE"
+  ) {
+    throw new Error("Mapping resolution does not match the authenticated tenant, context and entity")
   }
   if (!isExternalReferenceResolution(resolution)) {
     throw new Error(
@@ -113,6 +121,13 @@ export const resolveCommerceContext = async (
     throw new Error("Selected Market is not the Market of the Control Plane's resolved context")
   }
 
+  // ADR-0010: CP may resolve a *different primary Market* for the same
+  // country. Only an exact, current Market+currency+seller participation is
+  // sufficient to continue to native mapping resolution.
+  const marketAuthority = assertAuthorisedMarketExecution(
+    tenant, market, stored, selection.marketId,
+  )
+
   const [marketReference, legalSellerReference, digitalEstateReference] = await Promise.all([
     resolveExternalReference(
       client,
@@ -144,7 +159,8 @@ export const resolveCommerceContext = async (
     tenant,
     contextId: stored.context_id,
     market,
-    legalSellerCanonicalId: market.legal_entity_id,
+    marketAuthority,
+    legalSellerCanonicalId: marketAuthority.legalSellerCanonicalId,
     digitalEstateCanonicalId: selection.digitalEstateCanonicalId,
     externalReferences: {
       market: marketReference,
