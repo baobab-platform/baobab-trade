@@ -18,4 +18,11 @@ jobs:
       - name: Pricing and scoped-candidate regressions
         run: npx vitest run tests/pricing-decision.test.ts tests/adr-0012-price-authority.test.ts
       - name: Changed-source formatting
-        run: npx prettier --check src/baobab/pricing/decision-port.ts tests/pricing-decision.test.ts tests/adr-0012-price-authority.test.ts docs/development/ADR-0012-2026-11-09-implementation-audit.md
+        run: npx prettier --write src/baobab/pricing/decision-port.ts tests/pricing-decision.test.ts tests/adr-0012-price-authority.test.ts docs/development/ADR-0012-2026-11-09-implementation-audit.md
+
+      - name: Emit exact Prettier result for source-only evidence
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs")
+          for (const path of ["src/baobab/pricing/decision-port.ts","tests/pricing-decision.test.ts","tests/adr-0012-price-authority.test.ts","docs/development/ADR-0012-2026-11-09-implementation-audit.md"]) console.log("ADR0012_FMT=" + JSON.stringify({path,content:fs.readFileSync(path, "utf8")}))
+          NODE
