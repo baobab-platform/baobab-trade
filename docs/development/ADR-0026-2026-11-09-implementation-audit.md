@@ -1,6 +1,6 @@
 # ADR-0026 implementation audit — 9 November 2026
 
-**Governing status:** ADR-0026 currently reads Proposed — Normative Trade Architecture. This draft does not declare it Accepted.
+**Architecture status:** Accepted by Platform Owner directive, 9 November 2026, under higher accepted Shared/CP/IAM decisions. The implementation remains a draft and its outstanding runtime qualification gates are HELD; architecture acceptance is not production certification.
 
 ## Audited gap
 
