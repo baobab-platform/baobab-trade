@@ -111,8 +111,13 @@ export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
       if (existingTransition) {
         // An idempotency key is meant to replay the exact same transition, not silently no-op a
         // different one that happens to reuse it — that would hide a real caller bug.
-        if (existingTransition.from_status !== from || existingTransition.to_status !== to)
+        if (
+          existingTransition.payment_id !== paymentId ||
+          existingTransition.from_status !== from ||
+          existingTransition.to_status !== to
+        ) {
           throw new Error("Payment idempotency key reused for a different transition")
+        }
         return snapshot(current)
       }
       if (current.status !== from)

@@ -66,6 +66,33 @@ const TRANSITIONS: Record<PaymentStatus, readonly PaymentStatus[]> = {
   UNKNOWN: ["PENDING", "AUTHORIZED", "CAPTURED", "FAILED", "CANCELLED"],
 }
 
+/**
+ * A provider idempotency key binds one merchant, seller, buyer, currency,
+ * amount and commercial term. Losing the response cannot permit another
+ * payment attempt to adopt the original provider transaction.
+ */
+const REPLAY_FIELDS = [
+  "paymentReference", "orderReference", "organisationId",
+  "customerReference", "marketKey", "legalSellerKey", "method",
+  "terms", "providerKey", "currency", "amountMinor", "idempotencyKey",
+] as const
+
+export const assertSamePaymentAttempt = (
+  command: InitiatePaymentCommand & { digitalEstate: string },
+  stored: PaymentSnapshot,
+): PaymentSnapshot => {
+  if (
+    !stored ||
+    !stored.id ||
+    stored.digitalEstate !== command.digitalEstate ||
+    REPLAY_FIELDS.some((field) => stored[field] !== command[field]) ||
+    (stored.dueAt?.getTime() ?? null) !== (command.dueAt?.getTime() ?? null)
+  ) {
+    throw new Error("Payment idempotency key reused for a different financial attempt")
+  }
+  return stored
+}
+
 export class MedusaPaymentOrchestrationAdapter implements PaymentOrchestrationPort {
   constructor(private readonly records: PaymentRecordRepository) {}
 
@@ -85,16 +112,22 @@ export class MedusaPaymentOrchestrationAdapter implements PaymentOrchestrationPo
     const digitalEstate = command.organisationId
       ? ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID
       : THAMANI_DIGITAL_ESTATE_CANONICAL_ID
+    if (
+      !command.idempotencyKey ||
+      !/^[A-Za-z0-9][A-Za-z0-9_:.-]{0,199}$/.test(command.idempotencyKey)
+    ) {
+      throw new Error("Payment idempotency key must be a bounded opaque identifier")
+    }
+    const scoped = { ...command, digitalEstate }
     const existing = await this.records.findByIdempotencyKey(command.idempotencyKey)
     if (existing) {
-      // findByIdempotencyKey looks up by idempotencyKey alone — a caller-supplied string with
-      // no cross-estate uniqueness guarantee. Returning the other estate's payment here would
-      // leak its full snapshot to this request instead of just failing loudly.
-      if (existing.digitalEstate !== digitalEstate)
-        throw new Error("Payment idempotency key reused across Digital Estates")
-      return existing
+      // Cross-tenant/merchant/amount reuse must not disclose provider or payment
+      // details; a matching key is not an authorisation credential.
+      return assertSamePaymentAttempt(scoped, existing)
     }
-    return this.records.create({ ...command, digitalEstate })
+    // PaymentBridgeRecordAdapter holds the durable unique-key lock; it may
+    // return a concurrent winner. The result STILL must match this attempt.
+    return assertSamePaymentAttempt(scoped, await this.records.create(scoped))
   }
 
   async transition(
