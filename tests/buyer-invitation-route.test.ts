@@ -52,6 +52,7 @@ describe("buyer organisation invitations", () => {
         .mockResolvedValueOnce([
           {
             id: "b2bmem_invited",
+            organisation_id: "b2borg_1",
             customer_id: null,
             principal_id: null,
             status: "INVITED",
