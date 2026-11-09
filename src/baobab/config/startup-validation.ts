@@ -75,9 +75,7 @@ const validateDatabaseUrl = (env: NodeJS.ProcessEnv): void => {
  * identifies the actual deployment. A staging deployment normally runs with
  * NODE_ENV=production, so the two are intentionally not forced to match.
  */
-export const validateTradeStartupConfiguration = (
-  env: NodeJS.ProcessEnv,
-): TradeStartupIdentity => {
+export const validateTradeStartupConfiguration = (env: NodeJS.ProcessEnv): TradeStartupIdentity => {
   const productionRuntime = env.NODE_ENV === "production"
   const buyerEnabled = readTradeFeatureFlag(
     env.BAOBAB_BUYER_IDENTITY_ENABLED,
