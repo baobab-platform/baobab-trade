@@ -187,6 +187,40 @@ describe("ControlPlaneResourceAssignmentResolver", () => {
     }
   })
 
+  it("refuses a blank Trade workload credential without making a CP request", async () => {
+    let calls = 0
+    const instance = new ControlPlaneResourceAssignmentResolver({
+      baseUrl: "https://cp.example.test",
+      engineInstanceId: "ei_trade01",
+      tokenProvider: { getAccessToken: async () => " " },
+      now: () => NOW,
+      fetcher: (async () => {
+        calls += 1
+        return new Response(JSON.stringify(attestation()))
+      }) as typeof fetch,
+    })
+    expect(await code(instance.resolve(workload))).toBe("RESOLUTION_UNAVAILABLE")
+    expect(calls).toBe(0)
+  })
+
+  it("rejects credential-bearing or ambiguous CP base URLs", () => {
+    const tokenProvider = { getAccessToken: async () => "trade-token" }
+    for (const baseUrl of [
+      "https://service:password@cp.example.test",
+      "https://cp.example.test/?tenant=another",
+      "https://cp.example.test/#fragment",
+    ]) {
+      expect(
+        () =>
+          new ControlPlaneResourceAssignmentResolver({
+            baseUrl,
+            engineInstanceId: "ei_trade01",
+            tokenProvider,
+          }),
+      ).toThrow()
+    }
+  })
+
   it("refuses an insecure or uncanonical configuration", () => {
     const tokenProvider = { getAccessToken: async () => "t" }
     expect(
