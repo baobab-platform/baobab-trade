@@ -20,7 +20,8 @@ describe("ADR-0007 §47: live PostgreSQL readiness", () => {
       controlPlaneConfigured: true,
     })
 
-    expect(raw).toHaveBeenCalledExactlyOnceWith("SELECT 1")
+    expect(raw).toHaveBeenCalledTimes(1)
+    expect(raw).toHaveBeenCalledWith("SELECT 1")
     expect(result).toEqual({
       status: "ready",
       dependencies: {
@@ -102,7 +103,7 @@ const fakeResponse = (): RouteResponse => {
 const invoke = async (resolve: () => unknown) => {
   const res = fakeResponse()
   await GET(
-    { scope: { resolve } } as Parameters<typeof GET>[0],
+    { scope: { resolve } } as unknown as Parameters<typeof GET>[0],
     res as unknown as Parameters<typeof GET>[1],
   )
   return res
