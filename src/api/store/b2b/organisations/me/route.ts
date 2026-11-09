@@ -33,7 +33,9 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   )
 
   res.status(200).json({
-    applications: applications.map((application) => ({
+    applications: applications
+      .filter((application) => application.tenant_id === tenantId && application.applicant_customer_id === customerId)
+      .map((application) => ({
       id: application.id,
       status: application.status,
       legal_name: application.legal_name,
