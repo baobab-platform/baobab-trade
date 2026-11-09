@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError, Modules } from "@medusajs/framework/utils"
 import { principalIdFromAuthContext } from "../../../../../../baobab/b2b/onboarding-policy"
+import { requireLegacyTenantOrganisation } from "../../../../../../baobab/b2b/legacy-tenant-scope"
 import { B2B_MODULE } from "../../../../../../modules/b2b"
 import type B2BModuleService from "../../../../../../modules/b2b/service"
 
@@ -33,9 +34,16 @@ const activeAdmin = async (b2b: B2BModuleService, organisationId: string, custom
     customer_id: customerId,
     status: "ACTIVE",
   })
-  if (memberships.length !== 1) return false
+  if (
+    memberships.length !== 1 ||
+    memberships[0].organisation_id !== organisationId ||
+    memberships[0].customer_id !== customerId ||
+    memberships[0].status !== "ACTIVE"
+  ) return false
   const roles = await b2b.listBuyerRoles({ membership_id: memberships[0].id })
-  return roles.some((role) => role.role === "ACCOUNT_ADMIN")
+  return roles.some((role) =>
+    role.membership_id === memberships[0].id && role.role === "ACCOUNT_ADMIN",
+  )
 }
 
 export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) => {
@@ -46,11 +54,17 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
 
   const organisationId = req.params.id
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
+  await requireLegacyTenantOrganisation(b2b, organisationId)
   const callerMemberships = await b2b.listBuyerMemberships({
     organisation_id: organisationId,
     customer_id: customerId,
   })
-  if (!callerMemberships.some((membership) => membership.status === "ACTIVE")) {
+  if (
+    callerMemberships.length !== 1 ||
+    callerMemberships[0].organisation_id !== organisationId ||
+    callerMemberships[0].customer_id !== customerId ||
+    callerMemberships[0].status !== "ACTIVE"
+  ) {
     throw new MedusaError(
       MedusaError.Types.FORBIDDEN,
       "an active membership in this organisation is required",
@@ -125,7 +139,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<InviteBody>, res: Med
   }
 
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
-  const organisation = await b2b.retrieveB2BOrganisation(organisationId)
+  const organisation = await requireLegacyTenantOrganisation(b2b, organisationId)
   if (organisation.status !== "ACTIVE") {
     throw new MedusaError(
       MedusaError.Types.NOT_ALLOWED,
