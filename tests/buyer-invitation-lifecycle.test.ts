@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Modules } from "@medusajs/framework/utils"
 import { POST as resend } from "../src/api/store/b2b/organisations/[id]/members/[membershipId]/resend/route"
 import { POST as revoke } from "../src/api/store/b2b/organisations/[id]/members/[membershipId]/revoke/route"
@@ -6,7 +6,13 @@ import { B2B_MODULE } from "../src/modules/b2b"
 
 const oldUrl = process.env.ZURIBEANS_PUBLIC_URL
 const oldTemplate = process.env.BAOBAB_BUYER_INVITATION_TEMPLATE
+const oldTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
+beforeEach(() => {
+  process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tn_zuribeans"
+})
 afterEach(() => {
+  if (oldTenant === undefined) delete process.env.BAOBAB_ZURIBEANS_TENANT_ID
+  else process.env.BAOBAB_ZURIBEANS_TENANT_ID = oldTenant
   if (oldUrl === undefined) delete process.env.ZURIBEANS_PUBLIC_URL
   else process.env.ZURIBEANS_PUBLIC_URL = oldUrl
   if (oldTemplate === undefined) delete process.env.BAOBAB_BUYER_INVITATION_TEMPLATE
@@ -33,8 +39,10 @@ describe("buyer invitation lifecycle", () => {
     process.env.ZURIBEANS_PUBLIC_URL = "https://zuribeans.example"
     process.env.BAOBAB_BUYER_INVITATION_TEMPLATE = "buyer-invite"
     const b2b = {
-      listBuyerMemberships: vi.fn(async () => [{ id: "b2bmem_admin" }]),
-      listBuyerRoles: vi.fn(async () => [{ role: "ACCOUNT_ADMIN" }]),
+      listBuyerMemberships: vi.fn(async () => [{
+        id: "b2bmem_admin", organisation_id: "b2borg_1", customer_id: "cus_admin", status: "ACTIVE",
+      }]),
+      listBuyerRoles: vi.fn(async () => [{ membership_id: "b2bmem_admin", role: "ACCOUNT_ADMIN" }]),
       retrieveBuyerMembership: vi.fn(async () => ({
         id: "b2bmem_invite",
         organisation_id: "b2borg_1",
@@ -50,7 +58,9 @@ describe("buyer invitation lifecycle", () => {
       updateBuyerMemberships: vi.fn(async () => ({})),
       createBuyerInvitationDeliveries: vi.fn(async (input) => ({ id: "delivery_2", ...input })),
       updateBuyerInvitationDeliveries: vi.fn(async () => ({})),
-      retrieveB2BOrganisation: vi.fn(async () => ({ legal_name: "Acme" })),
+      retrieveB2BOrganisation: vi.fn(async () => ({
+        id: "b2borg_1", tenant_id: "tn_zuribeans", legal_name: "Acme", status: "ACTIVE",
+      })),
     }
     const notification = { createNotifications: vi.fn(async () => ({ id: "msg_2" })) }
     const req = {
@@ -90,6 +100,9 @@ describe("buyer invitation lifecycle", () => {
         status: "INVITED",
       })),
       updateBuyerMemberships: vi.fn(async (patch) => ({ id: "b2bmem_invite", ...patch })),
+      retrieveB2BOrganisation: vi.fn(async () => ({
+        id: "b2borg_1", tenant_id: "tn_zuribeans", status: "ACTIVE",
+      })),
     }
     const req = {
       auth_context: auth,
