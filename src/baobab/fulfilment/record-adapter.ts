@@ -95,8 +95,17 @@ export class FulfilmentBridgeRecordAdapter implements FulfilmentRecordRepository
       const [stored] = await this.bridge.listCommerceFulfilments({ id: current.id })
       if (!stored) throw new Error("Fulfilment does not exist")
       if (prior) {
-        if (prior.from_status !== stored.status || prior.to_status !== to)
+        // After a successful transition the native record has status=to,
+        // not status=from. Compare the historical transition to the original
+        // request AND confirm the committed record has its target state.
+        if (
+          prior.fulfilment_id !== current.id ||
+          prior.from_status !== current.status ||
+          prior.to_status !== to ||
+          stored.status !== to
+        ) {
           throw new Error("Fulfilment idempotency key reused for a different transition")
+        }
         return snapshot(stored)
       }
       if (stored.status !== current.status)

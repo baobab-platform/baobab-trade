@@ -63,7 +63,7 @@ describe("FulfilmentPort", () => {
         organisationId: undefined,
         customerReference: "customer-1",
       }),
-    ).rejects.toThrow(/reused across Digital Estates/)
+    ).rejects.toThrow(/different shipment/)
   })
   it("rejects incomplete cross-border trade metadata", async () => {
     const port = new MedusaFulfilmentAdapter(new MemoryRecords())

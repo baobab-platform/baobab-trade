@@ -97,12 +97,47 @@ const TRANSITIONS: Record<FulfilmentStatus, readonly FulfilmentStatus[]> = {
   RECONCILIATION_REQUIRED: ["ACCEPTED", "ALLOCATED", "DISPATCHED", "DELIVERED", "CANCELLED"],
 }
 
+const SHIPMENT_FIELDS = [
+  "originCountry", "destinationCountry", "exporterOrganisationId",
+  "importerOrganisationId", "complianceDecisionId", "incoterm",
+  "grossWeightKg", "packageCount", "exportReference", "customsReference",
+] as const
+const REQUEST_FIELDS = [
+  "fulfilmentReference", "orderReference", "organisationId", "customerReference",
+  "marketKey", "legalSellerKey", "sourceLocationKey", "mode",
+  "providerKey", "idempotencyKey",
+] as const
+
+/**
+ * ADR-0016 FUL-COM-015/016/021/023: one key commits one physical
+ * fulfilment intent. Provider-lock races may return an existing record,
+ * but it must be the SAME order/warehouse/carrier/cross-border shipment.
+ */
+export const assertSameFulfilmentAttempt = (
+  requested: RequestFulfilmentCommand & { digitalEstate: string },
+  stored: FulfilmentSnapshot,
+): FulfilmentSnapshot => {
+  if (
+    !stored ||
+    !stored.id ||
+    requested.digitalEstate !== stored.digitalEstate ||
+    REQUEST_FIELDS.some((field) => requested[field] !== stored[field]) ||
+    SHIPMENT_FIELDS.some((field) => requested.shipment[field] !== stored.shipment[field]) ||
+    JSON.stringify(requested.shipment.hsReferences ?? []) !==
+      JSON.stringify(stored.shipment.hsReferences ?? [])
+  ) {
+    throw new Error("Fulfilment idempotency key reused for a different shipment")
+  }
+  return stored
+}
+
 const validateShipment = (command: RequestFulfilmentCommand) => {
   if (Boolean(command.organisationId) === Boolean(command.customerReference))
     throw new Error("Fulfilment requires exactly one B2B organisation or B2C customer reference")
   if (
+    !Number.isFinite(command.shipment.grossWeightKg) ||
     !(command.shipment.grossWeightKg > 0) ||
-    !Number.isInteger(command.shipment.packageCount) ||
+    !Number.isSafeInteger(command.shipment.packageCount) ||
     command.shipment.packageCount <= 0
   )
     throw new Error("Shipment weight and package count must be positive")
@@ -128,16 +163,13 @@ export class MedusaFulfilmentAdapter implements FulfilmentPort {
     const digitalEstate = command.organisationId
       ? ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID
       : THAMANI_DIGITAL_ESTATE_CANONICAL_ID
-    const existing = await this.records.findByIdempotencyKey(command.idempotencyKey)
-    if (existing) {
-      // findByIdempotencyKey looks up by idempotencyKey alone — a caller-supplied string with
-      // no cross-estate uniqueness guarantee. Returning the other estate's fulfilment here
-      // would leak its full snapshot to this request instead of just failing loudly.
-      if (existing.digitalEstate !== digitalEstate)
-        throw new Error("Fulfilment idempotency key reused across Digital Estates")
-      return existing
+    if (!/^[A-Za-z0-9][A-Za-z0-9_:.-]{0,199}$/.test(command.idempotencyKey)) {
+      throw new Error("Fulfilment requires a bounded idempotency key")
     }
-    return this.records.create({ ...command, digitalEstate })
+    const scoped = { ...command, digitalEstate }
+    const existing = await this.records.findByIdempotencyKey(command.idempotencyKey)
+    if (existing) return assertSameFulfilmentAttempt(scoped, existing)
+    return assertSameFulfilmentAttempt(scoped, await this.records.create(scoped))
   }
   async transition(
     current: FulfilmentSnapshot,
