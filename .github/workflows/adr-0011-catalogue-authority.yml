@@ -22,14 +22,11 @@ jobs:
           cache: npm
       - name: Install pinned dependencies
         run: npm ci
-      - name: Format changed ADR-0011 sources for initial proof
+      - name: Verify changed ADR-0011 source formatting
         run: |
-          npx prettier --write 'src/baobab/catalogue/visibility-authority.ts' 'src/api/store/b2b/assortment/route.ts' 'src/baobab/b2b/product-assortment-admin-validation.ts' 'src/api/admin/b2b/market-product-eligibility/route.ts' 'tests/dev07-current-assortment.test.ts' 'tests/adr-0011-catalogue-access.test.ts' 'tests/adr-0011-admin-eligibility.test.ts' 'docs/development/ADR-0011-2026-11-09-implementation-audit.md'
-          node - <<'NODE'
-          const fs = require("node:fs")
-          const paths = ["src/baobab/catalogue/visibility-authority.ts","src/api/store/b2b/assortment/route.ts","src/baobab/b2b/product-assortment-admin-validation.ts","src/api/admin/b2b/market-product-eligibility/route.ts","tests/dev07-current-assortment.test.ts","tests/adr-0011-catalogue-access.test.ts","tests/adr-0011-admin-eligibility.test.ts","docs/development/ADR-0011-2026-11-09-implementation-audit.md"]
-          for (const path of paths) console.log("ADR0011_FMT_FILE=" + JSON.stringify({path, content:fs.readFileSync(path, "utf8")}))
-          NODE
+          npx prettier --check 'src/baobab/catalogue/visibility-authority.ts' 'src/api/store/b2b/assortment/route.ts' 'src/baobab/b2b/product-assortment-admin-validation.ts' 'src/api/admin/b2b/market-product-eligibility/route.ts' 'tests/dev07-current-assortment.test.ts' 'tests/adr-0011-catalogue-access.test.ts' 'tests/adr-0011-admin-eligibility.test.ts' 'docs/development/ADR-0011-2026-11-09-implementation-audit.md'
       - name: Run ADR-0011 source-level adversarial conformance
         run: |
           npx vitest run tests/adr-0011-catalogue-access.test.ts tests/adr-0011-admin-eligibility.test.ts tests/dev07-current-assortment.test.ts src/baobab/b2b/product-assortment-policy.test.ts src/baobab/b2b/product-assortment-admin-validation.test.ts tests/catalogue-config.test.ts
+      - name: Check TypeScript contracts
+        run: npm run typecheck

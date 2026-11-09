@@ -21,9 +21,7 @@ const blocked = {
 }
 const otherMarket = { ...permitted, product_id: "prod_other_market", market_key: "zuribeans_ug" }
 
-function access(
-  overrides: Partial<VerifiedCatalogueAccess> = {},
-): VerifiedCatalogueAccess {
+function access(overrides: Partial<VerifiedCatalogueAccess> = {}): VerifiedCatalogueAccess {
   return {
     tenantId: "tn_zuribeans",
     canonicalMarketId: "mkt_zuribeans_za",
@@ -126,11 +124,7 @@ describe("ADR-0011 B2B assortment Market and organisation confidentiality", () =
 
   it("does not leak blocked diagnostics, regulatory status or other-Market source rows", async () => {
     const service = {
-      listMarketProductEligibilities: vi.fn(async () => [
-        permitted,
-        blocked,
-        otherMarket,
-      ]),
+      listMarketProductEligibilities: vi.fn(async () => [permitted, blocked, otherMarket]),
     }
     const port = {
       authorizeRequest: vi.fn(async () => access()),
@@ -177,7 +171,9 @@ describe("ADR-0011 B2B assortment Market and organisation confidentiality", () =
       const { req } = request(service, port)
       const res = response()
       await GET({ ...req, organisation } as never, res as never)
-      expect((res.body as { sellable_product_ids: string[] }).sellable_product_ids).toEqual(expected)
+      expect((res.body as { sellable_product_ids: string[] }).sellable_product_ids).toEqual(
+        expected,
+      )
       if (organisation === "org_bob") {
         expect(JSON.stringify(res.body)).not.toContain("prod_confidential")
       }
@@ -195,9 +191,7 @@ describe("ADR-0011 B2B assortment Market and organisation confidentiality", () =
       }
       const { req } = request(service, port)
       const res = response()
-      await expect(GET(req as never, res as never)).rejects.toThrow(
-        "B2B catalogue unavailable",
-      )
+      await expect(GET(req as never, res as never)).rejects.toThrow("B2B catalogue unavailable")
       expect(res.body).toBeNull()
     }
   })
@@ -219,11 +213,10 @@ describe("ADR-0011 B2B assortment Market and organisation confidentiality", () =
   it("requires a valid Market/tenant identity and current buyer-specific authority", () => {
     const current = access()
     expect(assertVerifiedCatalogueAccess(current, current.marketKey)).toEqual(current)
+    expect(() => assertVerifiedCatalogueAccess(current, "zuribeans_ug")).toThrow(/not authorised/)
     expect(() =>
-      assertVerifiedCatalogueAccess(current, "zuribeans_ug"),
+      assertVerifiedCatalogueAccess(access({ tenantId: "thamani" }), "zuribeans_za"),
     ).toThrow(/not authorised/)
-    expect(() => assertVerifiedCatalogueAccess(access({ tenantId: "thamani" }), "zuribeans_za"))
-      .toThrow(/not authorised/)
   })
 
   it("cannot let browser query parameters disable regulatory clearance", async () => {
@@ -232,11 +225,10 @@ describe("ADR-0011 B2B assortment Market and organisation confidentiality", () =
       authorizeRequest: vi.fn(async () => access()),
       visibleProductIds: vi.fn(),
     }
-    const { req } = request(
-      service,
-      port,
-      { market_key: "zuribeans_za", require_regulatory_clearance: "false" },
-    )
+    const { req } = request(service, port, {
+      market_key: "zuribeans_za",
+      require_regulatory_clearance: "false",
+    })
     await expect(GET(req as never, response() as never)).rejects.toThrow(
       "regulatory clearance is mandatory",
     )

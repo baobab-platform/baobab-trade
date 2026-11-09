@@ -184,7 +184,8 @@ export const validateMarketEligibilityBody = (
       market_key: String(body.market_key).trim(),
       status,
       regulatory_eligibility: regulatory,
-      policy_reference: typeof body.policy_reference === "string" ? body.policy_reference.trim() : null,
+      policy_reference:
+        typeof body.policy_reference === "string" ? body.policy_reference.trim() : null,
       effective_from: boundaries.effective_from,
       effective_until: boundaries.effective_until,
     },

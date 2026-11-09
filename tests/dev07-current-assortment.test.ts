@@ -4,7 +4,12 @@ import { GET } from "../src/api/store/b2b/assortment/route"
 import { PRODUCT_CATALOGUE_ACCESS } from "../src/baobab/catalogue/visibility-authority"
 
 const now = new Date("2026-10-25T12:00:00Z")
-const row = { product_id: "prod_a", market_key: "zuribeans_ug", status: "ACTIVE", regulatory_eligibility: "ELIGIBLE" }
+const row = {
+  product_id: "prod_a",
+  market_key: "zuribeans_ug",
+  status: "ACTIVE",
+  regulatory_eligibility: "ELIGIBLE",
+}
 const ids = (rows: Parameters<typeof partitionCurrentMarketAssortment>[0], clock = now) =>
   partitionCurrentMarketAssortment(rows, clock).sellable_product_ids
 
