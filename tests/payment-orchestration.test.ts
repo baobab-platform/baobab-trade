@@ -71,7 +71,7 @@ describe("PaymentOrchestrationPort", () => {
         organisationId: undefined,
         customerReference: "customer-1",
       }),
-    ).rejects.toThrow(/reused across Digital Estates/)
+    ).rejects.toThrow(/different financial attempt/)
   })
 
   it("rejects invalid transitions and terms disguised as settlement", async () => {
