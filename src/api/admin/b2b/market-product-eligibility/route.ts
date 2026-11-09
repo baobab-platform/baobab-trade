@@ -18,7 +18,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     throw new MedusaError(MedusaError.Types.INVALID_DATA, validated.error.message)
   }
 
-  const body = (req.body ?? {}) as Record<string, unknown>
   const productId = validated.data.product_id as string
   const marketKey = validated.data.market_key as string
   const status = validated.data.status as CommercialAssortmentStatus
@@ -27,18 +26,27 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   const existing = await b2b.listMarketProductEligibilities(
     { product_id: productId, market_key: marketKey },
-    { take: 1 },
+    { take: 2 },
   )
+
+  // Never select the first of duplicate/mismatched rows. A stale or broken
+  // native filter must not let one Market's administrator change another
+  // Market's product eligibility through an injected product ID.
+  if (
+    existing.length > 1 ||
+    existing.some((row) => row.product_id !== productId || row.market_key !== marketKey)
+  ) {
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "Ambiguous product Market eligibility")
+  }
 
   const payload = {
     product_id: productId,
     market_key: marketKey,
     status,
     regulatory_eligibility: regulatory,
-    policy_reference: typeof body.policy_reference === "string" ? body.policy_reference : null,
-    effective_from: typeof body.effective_from === "string" ? new Date(body.effective_from) : null,
-    effective_until:
-      typeof body.effective_until === "string" ? new Date(body.effective_until) : null,
+    policy_reference: validated.data.policy_reference as string | null,
+    effective_from: validated.data.effective_from as Date | null,
+    effective_until: validated.data.effective_until as Date | null,
   }
 
   const row =
