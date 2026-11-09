@@ -5,6 +5,7 @@ import { createHash } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError, Modules } from "@medusajs/framework/utils"
 import { principalIdFromAuthContext } from "../../../../../baobab/b2b/onboarding-policy"
+import { requireLegacyTenantOrganisation } from "../../../../../baobab/b2b/legacy-tenant-scope"
 import { B2B_MODULE } from "../../../../../modules/b2b"
 import type B2BModuleService from "../../../../../modules/b2b/service"
 
@@ -74,7 +75,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<AcceptBody>, res: Med
     )
   }
 
-  const organisation = await b2b.retrieveB2BOrganisation(membership.organisation_id)
+  const organisation = await requireLegacyTenantOrganisation(b2b, membership.organisation_id)
   if (organisation.status !== "ACTIVE") {
     throw new MedusaError(
       MedusaError.Types.NOT_ALLOWED,

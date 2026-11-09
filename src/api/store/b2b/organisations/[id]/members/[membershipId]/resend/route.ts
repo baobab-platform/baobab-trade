@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError, Modules } from "@medusajs/framework/utils"
 import { principalIdFromAuthContext } from "../../../../../../../../baobab/b2b/onboarding-policy"
+import { requireLegacyTenantOrganisation } from "../../../../../../../../baobab/b2b/legacy-tenant-scope"
 import { B2B_MODULE } from "../../../../../../../../modules/b2b"
 import type B2BModuleService from "../../../../../../../../modules/b2b/service"
 
@@ -20,9 +21,17 @@ const activeAdmin = async (b2b: B2BModuleService, organisationId: string, custom
     customer_id: customerId,
     status: "ACTIVE",
   })
-  if (memberships.length !== 1) return false
+  if (
+    memberships.length !== 1 ||
+    memberships[0].organisation_id !== organisationId ||
+    memberships[0].customer_id !== customerId ||
+    memberships[0].status !== "ACTIVE"
+  )
+    return false
   const roles = await b2b.listBuyerRoles({ membership_id: memberships[0].id })
-  return roles.some((role) => role.role === "ACCOUNT_ADMIN")
+  return roles.some(
+    (role) => role.membership_id === memberships[0].id && role.role === "ACCOUNT_ADMIN",
+  )
 }
 
 export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) => {
@@ -48,6 +57,7 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
   }
 
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
+  const organisation = await requireLegacyTenantOrganisation(b2b, req.params.id)
   if (!(await activeAdmin(b2b, req.params.id, customerId))) {
     throw new MedusaError(
       MedusaError.Types.FORBIDDEN,
@@ -111,7 +121,7 @@ export const POST = async (req: AuthenticatedMedusaRequest, res: MedusaResponse)
       channel: "email",
       template,
       data: {
-        organisation_name: (await b2b.retrieveB2BOrganisation(req.params.id)).legal_name,
+        organisation_name: organisation.legal_name,
         invitation_url: `${publicUrl}/account/invitations/accept?token=${encodeURIComponent(token)}`,
         expires_at: expiresAt.toISOString(),
       },

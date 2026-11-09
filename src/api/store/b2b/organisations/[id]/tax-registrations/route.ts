@@ -2,6 +2,7 @@
 // GET: any member. POST: ACCOUNT_ADMIN on ACTIVE org.
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
+import { requireLegacyTenantOrganisation } from "../../../../../../baobab/b2b/legacy-tenant-scope"
 import { B2B_MODULE } from "../../../../../../modules/b2b"
 import type B2BModuleService from "../../../../../../modules/b2b/service"
 
@@ -29,7 +30,12 @@ const requireMember = async (b2b: B2BModuleService, organisationId: string, cust
     organisation_id: organisationId,
     customer_id: customerId,
   })
-  if (memberships.length === 0 || memberships[0].status !== "ACTIVE") {
+  if (
+    memberships.length !== 1 ||
+    memberships[0].organisation_id !== organisationId ||
+    memberships[0].customer_id !== customerId ||
+    memberships[0].status !== "ACTIVE"
+  ) {
     throw new MedusaError(
       MedusaError.Types.FORBIDDEN,
       "the authenticated buyer has no active membership in this organisation",
@@ -41,7 +47,7 @@ const requireMember = async (b2b: B2BModuleService, organisationId: string, cust
 const requireAdmin = async (b2b: B2BModuleService, organisationId: string, customerId: string) => {
   const membership = await requireMember(b2b, organisationId, customerId)
   const roles = await b2b.listBuyerRoles({ membership_id: membership.id })
-  if (!roles.some((r) => r.role === "ACCOUNT_ADMIN")) {
+  if (!roles.some((r) => r.membership_id === membership.id && r.role === "ACCOUNT_ADMIN")) {
     throw new MedusaError(
       MedusaError.Types.FORBIDDEN,
       "only an ACCOUNT_ADMIN can update tax profile",
@@ -58,11 +64,14 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
 
   const organisationId = req.params.id
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
+  await requireLegacyTenantOrganisation(b2b, organisationId)
   await requireMember(b2b, organisationId, customerId)
 
-  const registrations = await b2b.listTaxRegistrations({
-    organisation_id: organisationId,
-  })
+  const registrations = (
+    await b2b.listTaxRegistrations({
+      organisation_id: organisationId,
+    })
+  ).filter((registration) => registration.organisation_id === organisationId)
 
   res.status(200).json({
     tax_registrations: registrations.map((r) => ({
@@ -87,7 +96,7 @@ export const POST = async (req: AuthenticatedMedusaRequest<TaxBody>, res: Medusa
   const organisationId = req.params.id
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
 
-  const organisation = await b2b.retrieveB2BOrganisation(organisationId)
+  const organisation = await requireLegacyTenantOrganisation(b2b, organisationId)
   if (organisation.status !== "ACTIVE") {
     throw new MedusaError(
       MedusaError.Types.NOT_ALLOWED,
