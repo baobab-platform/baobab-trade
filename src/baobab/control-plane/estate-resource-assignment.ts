@@ -127,8 +127,8 @@ export class ControlPlaneResourceAssignmentResolver implements ResourceAssignmen
   constructor(private readonly options: ControlPlaneResourceAssignmentResolverOptions) {
     const base = new URL(options.baseUrl)
     if (
-      base.protocol !== "https:" &&
-      !(base.protocol === "http:" && base.hostname === "localhost") ||
+      (base.protocol !== "https:" &&
+        !(base.protocol === "http:" && base.hostname === "localhost")) ||
       !!base.username ||
       !!base.password ||
       !!base.search ||
