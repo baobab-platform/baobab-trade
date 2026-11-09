@@ -26,6 +26,10 @@ const market: BaobabMarket = {
   legal_entity_id: "ZURIBEANS-ZA",
   market_type: "B2B",
   status: "ACTIVE",
+  default_country: "ZA",
+  countries: ["ZA"],
+  default_currency: "ZAR",
+  allowed_currencies: ["ZAR"],
   effective_from: "2026-09-07T00:00:00Z",
   revision: 1,
 }
@@ -35,6 +39,8 @@ const storedContext: RawPlatformContextResolutionResponse = {
   tenant_id: tenant.tenantId,
   resolved_at: "2026-09-07T10:00:00Z",
   market_id: market.market_id,
+  country_code: "ZA",
+  currency_code: "ZAR",
 }
 
 const mapping = (
@@ -159,7 +165,7 @@ describe("Baobab commerce context isolation", () => {
       countryCode: "ZA",
     })
 
-    const noCountry = clientFor()
+    const noCountry = clientFor({ ...market, default_country: null })
     await resolveCommerceContext(noCountry, selection, "access-token", "corr-1")
     expect(noCountry.resolveStoredContext).toHaveBeenCalledWith("access-token", "corr-1", {
       tenantId: tenant.tenantId,
@@ -188,7 +194,7 @@ describe("Baobab commerce context isolation", () => {
         "access-token",
         "corr-1",
       ),
-    ).rejects.toThrow("other than the authenticated tenant")
+    ).rejects.toThrow("does not match the authenticated tenant")
 
     await expect(
       resolveCommerceContext(
