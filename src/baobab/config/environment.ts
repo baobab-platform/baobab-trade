@@ -41,6 +41,8 @@ export type BaobabTradeEnvironment = {
   // client binding names them. Neither is ever taken from a request.
   tradeEngineInstanceId?: string
   deploymentEnvironment?: string
+  deploymentRegion?: string
+  deploymentRevision?: string
   logLevel: string
 }
 
@@ -95,5 +97,7 @@ export const getBaobabTradeEnvironment = (): BaobabTradeEnvironment => ({
   buyerAssurancePolicyJson: process.env.BAOBAB_BUYER_ASSURANCE_POLICY_JSON,
   tradeEngineInstanceId: process.env.BAOBAB_TRADE_ENGINE_INSTANCE_ID,
   deploymentEnvironment: process.env.BAOBAB_ENVIRONMENT,
+  deploymentRegion: process.env.BAOBAB_REGION,
+  deploymentRevision: process.env.BAOBAB_DEPLOYMENT_REVISION,
   logLevel: process.env.LOG_LEVEL || "info",
 })
