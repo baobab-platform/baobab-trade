@@ -57,9 +57,7 @@ describe("ADR-0007 §47: live PostgreSQL readiness", () => {
   })
 
   it("refuses traffic when the PostgreSQL registration is missing or unusable", async () => {
-    expect(
-      (await checkTradeReadiness({ controlPlaneConfigured: true })).status,
-    ).toBe("not_ready")
+    expect((await checkTradeReadiness({ controlPlaneConfigured: true })).status).toBe("not_ready")
     expect(
       (
         await checkTradeReadiness({
@@ -140,11 +138,10 @@ describe("ADR-0007 §47: /readiness traffic-admission endpoint", () => {
     const raw = vi.fn().mockResolvedValue(1)
 
     const res = await invoke(() => ({ raw }))
-    expect(raw).toHaveBeenCalledExactlyOnceWith("SELECT 1")
+    expect(raw).toHaveBeenCalledTimes(1)
+    expect(raw).toHaveBeenCalledWith("SELECT 1")
     expect(res.status).toHaveBeenCalledWith(200)
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "ready" }),
-    )
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: "ready" }))
   })
 
   it("returns 503 rather than exposing missing production configuration", async () => {
