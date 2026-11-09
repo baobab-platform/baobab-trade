@@ -93,6 +93,11 @@ const normalize = (body: unknown) => {
   if (Number.isNaN(observedAt.valueOf())) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, "as_of must be an ISO timestamp")
   }
+  // The ERP projection is a historical attestation, never a future grant.
+  // Permit bounded clock skew; do not activate buyers on a signed future state.
+  if (observedAt.getTime() > Date.now() + 5 * 60 * 1000) {
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "future-dated ERP commercial profile")
+  }
   const tenantId = requiredText(event.tenantid ?? event.tenant_id ?? data.tenant_id, "tenantid")
   const legalEntityId = requiredText(
     event.entityid ?? event.entity_id ?? data.legal_entity_id,
