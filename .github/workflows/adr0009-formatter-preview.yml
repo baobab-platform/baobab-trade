@@ -1,0 +1,45 @@
+name: ADR-0009 formatting proof (temporary)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  formatter:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Print exact formatted changed source
+        run: |
+          npx prettier --write 'docs/development/ADR-0009-2026-11-09-implementation-audit.md' 'src/api/store/b2b/organisations/[id]/members/[membershipId]/resend/route.ts' 'src/api/store/b2b/organisations/[id]/members/[membershipId]/revoke/route.ts' 'src/api/store/b2b/organisations/[id]/members/route.ts' 'src/api/store/b2b/organisations/[id]/tax-registrations/route.ts' 'src/api/store/b2b/organisations/me/route.ts' 'tests/adr-0009-idempotency-scope.test.ts' 'tests/adr-0009-legacy-tenant-isolation.test.ts' 'tests/b2b-context-route.test.ts' 'tests/buyer-invitation-lifecycle.test.ts' 'tests/buyer-invitation-route.test.ts' 'tests/dev07-legacy-buyer-context-safety.test.ts'
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const paths = [
+  "docs/development/ADR-0009-2026-11-09-implementation-audit.md",
+  "src/api/store/b2b/organisations/[id]/members/[membershipId]/resend/route.ts",
+  "src/api/store/b2b/organisations/[id]/members/[membershipId]/revoke/route.ts",
+  "src/api/store/b2b/organisations/[id]/members/route.ts",
+  "src/api/store/b2b/organisations/[id]/tax-registrations/route.ts",
+  "src/api/store/b2b/organisations/me/route.ts",
+  "tests/adr-0009-idempotency-scope.test.ts",
+  "tests/adr-0009-legacy-tenant-isolation.test.ts",
+  "tests/b2b-context-route.test.ts",
+  "tests/buyer-invitation-lifecycle.test.ts",
+  "tests/buyer-invitation-route.test.ts",
+  "tests/dev07-legacy-buyer-context-safety.test.ts"
+];
+          for (const path of paths) console.log("ADR0009_FMT_FILE=" + JSON.stringify({path, content: fs.readFileSync(path, "utf8")}));
+          NODE
+      - name: Execute isolated ADR-0009 tests on formatted source
+        run: |
+          npx vitest run tests/adr-0009-legacy-tenant-isolation.test.ts tests/adr-0009-idempotency-scope.test.ts tests/buyer-invitation-route.test.ts tests/buyer-invitation-lifecycle.test.ts tests/b2b-context-route.test.ts tests/dev07-legacy-buyer-context-safety.test.ts tests/buyer-application-route.test.ts tests/buyer-kyb-evidence.test.ts
