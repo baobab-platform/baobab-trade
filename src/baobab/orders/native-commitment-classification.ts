@@ -281,6 +281,10 @@ export async function classifyNativeCommitment(
       c.digital_estate_id !== estate.digitalEstateId ||
       c.tenant_id !== estate.tenantId ||
       c.engine_instance_id !== deps.engineInstanceId ||
+      // The buyer must have selected and received CP attestation for the
+      // very Market of the native seller attribution. An unselected or
+      // different Market cannot inherit a matching estate/tenant.
+      c.market_id !== marketId ||
       // A buyer context established through a BFF names that BFF's binding.
       (estate.provenance.kind === "ESTATE_CLIENT_BINDING" &&
         !c.evidence_references.includes(estate.evidence[0])) ||

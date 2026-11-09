@@ -1,6 +1,7 @@
 # ADR-0034: Native Commitment Classification
 
-Status: Proposed. This is Trade's implementation record for ADR-SHARED-042 §14 Decision 8 (Platform Owner ruling of 2026-10-22), Trade classification step. Where this record and ADR-SHARED-042 differ, ADR-SHARED-042 governs.
+Status: Accepted. This is Trade's implementation record for ADR-SHARED-042 §14 Decision 8 (Platform Owner ruling of 2026-10-22), Trade classification step. Where this record and ADR-SHARED-042 differ, ADR-SHARED-042 governs.
+Architecture acceptance: Platform Owner directive 2026-11-09. This does not activate the native enforcement gate or qualify connected execution.
 Date: 2026-10-22
 
 ## Context

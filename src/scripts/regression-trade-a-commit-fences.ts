@@ -405,6 +405,7 @@ export default async function regressionTradeACommitFences({ container }: ExecAr
                   digital_estate_id: ESTATE,
                   tenant_id: TENANT,
                   engine_instance_id: ENGINE,
+                  market_id: scope.market,
                   buyer_organisation_id: "b2borg_ta07regression",
                   buyer_membership_id: "b2bmem_ta07regression",
                   expires_at: new Date(now + 60_000).toISOString(),
