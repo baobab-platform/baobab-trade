@@ -1,6 +1,7 @@
 # ADR-0036: Universal Native Commit Fence Behind an Inactive Enforcement Gate
 
-Status: Proposed. This is Trade's implementation record for ADR-SHARED-042 §14 Decision 9 (Platform Owner ruling of 2026-10-23), covering the universal fence step. Where this record and ADR-SHARED-042 differ, ADR-SHARED-042 governs.
+Status: Accepted. This is Trade's implementation record for ADR-SHARED-042 §14 Decision 9 (Platform Owner ruling of 2026-10-23), covering the universal fence step. Where this record and ADR-SHARED-042 differ, ADR-SHARED-042 governs.
+Architecture acceptance: Platform Owner directive 2026-11-09. The live enforcement mode remains SHADOW; changing it to ENFORCED requires the separate existing approvals and connected evidence.
 Date: 2026-10-23
 
 ## Context
