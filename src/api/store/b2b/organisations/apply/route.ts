@@ -96,6 +96,14 @@ export const POST = async (req: AuthenticatedMedusaRequest<ApplyBody>, res: Medu
     idempotency_key: idempotencyKey,
   })
   if (replay.length > 0) {
+    // An idempotency key never authenticates a different buyer's application.
+    if (
+      replay.length !== 1 ||
+      replay[0].tenant_id !== tenantId ||
+      replay[0].applicant_customer_id !== customerId
+    ) {
+      throw new MedusaError(MedusaError.Types.NOT_FOUND, "buyer application was not found")
+    }
     if (replay[0].request_hash !== requestHash) {
       throw new MedusaError(
         MedusaError.Types.DUPLICATE_ERROR,
