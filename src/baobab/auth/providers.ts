@@ -12,8 +12,8 @@ export type AuthProviderConfiguration = {
 // Production Medusa customer/admin actor login must not silently fall back to
 // its local password provider when the governed Baobab IAM issuer is absent.
 // This is an application Auth Module restriction, not a CP/Trade role grant.
-const productionIssuer = (environment: NodeJS.ProcessEnv): boolean =>
-  environment.NODE_ENV === "production"
+const protectedRuntime = (environment: NodeJS.ProcessEnv): boolean =>
+  environment.NODE_ENV !== "development" && environment.NODE_ENV !== "test"
 
 const exactOIDCEndpoint = (raw: string, field: string, production: boolean): string => {
   const url = new URL(raw)
@@ -63,7 +63,7 @@ const exactCallbackUrls = (configured: string | undefined, fallback: string): st
 export const buildAuthProviderConfiguration = (
   environment: NodeJS.ProcessEnv,
 ): AuthProviderConfiguration => {
-  const production = productionIssuer(environment)
+  // Absence of NODE_ENV is not an affirmative development authorization.\n  // In particular, missing deployment configuration must not enable password\n  // authentication on either Medusa actor.\n  const production = protectedRuntime(environment)
   // Local email/password is a development compatibility mechanism, not an
   // alternate production workforce/customer credential authority.
   const providers: AuthProviderRegistration[] = production
