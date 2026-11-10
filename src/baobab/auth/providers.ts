@@ -9,6 +9,23 @@ export type AuthProviderConfiguration = {
   methodsPerActor: { customer: string[]; user: string[] }
 }
 
+// Production Medusa customer/admin actor login must not silently fall back to
+// its local password provider when the governed Baobab IAM issuer is absent.
+// This is an application Auth Module restriction, not a CP/Trade role grant.
+const productionIssuer = (environment: NodeJS.ProcessEnv): boolean =>
+  environment.NODE_ENV === "production"
+
+const exactOIDCEndpoint = (raw: string, field: string, production: boolean): string => {
+  const url = new URL(raw)
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && !production && url.hostname === "localhost")) {
+    throw new Error(`${field} must use HTTPS outside local development`)
+  }
+  if (url.username || url.password || url.search || url.hash || url.pathname.includes("..")) {
+    throw new Error(`${field} must not contain credentials, query, fragment or traversal`)
+  }
+  return raw
+}
+
 const exactCallbackUrls = (configured: string | undefined, fallback: string): string[] => {
   const values = configured
     ?.split(",")
@@ -46,22 +63,35 @@ const exactCallbackUrls = (configured: string | undefined, fallback: string): st
 export const buildAuthProviderConfiguration = (
   environment: NodeJS.ProcessEnv,
 ): AuthProviderConfiguration => {
-  const providers: AuthProviderRegistration[] = [
-    { resolve: "@medusajs/medusa/auth-emailpass", id: "emailpass" },
-  ]
-  const customerMethods = ["emailpass"]
+  const production = productionIssuer(environment)
+  // Local email/password is a development compatibility mechanism, not an
+  // alternate production workforce/customer credential authority.
+  const providers: AuthProviderRegistration[] = production
+    ? []
+    : [{ resolve: "@medusajs/medusa/auth-emailpass", id: "emailpass" }]
+  const customerMethods = production ? [] : ["emailpass"]
+
+  if (production && (!environment.BAOBAB_IAM_OIDC_ISSUER ||
+    !environment.BAOBAB_IAM_OIDC_CLIENT_ID ||
+    !environment.BAOBAB_IAM_OIDC_CLIENT_SECRET ||
+    !environment.BAOBAB_IAM_OIDC_CALLBACK_URL)) {
+    throw new Error("Production Medusa admin authentication requires a configured confidential Baobab IAM OIDC client")
+  }
 
   if (environment.BAOBAB_IAM_OIDC_ISSUER) {
+    const issuer = exactOIDCEndpoint(environment.BAOBAB_IAM_OIDC_ISSUER, "Workforce issuer", production)
+    const callback = exactOIDCEndpoint(
+      environment.BAOBAB_IAM_OIDC_CALLBACK_URL || "http://localhost:9000/auth/user/oidc/callback",
+      "Workforce callback", production,
+    )
     providers.push({
       resolve: "@medusajs/auth-oidc",
       id: "oidc",
       options: {
-        issuer: environment.BAOBAB_IAM_OIDC_ISSUER,
+        issuer,
         client_id: environment.BAOBAB_IAM_OIDC_CLIENT_ID || "baobab-trade-admin",
         client_secret: environment.BAOBAB_IAM_OIDC_CLIENT_SECRET,
-        callback_url:
-          environment.BAOBAB_IAM_OIDC_CALLBACK_URL ||
-          "http://localhost:9000/auth/user/oidc/callback",
+        callback_url: callback,
         display_name: "Baobab Workforce SSO",
       },
     })
@@ -69,13 +99,20 @@ export const buildAuthProviderConfiguration = (
 
   const zuribeansIssuer = environment.BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER
   if (zuribeansIssuer) {
+    exactOIDCEndpoint(zuribeansIssuer, "ZuriBeans issuer", production)
     const callbackUrl =
       environment.BAOBAB_IAM_ZURIBEANS_OIDC_CALLBACK_URL ||
       "http://localhost:3000/api/auth/callback"
+    exactOIDCEndpoint(callbackUrl, "ZuriBeans callback", production)
     const allowedCallbackUrls = exactCallbackUrls(
       environment.BAOBAB_IAM_ZURIBEANS_OIDC_ALLOWED_CALLBACK_URLS,
       callbackUrl,
     )
+    if (production) {
+      for (const allowed of allowedCallbackUrls) {
+        exactOIDCEndpoint(allowed, "ZuriBeans allowlisted callback", true)
+      }
+    }
     if (!allowedCallbackUrls.includes(callbackUrl)) {
       throw new Error("The default ZuriBeans OIDC callback URL must be present in its allowlist")
     }
