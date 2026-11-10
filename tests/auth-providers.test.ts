@@ -52,13 +52,15 @@ describe("ZuriBeans Medusa customer OIDC", () => {
   })
 
   it("stays disabled unless its issuer is explicitly configured", () => {
-    const configuration = buildAuthProviderConfiguration({})
+    expect(() => buildAuthProviderConfiguration({})).toThrow(/confidential/)
+    const configuration = buildAuthProviderConfiguration({ NODE_ENV: "development" })
     expect(configuration.methodsPerActor.customer).toEqual(["emailpass"])
     expect(configuration.providers.map(({ id }) => id)).toEqual(["emailpass"])
   })
 
   it("uses Baobab IAM's public ZuriBeans client with exact callbacks", () => {
     const configuration = buildAuthProviderConfiguration({
+      NODE_ENV: "development",
       BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/realms/baobab",
       BAOBAB_IAM_ZURIBEANS_OIDC_CALLBACK_URL: "https://trade.zuribeans.example/api/auth/callback",
     })
@@ -79,6 +81,7 @@ describe("ZuriBeans Medusa customer OIDC", () => {
 
   it("keeps workforce OIDC unavailable to customer actors", () => {
     const configuration = buildAuthProviderConfiguration({
+      NODE_ENV: "development",
       BAOBAB_IAM_OIDC_ISSUER: "https://iam.example.test/realms/workforce",
       BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/realms/customer",
     })
@@ -88,7 +91,7 @@ describe("ZuriBeans Medusa customer OIDC", () => {
   })
 
   it("rejects wildcard, insecure remote and ambiguous callback URLs", () => {
-    const base = { BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/realms/baobab" }
+    const base = { NODE_ENV: "development", BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/realms/baobab" }
     expect(() =>
       buildAuthProviderConfiguration({
         ...base,
@@ -120,6 +123,7 @@ describe("ZuriBeans Medusa customer OIDC", () => {
   it("requires the configured default callback to remain allowlisted", () => {
     expect(() =>
       buildAuthProviderConfiguration({
+        NODE_ENV: "development",
         BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/realms/baobab",
         BAOBAB_IAM_ZURIBEANS_OIDC_CALLBACK_URL: "https://trade.example.test/api/auth/callback",
         BAOBAB_IAM_ZURIBEANS_OIDC_ALLOWED_CALLBACK_URLS:
