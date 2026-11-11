@@ -710,7 +710,7 @@ describe("TA-06 service boundary inventory", () => {
     ])
   })
 
-  it("limits the native owner to the protected buyer route, purchase reader and disposable probe", () => {
+  it("limits the native owner to the protected buyer route, purchase reader and disposable tools", () => {
     // Each importer is reviewed explicitly. A new route, loader, subscriber,
     // or background job cannot acquire access to the native writer implicitly.
     const root = join(__dirname, "..", "src")
@@ -734,8 +734,16 @@ describe("TA-06 service boundary inventory", () => {
       "api/store/b2b/buyer-commit/route.ts",
       "baobab/b2b/medusa-native-buyer-purchase-source.ts",
       "baobab/b2b/medusa-native-order-source.ts",
+      "scripts/fixture-dev07-bff-http.ts",
       "scripts/regression-medusa-native-order-owner.ts",
     ])
+    // The leased fixture reads cart pricing through the native manager.
+    // The confidential buyer route still owns creation of the actual order.
+    const fixture = readFileSync(join(root, "scripts/fixture-dev07-bff-http.ts"), "utf8")
+    expect(fixture).toMatch(
+      /import \{ withNativeMedusaOrderTransaction \} from "..\/baobab\/b2b\/medusa-native-transaction-owner"/,
+    )
+    expect(fixture).not.toMatch(/\b(?:commitAuthorizedNativeBuyerOrder|createOrders)\b/)
   })
 })
 
