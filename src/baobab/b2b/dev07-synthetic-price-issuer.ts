@@ -84,12 +84,15 @@ export function signDev07SyntheticPrice(
   )
     return fail()
 
-  const kinds = new Set<string>()
+  const chargesByKind = new Map<
+    ChargeEvidence["charges"][number]["kind"],
+    ChargeEvidence["charges"][number]
+  >()
   for (const line of profile.charges) {
     if (
       !line ||
       !REQUIRED_CHARGES.includes(line.kind) ||
-      kinds.has(line.kind) ||
+      chargesByKind.has(line.kind) ||
       !/^(0|[1-9][0-9]{0,15})$/.test(line.amountMinor) ||
       BigInt(line.amountMinor) > BigInt(Number.MAX_SAFE_INTEGER) ||
       typeof line.sourceReference !== "string" ||
@@ -102,9 +105,8 @@ export function signDev07SyntheticPrice(
     } else if (line.amountMinor !== "0" || line.zeroReason !== REASONS[line.resolution]) {
       return fail()
     }
-    kinds.add(line.kind)
+    chargesByKind.set(line.kind, line)
   }
-  if (!REQUIRED_CHARGES.every((kind) => kinds.has(kind))) return fail()
   const evidence: ChargeEvidence = {
     issuerId: profile.issuerId,
     attestationId: randomUUID(),
@@ -118,7 +120,7 @@ export function signDev07SyntheticPrice(
     evaluatedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + 30000).toISOString(),
     policyReference: profile.policyReference,
-    charges: REQUIRED_CHARGES.map((kind) => profile.charges.find((line) => line.kind === kind)!),
+    charges: REQUIRED_CHARGES.map((kind) => chargesByKind.get(kind) ?? fail()),
   }
   return {
     evidence,
