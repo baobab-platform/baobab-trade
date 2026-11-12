@@ -4,12 +4,14 @@ import { resolve } from "node:path"
 
 // Medusa loads CommonJS. Keep GraphQL and its schema helpers in the same
 // module realm instead of mixing Vitest's ESM GraphQL with CJS dependencies.
-const require = createRequire(resolve(process.cwd(), "package.json"))
-const { graphql } = require("graphql") as typeof import("graphql")
-const { makeExecutableSchema } =
-  require("@graphql-tools/schema") as typeof import("@graphql-tools/schema")
-const { mergeDeep, mergeIncrementalResult } =
-  require("@graphql-tools/utils") as typeof import("@graphql-tools/utils")
+const medusaRequire = createRequire(resolve(process.cwd(), "package.json"))
+const { graphql } = medusaRequire("graphql") as typeof import("graphql")
+const { makeExecutableSchema } = medusaRequire(
+  "@graphql-tools/schema",
+) as typeof import("@graphql-tools/schema")
+const { mergeDeep, mergeIncrementalResult } = medusaRequire(
+  "@graphql-tools/utils",
+) as typeof import("@graphql-tools/utils")
 
 describe("Medusa GraphQL dependency compatibility and security", () => {
   it("executes an ordinary schema after the security override", async () => {

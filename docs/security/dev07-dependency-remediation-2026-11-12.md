@@ -42,3 +42,12 @@ Final-head Foundation container scanning and native database/broker CI must
 rerun. Genuine IAM/CP-governed checkout, original same-XID order/commitments/event,
 ERP consequence, independent trace custody and teardown remain separate open
 engineering gates. These dependency changes do not qualify or activate them.
+
+## Final-head CI correction
+
+The first published dependency candidate failed Medusa backend compilation in
+CI because the new GraphQL test declared a top-level `require` binding. The
+standalone typecheck accepted it, but Medusa's compilation reserves that name.
+Renamed the test-local CommonJS loader to `medusaRequire`; production code and
+dependency versions are unchanged. Full Medusa build must include the newly
+added regression file, not only the dependency update that preceded it.
