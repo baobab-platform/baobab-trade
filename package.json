@@ -107,18 +107,18 @@
     "test:dev07-price-issuer": "vitest run tests/dev07-synthetic-price-issuer.test.ts tests/trade-price-issuer.test.ts tests/governed-cart-charge-issuer.test.ts"
   },
   "dependencies": {
-    "@opentelemetry/api": "1.9.1",
-    "@opentelemetry/sdk-node": "0.220.0",
-    "@opentelemetry/exporter-trace-otlp-http": "0.220.0",
-    "@opentelemetry/resources": "2.12.0",
     "@medusajs/auth-oidc": "2.21.2",
     "@medusajs/framework": "2.21.2",
     "@medusajs/medusa": "2.21.2",
     "@medusajs/utils": "2.21.2",
-    "awilix": "13.0.5",
-    "pg": "8.23.1",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "0.220.0",
+    "@opentelemetry/resources": "2.12.0",
+    "@opentelemetry/sdk-node": "0.220.0",
     "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1"
+    "ajv-formats": "^3.0.1",
+    "awilix": "13.0.5",
+    "pg": "8.23.1"
   },
   "devDependencies": {
     "@medusajs/admin-sdk": "2.21.2",
@@ -139,6 +139,11 @@
     "lodash": "4.18.1",
     "proxy-addr": "2.0.8",
     "compression": "1.8.2",
-    "source-map-js": "1.2.2"
+    "source-map-js": "1.2.2",
+    "@graphql-tools/utils": "12.0.2",
+    "body-parser@1": "1.20.9",
+    "follow-redirects": "1.16.2",
+    "multer": "2.5.0",
+    "zod": "4.6.6"
   }
 }
