@@ -155,6 +155,14 @@ export type BudgetFact = {
 
 /** The purchase's own reservation from formal submission (b2b_spend_reservation) and its holds. */
 export type ReservationFact = {
+  /** Persisted purchase binding when the caller is the native commit owner.
+   * Discovery policy callers need not consume these fields. Missing bindings
+   * never qualify a CAA-06b receipt or its under-lock recheck. */
+  reservationId?: string
+  tenantId?: string
+  purchaseReference?: string
+  holdRevision?: number
+  amountMinor?: bigint
   status: "ACTIVE" | "COMMITTED" | "RELEASED" | "EXPIRED"
   membershipId: string
   marketKey: string
@@ -221,9 +229,10 @@ export type BuyerOperationFacts = {
   marketKey?: string
   /**
    * CP's current answer to whether this Market is active and permitted for the
-   * seller-side Tenant and this buyer relationship. Trade has no such source
-   * yet, so callers supply UNAVAILABLE and market-scoped operations cannot
-   * ALLOW.
+   * seller-side Tenant and this buyer relationship. Only a fresh CP runtime
+   * participation and canonical Market read may attest this. The current
+   * native buyer authority composition supplies them; other callers without
+   * that source must supply UNAVAILABLE.
    */
   marketAuthority: "ATTESTED" | "DENIED" | "UNAVAILABLE"
   sites: SiteUse[]

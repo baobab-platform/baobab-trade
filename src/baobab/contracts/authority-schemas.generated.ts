@@ -9,21 +9,23 @@ import schema5 from "./shared/contracts/control-plane/v1/estate-commerce-profile
 import schema6 from "./shared/contracts/control-plane/v1/estate-resource-assignment.schema.json"
 import schema7 from "./shared/contracts/control-plane/v1/market.schema.json"
 import schema8 from "./shared/contracts/control-plane/v1/platform-context.schema.json"
-import schema9 from "./shared/contracts/identity/v1/assurance-policy.schema.json"
-import schema10 from "./shared/contracts/identity/v1/buyer-identity-handoff.schema.json"
-import schema11 from "./shared/contracts/organisation/v1/domain.schema.json"
-import schema12 from "./shared/contracts/organisation/v1/iam.schema.json"
-import schema13 from "./shared/contracts/organisation/v2/domain.schema.json"
-import schema14 from "./shared/contracts/organisation/v2/legal-actor-enforcement.schema.json"
-import schema15 from "./shared/contracts/organisation/v2/legal-actor-mandate.schema.json"
-import schema16 from "./shared/contracts/payments/v1/merchant-readiness.schema.json"
-import schema17 from "./shared/contracts/trade/v2/buyer-authority-receipt.schema.json"
-import schema18 from "./shared/contracts/trade/v2/buyer-commitment-valuation.schema.json"
-import schema19 from "./shared/contracts/trade/v2/buyer-execution-context.schema.json"
-import schema20 from "./shared/contracts/trade/v2/buyer-spend-budget.schema.json"
-import schema21 from "./shared/contracts/trade/v2/native-commitment-classification.schema.json"
-import schema22 from "./shared/contracts/trade/v2/order-authority.schema.json"
-import schema23 from "./shared/contracts/trade/v2/seller-operating-binding.schema.json"
+import schema9 from "./shared/contracts/erp/v1/commerce-order-consequence.schema.json"
+import schema10 from "./shared/contracts/erp/v1/domain.schema.json"
+import schema11 from "./shared/contracts/identity/v1/assurance-policy.schema.json"
+import schema12 from "./shared/contracts/identity/v1/buyer-identity-handoff.schema.json"
+import schema13 from "./shared/contracts/organisation/v1/domain.schema.json"
+import schema14 from "./shared/contracts/organisation/v1/iam.schema.json"
+import schema15 from "./shared/contracts/organisation/v2/domain.schema.json"
+import schema16 from "./shared/contracts/organisation/v2/legal-actor-enforcement.schema.json"
+import schema17 from "./shared/contracts/organisation/v2/legal-actor-mandate.schema.json"
+import schema18 from "./shared/contracts/payments/v1/merchant-readiness.schema.json"
+import schema19 from "./shared/contracts/trade/v2/buyer-authority-receipt.schema.json"
+import schema20 from "./shared/contracts/trade/v2/buyer-commitment-valuation.schema.json"
+import schema21 from "./shared/contracts/trade/v2/buyer-execution-context.schema.json"
+import schema22 from "./shared/contracts/trade/v2/buyer-spend-budget.schema.json"
+import schema23 from "./shared/contracts/trade/v2/native-commitment-classification.schema.json"
+import schema24 from "./shared/contracts/trade/v2/order-authority.schema.json"
+import schema25 from "./shared/contracts/trade/v2/seller-operating-binding.schema.json"
 
 export const authoritySchemas = [
   schema0,
@@ -50,6 +52,8 @@ export const authoritySchemas = [
   schema21,
   schema22,
   schema23,
+  schema24,
+  schema25,
 ]
 export const LEGAL_ACTOR_OUTCOMES = [
   "AUTHORIZED",

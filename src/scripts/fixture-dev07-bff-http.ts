@@ -3,8 +3,20 @@
  * The actual HTTP handler must still verify current IAM and CP on every call.
  */
 import assert from "node:assert/strict"
+import { createHash, randomUUID } from "node:crypto"
 import { lstatSync, readFileSync, writeFileSync } from "node:fs"
-import type { ExecArgs, IApiKeyModuleService } from "@medusajs/framework/types"
+import type { ExecArgs, IApiKeyModuleService, IOrderModuleService } from "@medusajs/framework/types"
+import { Modules } from "@medusajs/framework/utils"
+import { Pool } from "pg"
+import { buildFinalBuyerCommitmentValuation } from "../baobab/b2b/buyer-commitment-valuation"
+import { issueGovernedCartCharges } from "../baobab/b2b/governed-cart-charge-issuer"
+import {
+  nativeMedusaCartPriceReadback,
+  type NativeCartModule,
+} from "../baobab/b2b/medusa-final-cart-pricing"
+import { withNativeMedusaOrderTransaction } from "../baobab/b2b/medusa-native-transaction-owner"
+import { nativeBuyerCommitRuntime } from "../baobab/b2b/native-buyer-commit-runtime"
+import { readNativeCurrencyExponent } from "../baobab/b2b/native-currency-exponent"
 import type B2BModuleService from "../modules/b2b/service"
 
 type OwnerFixture = {
@@ -82,7 +94,11 @@ export default async function ({ container }: ExecArgs) {
   assert.ok(stat.size > 0 && stat.size <= 4096)
   const f = validateOwnerFixture(JSON.parse(readFileSync(PATH, "utf8")), process.env)
   const phase = process.env.BAOBAB_DEV07_NATIVE_PHASE
-  assert.ok(["prepare", "suspend", "resume", "cleanup"].includes(phase ?? ""))
+  assert.ok(
+    ["prepare", "suspend", "resume", "cleanup", "enforce-checkout", "price-and-reserve"].includes(
+      phase ?? "",
+    ),
+  )
   const b2b = container.resolve<B2BModuleService>("b2b")
   const apiKeys = container.resolve<IApiKeyModuleService>("api_key")
   const keyTitle = `DEV07 BFF HTTP ${f.run_id}`
@@ -111,6 +127,123 @@ export default async function ({ container }: ExecArgs) {
   for (const role of roles) {
     assert.equal(role.membership_id, memberId)
     assert.equal(role.role, "BUYER")
+  }
+  if (phase === "enforce-checkout" || phase === "price-and-reserve") {
+    assert.ok(keys.length === 1 && orgs.length === 1 && members.length === 1 && roles.length === 1)
+    assert.equal(orgs[0].status, "ACTIVE")
+    assert.equal(members[0].status, "ACTIVE")
+    assert.equal(process.env.BAOBAB_DEV07_DISPOSABLE_CHECKOUT_APPROVED_RUN, f.run_id)
+    assert.ok(
+      process.env.BAOBAB_DEPLOYMENT_ENV === undefined ||
+        process.env.BAOBAB_DEPLOYMENT_ENV === "development",
+    )
+    const reference = process.env.BAOBAB_DEV07_CHECKOUT_CHANGE_REFERENCE ?? ""
+    assert.ok(/^[A-Za-z0-9._:/-]{8,200}$/.test(reference))
+    if (phase === "price-and-reserve") {
+      const cartId = process.env.BAOBAB_NATIVE_PRICE_CART_ID ?? ""
+      assert.ok(/^cart_[A-Za-z0-9_-]{6,128}$/.test(cartId) && members[0].customer_id)
+      const orders = container.resolve<IOrderModuleService>(Modules.ORDER)
+      const carts = container.resolve<NativeCartModule>(Modules.CART)
+      const runtime = nativeBuyerCommitRuntime()
+      const correlation = randomUUID()
+      const binding = await withNativeMedusaOrderTransaction(orders, async ({ db }) => {
+        const result = await db.query(
+          `SELECT b.market_key,b.responsible_legal_entity_id,b.currency_code
+             FROM native_seller_cart_binding b JOIN cart c ON c.id=b.cart_id
+            WHERE c.id=$1 AND b.tenant_id=$2 AND c.customer_id=$3
+              AND c.completed_at IS NULL AND c.deleted_at IS NULL
+              AND b.status='ACTIVE' AND b.deleted_at IS NULL AND b.expires_at>clock_timestamp()
+              AND b.sales_channel_id=c.sales_channel_id AND b.region_id=c.region_id
+              AND b.currency_code=upper(c.currency_code)
+              AND EXISTS (SELECT 1 FROM trade_commit_fence_enforcement
+                 WHERE singleton AND mode='ENFORCED' AND revision=2 AND change_reference=$4)`,
+          [cartId, f.tenant_id, members[0].customer_id, `dev07:${f.run_id}:${reference}`],
+        )
+        assert.equal(result.rowCount, 1)
+        const { market_key, responsible_legal_entity_id, currency_code } = result.rows[0]
+        assert.ok(typeof market_key === "string" && market_key !== "PENDING")
+        assert.ok(typeof currency_code === "string" && /^[A-Z]{3}$/.test(currency_code))
+        if (typeof responsible_legal_entity_id !== "string" || !responsible_legal_entity_id)
+          throw new Error("DEV07_CART_SELLER_UNAVAILABLE")
+        return { market_key, responsible_legal_entity_id, currency_code }
+      })
+      await issueGovernedCartCharges(runtime.chargeSource(correlation), cartId)
+      const price = await withNativeMedusaOrderTransaction(orders, async ({ db, manager }) => {
+        const source = await db.query(
+          `SELECT DISTINCT a.market_id
+             FROM trade_native_cart_charge_authority a JOIN cart c ON c.id=a.cart_id
+            WHERE a.cart_id=$1 AND a.tenant_id=$2 AND a.seller_legal_entity_id=$3
+              AND a.cart_updated_at_exact=to_char(c.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+          [cartId, f.tenant_id, binding.responsible_legal_entity_id],
+        )
+        assert.equal(source.rowCount, 1)
+        const marketId = source.rows[0].market_id
+        assert.ok(typeof marketId === "string" && marketId)
+        return nativeMedusaCartPriceReadback(carts, readNativeCurrencyExponent, (check) =>
+          runtime.verifyCurrentIssuer(check, correlation),
+        )(
+          db,
+          "READ_ONLY",
+          {
+            receipt: {
+              resource_id: cartId,
+              tenant_id: f.tenant_id,
+              market_id: marketId,
+              seller_legal_entity_id: binding.responsible_legal_entity_id,
+              currency: binding.currency_code,
+            },
+          },
+          manager,
+        )
+      })
+      const valuation = buildFinalBuyerCommitmentValuation(price.valuation)
+      const holdKey = createHash("sha256")
+        .update(JSON.stringify([f.run_id, cartId, valuation.transaction_digest]))
+        .digest("hex")
+      const result = await runtime.spend.submit({
+        idempotencyKey: `dev07.reserve.${holdKey}`,
+        purchaseReference: cartId,
+        tenantId: f.tenant_id,
+        organisationId: orgId,
+        membershipId: memberId,
+        actorPrincipalId: f.principal_id,
+        marketKey: binding.market_key,
+        currencyCode: valuation.currency,
+        agreementReference: null,
+        transactionDigest: valuation.transaction_digest,
+        resourceVersion: valuation.resource_version,
+        amountMinor: BigInt(valuation.buyer_commitment_amount_minor),
+        expiresAt: new Date(Math.min(Date.parse(f.expires_at), Date.now() + 300_000)),
+      })
+      assert.ok(result.outcome === "APPLIED" && result.status === "ACTIVE")
+      return
+    }
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, statement_timeout: 3000 })
+    try {
+      const scope = [process.env.BAOBAB_DEV07_TEST_DB, `dev07:${f.run_id}:${reference}`]
+      // This operation is restricted to the existing isolated buyer-BFF
+      // fixture database and its single initial migration posture.
+      const result = await pool.query(
+        `UPDATE trade_commit_fence_enforcement
+            SET mode='ENFORCED', revision=revision+1, change_reference=$2
+          WHERE singleton AND mode='SHADOW' AND revision=1 AND current_database()=$1
+          RETURNING mode,revision`,
+        scope,
+      )
+      const observed =
+        result.rowCount === 1
+          ? result
+          : await pool.query(
+              `SELECT mode,revision FROM trade_commit_fence_enforcement
+          WHERE singleton AND mode='ENFORCED' AND revision=2
+            AND current_database()=$1 AND change_reference=$2`,
+              scope,
+            )
+      assert.deepEqual(observed.rows, [{ mode: "ENFORCED", revision: 2 }])
+    } finally {
+      await pool.end()
+    }
+    return
   }
   if (phase === "prepare") {
     assert.equal(keys.length, 0)

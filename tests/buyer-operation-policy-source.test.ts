@@ -355,6 +355,7 @@ describe("loadBuyerOperationPolicy", () => {
     )
     expect(asked).toEqual([{ id: "b2bres_cart000001", organisation_id: ORG }])
     expect(facts.reservation).toEqual({
+      reservationId: "b2bres_cart000001",
       status: "ACTIVE",
       membershipId: "b2bmem_alice00001",
       marketKey: "ZA",

@@ -244,9 +244,32 @@ export class PostgresSpendReservationCommands {
     return this.commitCapacity(command, mutation)
   }
 
+  /**
+   * CAA-06b: compose a Medusa-native transaction's EXISTING connection with
+   * Decision 5 capacity, origin, outbox and receipt writes. This method never
+   * opens, commits, releases or rolls back the connection. The native owner
+   * must supply a real, live transaction manager; it MUST roll the *whole*
+   * transaction back on any thrown refusal, SQL error or deferred constraint.
+   *
+   * In contrast to the legacy command API, errors propagate instead of
+   * becoming a success-shaped business result inside an open transaction.
+   * Idempotent replay is read-only and never re-enters the native writer.
+   */
+  commitWithOwnerTransaction(
+    command: CommitCommand,
+    owner: PgClient,
+    mutation: (db: Pick<PgClient, "query">) => Promise<void>,
+  ): Promise<SpendCommandResult> {
+    if (typeof mutation !== "function" || typeof owner?.query !== "function") {
+      throw new TypeError("a native transaction and database mutation are required")
+    }
+    return this.commitCapacity(command, mutation, owner)
+  }
+
   private commitCapacity(
     command: CommitCommand,
     mutation?: (db: Pick<PgClient, "query">) => Promise<void>,
+    owner?: PgClient,
   ): Promise<SpendCommandResult> {
     assertReservationCommand(command)
     if (
@@ -258,67 +281,76 @@ export class PostgresSpendReservationCommands {
       throw new TypeError("invalid commit command")
     }
     const request = mutation ? { ...command, execution: "ATOMIC_DATABASE_MUTATION" } : command
-    return this.run("COMMIT", request, command.organisationId, async (db) => {
-      const reservation = await this.lockReservation(
-        db,
-        command.organisationId,
-        command.reservationId,
-      )
-      if (reservation.status !== "ACTIVE" || reservation.expired) {
-        throw new Refused("CONTEXT_NOT_USABLE")
-      }
-      if (
-        reservation.transaction_digest !== command.transactionDigest ||
-        reservation.resource_version !== command.resourceVersion ||
-        reservation.amount_minor !== command.amountMinor ||
-        reservation.hold_revision !== command.holdRevision
-      ) {
-        throw new Refused("TRANSACTION_CHANGED")
-      }
-      const policies = await this.applicablePolicies(db, reservation)
-      const holds = await this.holds(db, reservation.id)
-      // Commit never moves a hold. Every applicable budget must hold the
-      // full amount now, and no held budget may be stale, retired or no
-      // longer applicable: only an explicit rollover (which advances the
-      // hold revision and so forces revalidation) may change that.
-      for (const policy of policies) {
-        const hold = currentHold(holds, policy)
-        if (!hold || hold.reserved_minor !== reservation.amount_minor) {
+    return this.run(
+      "COMMIT",
+      request,
+      command.organisationId,
+      async (db) => {
+        const reservation = await this.lockReservation(
+          db,
+          command.organisationId,
+          command.reservationId,
+        )
+        if (reservation.status !== "ACTIVE" || reservation.expired) {
+          throw new Refused("CONTEXT_NOT_USABLE")
+        }
+        if (
+          reservation.transaction_digest !== command.transactionDigest ||
+          reservation.resource_version !== command.resourceVersion ||
+          reservation.amount_minor !== command.amountMinor ||
+          reservation.hold_revision !== command.holdRevision
+        ) {
+          throw new Refused("TRANSACTION_CHANGED")
+        }
+        const policies = await this.applicablePolicies(db, reservation)
+        const holds = await this.holds(db, reservation.id)
+        // Commit never moves a hold. Every applicable budget must hold the
+        // full amount now, and no held budget may be stale, retired or no
+        // longer applicable: only an explicit rollover (which advances the
+        // hold revision and so forces revalidation) may change that.
+        for (const policy of policies) {
+          const hold = currentHold(holds, policy)
+          if (!hold || hold.reserved_minor !== reservation.amount_minor) {
+            throw new Refused("CONTEXT_NOT_USABLE", "ROLLOVER_REQUIRED")
+          }
+        }
+        if (
+          holds.some((h) => h.reserved_minor > 0n && !policies.some((p) => currentHold([h], p)))
+        ) {
           throw new Refused("CONTEXT_NOT_USABLE", "ROLLOVER_REQUIRED")
         }
-      }
-      if (holds.some((h) => h.reserved_minor > 0n && !policies.some((p) => currentHold([h], p)))) {
-        throw new Refused("CONTEXT_NOT_USABLE", "ROLLOVER_REQUIRED")
-      }
-      for (const policy of policies) {
-        await db.query(
-          `insert into "b2b_spend_ledger_entry" ("id", "entry_kind", "reservation_id", "budget_policy_id",
+        for (const policy of policies) {
+          await db.query(
+            `insert into "b2b_spend_ledger_entry" ("id", "entry_kind", "reservation_id", "budget_policy_id",
              "policy_revision", "amount_minor", "raw_amount_minor", "commitment_reference",
              "idempotency_key", "actor_principal_id")
            values ($1, 'COMMIT', $2, $3, $4, $5, '{}', $6, $7, $8)`,
-          [
-            `b2bled_${randomUUID().replaceAll("-", "")}`,
-            reservation.id,
-            policy.id,
-            policy.revision,
-            reservation.amount_minor.toString(),
-            command.commitmentReference,
-            entryKey("COMMIT", command.idempotencyKey, policy.id, "commit"),
-            command.actorPrincipalId,
-          ],
+            [
+              `b2bled_${randomUUID().replaceAll("-", "")}`,
+              reservation.id,
+              policy.id,
+              policy.revision,
+              reservation.amount_minor.toString(),
+              command.commitmentReference,
+              entryKey("COMMIT", command.idempotencyKey, policy.id, "commit"),
+              command.actorPrincipalId,
+            ],
+          )
+        }
+        await db.query(
+          `update "b2b_spend_reservation" set "status" = 'COMMITTED' where "id" = $1`,
+          [reservation.id],
         )
-      }
-      await db.query(`update "b2b_spend_reservation" set "status" = 'COMMITTED' where "id" = $1`, [
-        reservation.id,
-      ])
-      // Bound to the same connected transaction; do not expose release().
-      if (mutation) await mutation({ query: db.query.bind(db) })
-      return {
-        reservationId: reservation.id,
-        status: "COMMITTED" as const,
-        holdRevision: reservation.hold_revision,
-      }
-    })
+        // Bound to the same connected transaction; do not expose release().
+        if (mutation) await mutation({ query: db.query.bind(db) })
+        return {
+          reservationId: reservation.id,
+          status: "COMMITTED" as const,
+          holdRevision: reservation.hold_revision,
+        }
+      },
+      owner,
+    )
   }
 
   /** Release every unused hold on rejection or cancellation. */
@@ -419,10 +451,12 @@ export class PostgresSpendReservationCommands {
     const member = await db.query(
       `select 1 from "b2b_buyer_membership" m join "b2b_organisation" o on o."id" = m."organisation_id"
         where m."id" = $1 and m."organisation_id" = $2 and o."tenant_id" = $3
+          and m."principal_id" = $4 and o."status" = 'ACTIVE' and o."deleted_at" is null
           and m."status" = 'ACTIVE' and m."deleted_at" is null
           and (m."effective_from" is null or m."effective_from" <= now())
-          and (m."effective_until" is null or now() < m."effective_until")`,
-      [command.membershipId, command.organisationId, command.tenantId],
+          and (m."effective_until" is null or now() < m."effective_until")
+        for share of m,o`,
+      [command.membershipId, command.organisationId, command.tenantId, command.actorPrincipalId],
     )
     if (member.rowCount !== 1) throw new Refused("BUYER_NOT_AUTHORISED")
     const reservationId = reservationIdFor(command.organisationId, command.idempotencyKey)
@@ -679,20 +713,32 @@ export class PostgresSpendReservationCommands {
       holdRevision: number
       approvalRevalidationRequired?: boolean
     }>,
+    owner?: PgClient,
   ): Promise<SpendCommandResult> {
     const key = (request as { idempotencyKey: string }).idempotencyKey
     const actor = (request as { actorPrincipalId: string }).actorPrincipalId
     const digest = requestDigest(kind, request)
     let db: PgClient
-    try {
-      db = await this.pool.connect()
-    } catch {
-      return { outcome: "REFUSED", reason: "SOURCE_UNAVAILABLE" }
+    if (owner) {
+      db = owner
+    } else {
+      try {
+        db = await this.pool.connect()
+      } catch {
+        return { outcome: "REFUSED", reason: "SOURCE_UNAVAILABLE" }
+      }
     }
     try {
-      await db.query("BEGIN")
+      if (!owner) await db.query("BEGIN")
       await db.query("SET LOCAL lock_timeout = '3s'")
       await db.query("SET LOCAL statement_timeout = '5s'")
+      // A transaction manager handed in by Medusa MUST remain on the very
+      // same PostgreSQL XID for all ledger and native writes. An implicit
+      // autocommit connection changes XID and is refused rather than silently
+      // claiming a joined transaction.
+      const ownerXid = owner
+        ? String((await db.query("SELECT pg_current_xact_id()::text AS xid")).rows[0]?.xid)
+        : null
       await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
         `spend-command/${key}`,
       ])
@@ -702,7 +748,7 @@ export class PostgresSpendReservationCommands {
         [key],
       )
       if (prior.rows[0]) {
-        await db.query("ROLLBACK")
+        if (!owner) await db.query("ROLLBACK")
         const row = prior.rows[0]
         if (
           row.command_kind !== kind ||
@@ -729,9 +775,21 @@ export class PostgresSpendReservationCommands {
           actor,
         ],
       )
-      await db.query("COMMIT")
+      if (owner) {
+        const afterXid = String(
+          (await db.query("SELECT pg_current_xact_id()::text AS xid")).rows[0]?.xid,
+        )
+        if (!ownerXid || ownerXid === "undefined" || afterXid !== ownerXid) {
+          throw new Error("MEDUSA_NATIVE_TRANSACTION_CONNECTION_CHANGED")
+        }
+      } else {
+        await db.query("COMMIT")
+      }
       return { outcome: "APPLIED", ...result }
     } catch (error) {
+      // Throw *inside* the owner's transaction callback: converting a refusal
+      // into a return value here would let Medusa commit a partial order.
+      if (owner) throw error
       await db.query("ROLLBACK").catch(() => undefined)
       if (error instanceof Refused) {
         return error.detail
@@ -741,7 +799,7 @@ export class PostgresSpendReservationCommands {
       if (error instanceof Conflict) return { outcome: "CONFLICT" }
       return { outcome: "REFUSED", reason: refusalFor(error) }
     } finally {
-      db.release()
+      if (!owner) db.release()
     }
   }
 }

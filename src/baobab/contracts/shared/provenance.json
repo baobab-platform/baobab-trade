@@ -18,7 +18,8 @@
     "contracts/trade/v2/buyer-commitment-valuation.schema.json",
     "contracts/control-plane/v1/estate-commerce-profile.schema.json",
     "contracts/trade/v2/native-commitment-classification.schema.json",
-    "contracts/control-plane/v1/estate-resource-assignment.schema.json"
+    "contracts/control-plane/v1/estate-resource-assignment.schema.json",
+    "contracts/erp/v1/commerce-order-consequence.schema.json"
   ],
   "tenancy_version": "2.0",
   "files": {
@@ -31,6 +32,8 @@
     "contracts/control-plane/v1/estate-resource-assignment.schema.json": "61bd31d1148aa76f57b0679a37568048d19cf58c42f11f2359ce33a69bfb23dd",
     "contracts/control-plane/v1/market.schema.json": "acbdc4c1e8c716f1dcd9b855b79f5206ebcb69fd911f5a14b515bbcb78cca2f9",
     "contracts/control-plane/v1/platform-context.schema.json": "92a3584f1db3c192fa0315820b6054607d377a52028f43a6fe48deda14c7ed2f",
+    "contracts/erp/v1/commerce-order-consequence.schema.json": "0ddf08a29fd7dae479fed3c33c802a1d67dbf78e5c3bb7d4f8f7056a45c05281",
+    "contracts/erp/v1/domain.schema.json": "5a1a11677a889eba113ada74d71e257f1a095e1d7029efaa366c363594cece47",
     "contracts/identity/v1/assurance-policy.schema.json": "ac9722e6a9cf2b25d2d6b5ff888d6786eee07929b6706e2dd719c365da73577f",
     "contracts/identity/v1/buyer-identity-handoff.schema.json": "303414c536916671bedad867392bc62d1348535328aeb577a3a9f3f6c9711853",
     "contracts/organisation/v1/domain.schema.json": "8409e3d9f1741421ee08818540ddeae60e1990dd9b117826f032d3733f3c5801",
