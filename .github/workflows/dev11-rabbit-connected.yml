@@ -151,7 +151,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - name: Native Python 3.14 AMQP and OTel baseline
-        uses: actions/setup-python@06da6279cdbca41027908073e81a4544dc79c06b # v6
+        uses: actions/setup-python@90485b7ad25ff6932f80015b8a56a6546cd816a7 # v6
         with:
           python-version: "3.14"
       - name: Install immutable Trade dependencies and native ERP application wheel
