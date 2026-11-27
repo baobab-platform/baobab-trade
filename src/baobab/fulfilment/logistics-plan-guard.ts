@@ -247,7 +247,6 @@ export function adoptLogisticsBooking(
     "sellerLegalEntityId",
     "buyerLegalEntityId",
     "marketId",
-    "tradeLaneId",
     "legId",
     "providerId",
     "providerBindingId",
@@ -257,6 +256,7 @@ export function adoptLogisticsBooking(
     "quoteReference",
     "quoteVersion",
   ] as const) present(intent[field], field)
+  if (intent.tradeLaneId !== undefined) present(intent.tradeLaneId, "Trade Lane")
   if (
     !Number.isSafeInteger(intent.marketRevision) ||
     intent.marketRevision < 1 ||
