@@ -51,3 +51,13 @@
 **G4 — Cross-engine and historical proof.** Qualify Medusa commerce vs Payload editorial vs iDempiere costing, privacy-safe events, replay/reconciliation, immutable order-line product snapshots and all 25 §106 scenarios under connected PostgreSQL, IAM/CP and the actual engine providers.
 
 **Release decision:** the new development tests and CI are necessary regression barriers. They are **not** live CP/IAM or cross-engine acceptance evidence. Do not merge based only on source-level tests; do not promote or enable the restricted route in production until G1–G4 are qualified.
+
+
+## 27 November 2026 follow-up
+
+- ADR-0024 §§18–20 and 54–60 make regulatory eligibility contextual and provider-owned; where no mandatory provider exists, the result is `NOT_READY` and the system SHALL NOT assume eligibility. A `policy_reference` string is not a provider decision or evidence.
+- The Trade admin mutation now requires an explicit commercial assortment status, cannot write any regulatory state other than `NOT_EVALUATED`, and preserves an existing provider-owned regulatory state on commercial updates. New rows are created as `NOT_EVALUATED`.
+- `ELIGIBLE_WITH_CONDITIONS` is now blocking in both strict and soft sellability modes until the conditions are represented and verified. The current model has no `conditions[]` evidence/verification structure, so treating conditional eligibility as sellable would manufacture permission.
+- The Store B2B assortment endpoint still fails closed because no genuine IAM/CP catalogue-access provider is registered. Provider-backed regulatory resolution (ADR-0021) also remains an external dependency. No product enumeration, regulatory approval or protected activation is claimed.
+- The existing composite unique index on `(product_id, market_key)` protects the admin upsert from concurrent duplicate rows; the handler also refuses ambiguous returned rows.
+- Final-head full CI and independent review remain pending. The original 64/64 isolated test result is historical evidence for the pre-correction head only.
