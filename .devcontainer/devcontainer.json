@@ -4,7 +4,7 @@
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "init": true,
-  "postCreateCommand": "test \"$(node --version)\" = v26.13.0 && baobab-verify --contract && npm ci --ignore-scripts && npm run typecheck",
+  "postCreateCommand": "node --version",
   "customizations": {
     "vscode": {
       "extensions": ["github.vscode-github-actions", "redhat.vscode-yaml"]
@@ -12,7 +12,11 @@
   },
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "26.13.0"
+      "version": "26.13.1"
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false
     }
-  }
+  },
+  "waitFor": "postCreateCommand"
 }

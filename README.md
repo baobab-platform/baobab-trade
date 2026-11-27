@@ -18,7 +18,7 @@ P0-04B-02 adds [authenticated binding intake and versioned CP-owned activation](
 
 ## Local development
 
-Prerequisites: Node.js 26.13.0, Git, PostgreSQL and Redis (npm 11.20.0, lockfile v3).
+Prerequisites: Node.js 26.13.1, Git, PostgreSQL and Redis (npm 11.20.0, lockfile v3).
 
 ```bash
 cp .env.example .env
@@ -266,9 +266,16 @@ Never commit credentials. Production injects database, Redis, Medusa signing and
 
 ## Foundation 4
 
-Codespaces uses `ghcr.io/baobab-platform/baobab-dev:1.4.4`. The reusable, SHA-pinned
-Foundation gate validates the environment contract and reproducible inputs and
-scans source, dependencies, secrets, configuration, and the Trade image.
+Codespaces uses the existing `ghcr.io/baobab-platform/baobab-dev:1.4.4` base
+and installs the Node version in `.nvmrc` through the Dev Container Node
+feature. The startup workflow checks Node, npm, the non-root user and Docker
+access. Run `npm ci` to install Trade dependencies. Adoption of a newer
+baobab-dev image requires provenance and Trade Codespaces startup evidence.
+
+The reusable, SHA-pinned Foundation gate validates the environment contract
+and reproducible inputs and scans source, dependencies, secrets, configuration,
+and the Trade image. See the [Node.js security release](https://nodejs.org/en/blog/release/v26.13.1/)
+and the [Docker Official Image](https://hub.docker.com/_/node/tags?name=26.13.1-alpine3.24).
 
 P0-04B-03 adds a [native checkout consumption fence](docs/plans/P0-04B-03-checkout-commit-fence.md) for ever-activated seller bindings. Legal, documentary and independent merchant leases are rechecked immediately before cart-completion COMMIT; compensation voids earlier receipts. Native acceptance exercises the installed guard with synthetic external authority ports. Cross-engine execution and real provider/workload qualification remain open; production checkout stays denied.
 

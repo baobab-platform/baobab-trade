@@ -1,0 +1,46 @@
+name: Dev Container Startup
+
+on:
+  pull_request:
+    paths:
+      - ".devcontainer/**"
+      - ".baobab/environment.yaml"
+      - ".nvmrc"
+      - "package.json"
+      - ".github/workflows/devcontainer-startup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  startup:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and start the configured Dev Container
+        run: npm exec --yes --package=@devcontainers/cli@0.90.0 -- devcontainer up --workspace-folder .
+      - name: Verify the development user, tools and Docker connection
+        run: |
+          npm exec --yes --package=@devcontainers/cli@0.90.0 -- devcontainer exec --workspace-folder . sh -ec '
+            test "$(id -un)" = vscode
+            test "$(node --version)" = "v$(cat .nvmrc)"
+            expected_npm=$(node -p "require(\"./package.json\").packageManager")
+            test "npm@$(npm --version)" = "$expected_npm"
+            psql --version
+            gh --version
+            docker version
+            docker compose version
+          '
