@@ -6,7 +6,9 @@
  * credentials, connection strings, or SQL diagnostics to unauthenticated clients.
  */
 export interface TradeDatabaseProbe {
-  raw(sql: string): PromiseLike<unknown>
+  raw(sql: string): {
+    timeout(ms: number, options: { cancel: true }): PromiseLike<unknown>
+  }
 }
 
 export type TradeReadinessReport = {
@@ -41,10 +43,12 @@ export async function checkTradeReadiness(options: {
 
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      // A bound on the *entire* probe includes waiting for a connection
-      // from the pool, not merely PostgreSQL's query execution time.
+      // Bound the HTTP response even if pool acquisition is waiting. Knex's
+      // query timeout also cancels an executing PostgreSQL statement instead
+      // of leaving a timed-out readiness query occupying a pooled connection.
+      const query = database.raw("SELECT 1").timeout(timeoutMs, { cancel: true })
       await Promise.race([
-        Promise.resolve().then(() => database.raw("SELECT 1")),
+        query,
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error("readiness deadline exceeded")), timeoutMs)
         }),
