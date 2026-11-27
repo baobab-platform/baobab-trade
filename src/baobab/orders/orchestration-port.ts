@@ -1,15 +1,20 @@
 /**
  * ADR-0014 ORD-COM-010/021–023: a checkout idempotency key binds ONE
  * immutable purchase intent. Replays may have new correlation IDs but may
- * not change the buyer, legal seller, Market, currency or quoted total.
+ * not change tenant, buyer Principal/organisation, Market identity/revision,
+ * legal seller, currency, order reference or quoted total.
  *
  * A read-then-create seam is NOT atomic native Medusa commitment. Persistent
- * storage must still supply a unique key, a local commit+outbox transaction,
- * and a committed-result-loss/replay adoption test.
+ * storage must still supply a tenant/principal-scoped unique key, a local
+ * commit+outbox transaction, and committed-result-loss/replay adoption proof.
  */
 export type OrderCommand = {
   orderReference: string
+  tenantId: string
+  principalId: string
   organisationId: string
+  marketId: string
+  marketRevision: number
   marketKey: string
   legalSellerKey: string
   currencyCode: string
@@ -19,8 +24,13 @@ export type OrderCommand = {
 }
 export type OrderSnapshot = OrderCommand & { id: string; status: string }
 
+export type OrderIdempotencyScope = Pick<OrderCommand, "tenantId" | "principalId">
+
 export interface OrderRecordRepository {
-  findByIdempotencyKey(key: string): Promise<OrderSnapshot | undefined>
+  findByIdempotencyKey(
+    key: string,
+    scope: OrderIdempotencyScope,
+  ): Promise<OrderSnapshot | undefined>
   create(command: OrderCommand): Promise<OrderSnapshot>
   retrieve(id: string): Promise<OrderSnapshot>
 }
@@ -31,7 +41,11 @@ export interface OrderOrchestrationPort {
 
 const BOUND_FIELDS = [
   "orderReference",
+  "tenantId",
+  "principalId",
   "organisationId",
+  "marketId",
+  "marketRevision",
   "marketKey",
   "legalSellerKey",
   "currencyCode",
@@ -40,12 +54,19 @@ const BOUND_FIELDS = [
 ] as const
 
 const REFERENCE = /^[A-Za-z0-9][A-Za-z0-9_:.-]{0,199}$/
+const MARKET_ID = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/
+const MARKET_KEY = /^[a-z][a-z0-9]*(?:[._][a-z0-9]+)*$/
+const ORDER_ID = /^order_[A-Za-z0-9]+$/
 
 export const assertUnchangedOrderAttempt = (
   command: OrderCommand,
   stored: OrderSnapshot,
 ): OrderSnapshot => {
-  if (!stored || !stored.id || BOUND_FIELDS.some((field) => stored[field] !== command[field])) {
+  if (
+    !stored ||
+    !ORDER_ID.test(stored.id ?? "") ||
+    BOUND_FIELDS.some((field) => stored[field] !== command[field])
+  ) {
     throw new Error("Checkout replay refused: the idempotency key belongs to a different purchase")
   }
   return stored
@@ -58,13 +79,17 @@ export class MedusaOrderOrchestrationAdapter implements OrderOrchestrationPort {
     if (!Number.isSafeInteger(command.totalMinor) || command.totalMinor < 0) {
       throw new Error("Order total must be a non-negative safe integer")
     }
+    if (!Number.isSafeInteger(command.marketRevision) || command.marketRevision < 1) {
+      throw new Error("Order Market revision must be a positive integer")
+    }
     if (!/^[A-Z]{3}$/.test(command.currencyCode)) {
       throw new Error("Order currency must use an uppercase ISO 4217 code")
     }
     for (const field of [
       "orderReference",
+      "tenantId",
+      "principalId",
       "organisationId",
-      "marketKey",
       "legalSellerKey",
       "idempotencyKey",
       "correlationId",
@@ -73,8 +98,19 @@ export class MedusaOrderOrchestrationAdapter implements OrderOrchestrationPort {
         throw new Error("Checkout requires nonempty and bounded authority identifiers")
       }
     }
+    if (
+      command.marketId.length < 3 ||
+      command.marketId.length > 63 ||
+      !MARKET_ID.test(command.marketId) ||
+      command.marketKey.length < 3 ||
+      command.marketKey.length > 128 ||
+      !MARKET_KEY.test(command.marketKey)
+    ) {
+      throw new Error("Checkout requires canonical CP Market identity and key")
+    }
 
-    const stored = await this.records.findByIdempotencyKey(command.idempotencyKey)
+    const scope = { tenantId: command.tenantId, principalId: command.principalId }
+    const stored = await this.records.findByIdempotencyKey(command.idempotencyKey, scope)
     if (stored) return assertUnchangedOrderAttempt(command, stored)
     const created = await this.records.create(command)
     // Even the creation adapter may return an existing row after a unique-key
@@ -82,8 +118,12 @@ export class MedusaOrderOrchestrationAdapter implements OrderOrchestrationPort {
     return assertUnchangedOrderAttempt(command, created)
   }
 
-  retrieve(id: string): Promise<OrderSnapshot> {
-    if (!REFERENCE.test(id ?? "")) throw new Error("Order identifier is invalid")
-    return this.records.retrieve(id)
+  async retrieve(id: string): Promise<OrderSnapshot> {
+    if (!ORDER_ID.test(id ?? "")) throw new Error("Order identifier is invalid")
+    const stored = await this.records.retrieve(id)
+    if (!stored || stored.id !== id) {
+      throw new Error("Native Order retrieval returned a different order")
+    }
+    return stored
   }
 }
