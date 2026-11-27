@@ -1,18 +1,29 @@
-import type { IInventoryService } from "@medusajs/framework/types"
+import type {
+  BigNumberInput,
+  IInventoryService,
+  MedusaContainer,
+} from "@medusajs/framework/types"
+import { MathBN } from "@medusajs/framework/utils"
+import {
+  createReservationsWorkflow,
+  deleteReservationsWorkflow,
+} from "@medusajs/medusa/core-flows"
 
 export type InventoryAvailability = {
   inventoryItemId: string
   locationId: string
-  stockedQuantity: number
-  reservedQuantity: number
-  incomingQuantity: number
-  availableQuantity: number
+  stockedQuantity: string
+  reservedQuantity: string
+  incomingQuantity: string
+  availableQuantity: string
 }
 
 export type ReservationRequest = {
   inventoryItemId: string
   locationId: string
-  quantity: number
+  // Quantity is already expressed in native inventory-item units, after the
+  // caller applies Medusa's required_quantity conversion for the variant.
+  quantity: BigNumberInput
   lineItemId?: string
   correlationId: string
 }
@@ -29,23 +40,31 @@ const requiredIdentity = (value: unknown, name: string): void => {
   }
 }
 
-const safeQuantity = (value: unknown, field: string): number => {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+const exactNonNegativeQuantity = (value: unknown, field: string): string => {
+  try {
+    const quantity = MathBN.convert(value as BigNumberInput)
+    if (!quantity.isFinite() || quantity.isNegative()) {
+      throw new Error("invalid")
+    }
+    return quantity.toFixed()
+  } catch {
     throw new Error(`Invalid native Inventory ${field} quantity`)
   }
-  return value
 }
 
 /**
  * ADR-0013 INV-COM-003/007/013/015/018/028. Medusa owns reservation and
- * availability semantics; do not recompute available_quantity from the
- * physical ERP balance or accept foreign native inventory rows.
+ * availability semantics; preserve its computed available_quantity rather
+ * than recomputing from ERP physical stock or stocked-minus-reserved.
  *
  * This internal adapter is NOT a tenant/IAM PEP. Its caller must first
  * establish authorised location, tenant, stock owner and Market scope.
  */
 export class MedusaInventoryAvailabilityAdapter implements InventoryAvailabilityPort {
-  constructor(private readonly inventory: IInventoryService) {}
+  constructor(
+    private readonly inventory: IInventoryService,
+    private readonly container: MedusaContainer,
+  ) {}
 
   async getAvailability(
     inventoryItemId: string,
@@ -81,12 +100,11 @@ export class MedusaInventoryAvailabilityAdapter implements InventoryAvailability
       return {
         inventoryItemId: level.inventory_item_id,
         locationId: level.location_id,
-        stockedQuantity: safeQuantity(level.stocked_quantity, "stocked"),
-        reservedQuantity: safeQuantity(level.reserved_quantity, "reserved"),
-        incomingQuantity: safeQuantity(level.incoming_quantity, "incoming"),
-        // Medusa calculates commerce availability, potentially with policy
-        // deductions. Do not substitute ERP on-hand or incoming stock here.
-        availableQuantity: safeQuantity(level.available_quantity, "available-to-sell"),
+        stockedQuantity: exactNonNegativeQuantity(level.stocked_quantity, "stocked"),
+        reservedQuantity: exactNonNegativeQuantity(level.reserved_quantity, "reserved"),
+        incomingQuantity: exactNonNegativeQuantity(level.incoming_quantity, "incoming"),
+        // This is Medusa's computed commerce ATS, including its own policy deductions.
+        availableQuantity: exactNonNegativeQuantity(level.available_quantity, "available-to-sell"),
       }
     })
   }
@@ -96,28 +114,44 @@ export class MedusaInventoryAvailabilityAdapter implements InventoryAvailability
     requiredIdentity(request.locationId, "location")
     requiredIdentity(request.correlationId, "correlation")
     if (request.lineItemId !== undefined) requiredIdentity(request.lineItemId, "line item")
-    if (!Number.isSafeInteger(request.quantity) || request.quantity <= 0) {
-      throw new Error("Reservation quantity must be a positive integer")
+    const quantity = exactNonNegativeQuantity(request.quantity, "reservation")
+    if (!MathBN.gt(quantity, 0)) {
+      throw new Error("Reservation quantity must be positive")
     }
-    // Native Medusa must perform the actual concurrency/stock check; this
-    // wrapper is not an atomic reserve or a preflight ATS proof.
-    const reservation = await this.inventory.createReservationItems({
-      inventory_item_id: request.inventoryItemId,
-      location_id: request.locationId,
-      quantity: request.quantity,
-      line_item_id: request.lineItemId,
-      allow_backorder: false,
-      created_by: "baobab-trade",
-      metadata: { correlation_id: request.correlationId },
+
+    // Use Medusa's native workflow so inventory validation, compensation and
+    // reservation-item.created event semantics are retained.
+    const { result } = await createReservationsWorkflow(this.container).run({
+      input: {
+        reservations: [
+          {
+            inventory_item_id: request.inventoryItemId,
+            location_id: request.locationId,
+            quantity,
+            line_item_id: request.lineItemId,
+            allow_backorder: false,
+            created_by: "baobab-trade",
+            metadata: { correlation_id: request.correlationId },
+          },
+        ],
+      },
     })
-    if (!reservation?.id) {
-      throw new Error("Medusa did not return a committed reservation identifier")
+    const reservation = result?.[0]
+    if (
+      !reservation?.id ||
+      reservation.inventory_item_id !== request.inventoryItemId ||
+      reservation.location_id !== request.locationId ||
+      !MathBN.eq(reservation.quantity, quantity)
+    ) {
+      throw new Error("Medusa reservation workflow did not return the exact committed reservation")
     }
     return reservation.id
   }
 
   async release(reservationId: string): Promise<void> {
     requiredIdentity(reservationId, "reservation")
-    await this.inventory.deleteReservationItems(reservationId)
+    await deleteReservationsWorkflow(this.container).run({
+      input: { ids: [reservationId] },
+    })
   }
 }
