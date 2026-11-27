@@ -24,8 +24,9 @@ export const isAssortmentActive = (status: CommercialAssortmentStatus): boolean 
   status === "ACTIVE"
 
 /**
- * Regulatory states that may allow a commercial offer when policy accepts
- * conditions. NOT_EVALUATED / PENDING / REVIEW fail closed for automated sell.
+ * Only unconditional ELIGIBLE permits automated sell. Conditional eligibility
+ * remains blocked until its conditions are modelled and verified by the
+ * qualified regulatory authority/provider.
  */
 export const isRegulatoryBlocking = (eligibility: RegulatoryEligibility): boolean =>
   eligibility === "ELIGIBLE_WITH_CONDITIONS" ||
