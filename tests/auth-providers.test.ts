@@ -26,22 +26,33 @@ describe("ZuriBeans Medusa customer OIDC", () => {
       BAOBAB_IAM_OIDC_CLIENT_SECRET: "test-fixture-only",
       BAOBAB_IAM_OIDC_CALLBACK_URL: "https://trade.example.test/auth/user/oidc/callback",
     }
-    expect(() => buildAuthProviderConfiguration({
-      ...base,
-      BAOBAB_IAM_OIDC_CALLBACK_URL: "http://localhost:9000/auth/user/oidc/callback",
-    })).toThrow(/HTTPS/)
-    expect(() => buildAuthProviderConfiguration({
-      ...base, BAOBAB_IAM_OIDC_ISSUER: "https://iam.example.test/oauth?unsafe=1",
-    })).toThrow(/query/)
-    expect(() => buildAuthProviderConfiguration({
-      ...base, BAOBAB_IAM_OIDC_CALLBACK_URL: "https://trade.example.test/auth/user/oidc/callback#fragment",
-    })).toThrow(/fragment/)
-    expect(() => buildAuthProviderConfiguration({
-      ...base,
-      BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/oauth",
-      BAOBAB_IAM_ZURIBEANS_OIDC_CALLBACK_URL: "https://trade.example.test/api/auth/callback",
-      BAOBAB_IAM_ZURIBEANS_OIDC_ALLOWED_CALLBACK_URLS: "https://trade.example.test/api/auth/callback,http://localhost:3000/api/auth/callback",
-    })).toThrow(/HTTPS/)
+    expect(() =>
+      buildAuthProviderConfiguration({
+        ...base,
+        BAOBAB_IAM_OIDC_CALLBACK_URL: "http://localhost:9000/auth/user/oidc/callback",
+      }),
+    ).toThrow(/HTTPS/)
+    expect(() =>
+      buildAuthProviderConfiguration({
+        ...base,
+        BAOBAB_IAM_OIDC_ISSUER: "https://iam.example.test/oauth?unsafe=1",
+      }),
+    ).toThrow(/query/)
+    expect(() =>
+      buildAuthProviderConfiguration({
+        ...base,
+        BAOBAB_IAM_OIDC_CALLBACK_URL: "https://trade.example.test/auth/user/oidc/callback#fragment",
+      }),
+    ).toThrow(/fragment/)
+    expect(() =>
+      buildAuthProviderConfiguration({
+        ...base,
+        BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/oauth",
+        BAOBAB_IAM_ZURIBEANS_OIDC_CALLBACK_URL: "https://trade.example.test/api/auth/callback",
+        BAOBAB_IAM_ZURIBEANS_OIDC_ALLOWED_CALLBACK_URLS:
+          "https://trade.example.test/api/auth/callback,http://localhost:3000/api/auth/callback",
+      }),
+    ).toThrow(/HTTPS/)
     const ok = buildAuthProviderConfiguration({
       ...base,
       BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/oauth",
@@ -91,7 +102,10 @@ describe("ZuriBeans Medusa customer OIDC", () => {
   })
 
   it("rejects wildcard, insecure remote and ambiguous callback URLs", () => {
-    const base = { NODE_ENV: "development", BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/realms/baobab" }
+    const base = {
+      NODE_ENV: "development",
+      BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/realms/baobab",
+    }
     expect(() =>
       buildAuthProviderConfiguration({
         ...base,

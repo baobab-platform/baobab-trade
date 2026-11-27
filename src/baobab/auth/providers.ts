@@ -17,7 +17,10 @@ const protectedRuntime = (environment: NodeJS.ProcessEnv): boolean =>
 
 const exactOIDCEndpoint = (raw: string, field: string, production: boolean): string => {
   const url = new URL(raw)
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && !production && url.hostname === "localhost")) {
+  if (
+    url.protocol !== "https:" &&
+    !(url.protocol === "http:" && !production && url.hostname === "localhost")
+  ) {
     throw new Error(`${field} must use HTTPS outside local development`)
   }
   if (url.username || url.password || url.search || url.hash || url.pathname.includes("..")) {
@@ -63,7 +66,10 @@ const exactCallbackUrls = (configured: string | undefined, fallback: string): st
 export const buildAuthProviderConfiguration = (
   environment: NodeJS.ProcessEnv,
 ): AuthProviderConfiguration => {
-  // Absence of NODE_ENV is not an affirmative development authorization.\n  // In particular, missing deployment configuration must not enable password\n  // authentication on either Medusa actor.\n  const production = protectedRuntime(environment)
+  // Absence of NODE_ENV is not an affirmative development authorization.
+  // In particular, missing deployment configuration must not enable password
+  // authentication on either Medusa actor.
+  const production = protectedRuntime(environment)
   // Local email/password is a development compatibility mechanism, not an
   // alternate production workforce/customer credential authority.
   const providers: AuthProviderRegistration[] = production
@@ -71,18 +77,28 @@ export const buildAuthProviderConfiguration = (
     : [{ resolve: "@medusajs/medusa/auth-emailpass", id: "emailpass" }]
   const customerMethods = production ? [] : ["emailpass"]
 
-  if (production && (!environment.BAOBAB_IAM_OIDC_ISSUER ||
-    !environment.BAOBAB_IAM_OIDC_CLIENT_ID ||
-    !environment.BAOBAB_IAM_OIDC_CLIENT_SECRET ||
-    !environment.BAOBAB_IAM_OIDC_CALLBACK_URL)) {
-    throw new Error("Production Medusa admin authentication requires a configured confidential Baobab IAM OIDC client")
+  if (
+    production &&
+    (!environment.BAOBAB_IAM_OIDC_ISSUER ||
+      !environment.BAOBAB_IAM_OIDC_CLIENT_ID ||
+      !environment.BAOBAB_IAM_OIDC_CLIENT_SECRET ||
+      !environment.BAOBAB_IAM_OIDC_CALLBACK_URL)
+  ) {
+    throw new Error(
+      "Production Medusa admin authentication requires a configured confidential Baobab IAM OIDC client",
+    )
   }
 
   if (environment.BAOBAB_IAM_OIDC_ISSUER) {
-    const issuer = exactOIDCEndpoint(environment.BAOBAB_IAM_OIDC_ISSUER, "Workforce issuer", production)
+    const issuer = exactOIDCEndpoint(
+      environment.BAOBAB_IAM_OIDC_ISSUER,
+      "Workforce issuer",
+      production,
+    )
     const callback = exactOIDCEndpoint(
       environment.BAOBAB_IAM_OIDC_CALLBACK_URL || "http://localhost:9000/auth/user/oidc/callback",
-      "Workforce callback", production,
+      "Workforce callback",
+      production,
     )
     providers.push({
       resolve: "@medusajs/auth-oidc",
