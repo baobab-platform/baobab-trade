@@ -148,6 +148,15 @@ const TRANSACTION_TYPES: readonly TransactionType[] = [
   "RETURN",
   "REFUND",
 ]
+const CUSTOMER_REGISTRATION_STATUSES = [
+  "UNVERIFIED",
+  "PENDING",
+  "VERIFIED",
+  "INVALID",
+  "EXPIRED",
+  "REVOKED",
+  "ERROR",
+] as const
 
 const isReference = (value: unknown): value is string =>
   typeof value === "string" && REFERENCE.test(value)
@@ -268,7 +277,13 @@ const validateRequest = (request: TaxDeterminationRequest): void => {
     }
   }
   if (
+    typeof request.marketId !== "string" ||
+    request.marketId.length < 3 ||
+    request.marketId.length > 63 ||
     !MARKET_ID.test(request.marketId) ||
+    typeof request.marketKey !== "string" ||
+    request.marketKey.length < 3 ||
+    request.marketKey.length > 128 ||
     !MARKET_KEY.test(request.marketKey) ||
     !Number.isSafeInteger(request.marketRevision) ||
     request.marketRevision < 1
@@ -301,43 +316,64 @@ const validateRequest = (request: TaxDeterminationRequest): void => {
     throw new Error("Tax requires an explicit, sourced TaxPoint in the resolved jurisdiction")
   }
   if (
+    request.customerTaxRegistrationVerificationStatus !== undefined &&
+    !CUSTOMER_REGISTRATION_STATUSES.includes(request.customerTaxRegistrationVerificationStatus)
+  ) {
+    throw new Error("Customer tax registration verification status is invalid")
+  }
+  if (
     request.customerTaxRegistrationReference !== undefined &&
     (!isReference(request.customerTaxRegistrationReference) ||
       !request.customerTaxRegistrationVerificationStatus)
   ) {
     throw new Error("Customer tax registration reference requires a verification status")
   }
+  if (
+    request.customerTaxRegistrationJurisdictionKey !== undefined &&
+    !isReference(request.customerTaxRegistrationJurisdictionKey)
+  ) {
+    throw new Error("Customer tax registration jurisdiction is invalid")
+  }
+  if (
+    request.customerTaxRegistrationVerifiedAt !== undefined &&
+    !isDate(request.customerTaxRegistrationVerifiedAt)
+  ) {
+    throw new Error("Customer tax registration verification timestamp is invalid")
+  }
+  if (
+    request.customerTaxRegistrationVerificationSource !== undefined &&
+    !isReference(request.customerTaxRegistrationVerificationSource)
+  ) {
+    throw new Error("Customer tax registration verification source is invalid")
+  }
+  if (
+    request.customerTaxRegistrationValidFrom !== undefined &&
+    !isDate(request.customerTaxRegistrationValidFrom)
+  ) {
+    throw new Error("Customer tax registration valid-from date is invalid")
+  }
+  if (
+    request.customerTaxRegistrationValidUntil !== undefined &&
+    request.customerTaxRegistrationValidUntil !== null &&
+    !isDate(request.customerTaxRegistrationValidUntil)
+  ) {
+    throw new Error("Customer tax registration valid-until date is invalid")
+  }
   if (request.customerTaxRegistrationVerificationStatus === "VERIFIED") {
-    if (
-      !request.customerTaxRegistrationReference ||
-      request.customerTaxRegistrationJurisdictionKey !== request.jurisdictionKey ||
-      !isDate(request.customerTaxRegistrationVerifiedAt) ||
-      request.customerTaxRegistrationVerifiedAt > request.taxPoint.occurredAt ||
-      !isReference(request.customerTaxRegistrationVerificationSource)
-    ) {
-      throw new Error("Verified customer tax registration lacks matching jurisdiction or verification evidence")
-    }
-    if (
-      request.customerTaxRegistrationValidFrom !== undefined &&
-      !isDate(request.customerTaxRegistrationValidFrom)
-    ) {
-      throw new Error("Customer tax registration valid-from date is invalid")
-    }
-    if (
-      request.customerTaxRegistrationValidUntil !== undefined &&
-      request.customerTaxRegistrationValidUntil !== null &&
-      !isDate(request.customerTaxRegistrationValidUntil)
-    ) {
-      throw new Error("Customer tax registration valid-until date is invalid")
-    }
     const validFrom = request.customerTaxRegistrationValidFrom
     const validUntil = request.customerTaxRegistrationValidUntil
     if (
+      !request.customerTaxRegistrationReference ||
+      request.customerTaxRegistrationJurisdictionKey !== request.jurisdictionKey ||
+      !request.customerTaxRegistrationVerifiedAt ||
+      request.customerTaxRegistrationVerifiedAt > request.taxPoint.occurredAt ||
+      !request.customerTaxRegistrationVerificationSource ||
+      !validFrom ||
       (validFrom && request.taxPoint.occurredAt < validFrom) ||
       (validUntil && request.taxPoint.occurredAt >= validUntil) ||
       (validFrom && validUntil && validFrom >= validUntil)
     ) {
-      throw new Error("Customer tax registration was not effective at the TaxPoint")
+      throw new Error("Verified customer tax registration lacks matching effective jurisdiction or verification evidence")
     }
   }
 }
