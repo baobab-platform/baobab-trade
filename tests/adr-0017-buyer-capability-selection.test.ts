@@ -80,6 +80,43 @@ describe("ADR-0017 explicit B2B organisation selection", () => {
     ).toBeNull()
     expect(cp.verifyOrganisationTenant).not.toHaveBeenCalled()
   })
+  it("refuses a customer ID masquerading as a canonical Principal", async () => {
+    const db = service(),
+      cp = verifier()
+    expect(
+      await resolveSelectedOrganisationCapability(
+        db as never,
+        cp,
+        { ...args, principalId: args.customerId },
+        now,
+      ),
+    ).toBeNull()
+    expect(db.listBuyerMemberships).not.toHaveBeenCalled()
+    expect(cp.verifyOrganisationTenant).not.toHaveBeenCalled()
+  })
+
+  it("rejects malformed selected identifiers and supports Date-valued membership bounds", async () => {
+    const cp = verifier()
+    const db = service([
+      {
+        ...member,
+        effective_from: new Date("2026-10-01T00:00:00Z"),
+        effective_until: new Date("2026-12-01T00:00:00Z"),
+      },
+    ])
+    expect(
+      await resolveSelectedOrganisationCapability(
+        db as never,
+        cp,
+        { ...args, selectedOrganisationId: " org_a " },
+        now,
+      ),
+    ).toBeNull()
+    expect(
+      await resolveSelectedOrganisationCapability(db as never, cp, args, now),
+    ).toEqual({ organisationId: "org_a", status: "ACTIVE" })
+  })
+
   it("requires current CP context, not a bare 200 response", async () => {
     const db = service()
     const cp = {
@@ -90,6 +127,23 @@ describe("ADR-0017 explicit B2B organisation selection", () => {
     }
     expect(await resolveSelectedOrganisationCapability(db as never, cp, args, now)).toBeNull()
   })
+  it("fails closed when Medusa customer identity is mislabelled as the Principal", async () => {
+    const req = {
+      auth_context: { actor_id: "cus_1", app_metadata: { baobab_principal_id: "cus_1" } },
+      query: { organisation_id: "org_a" },
+      scope: { resolve: vi.fn() },
+    }
+    const res = {
+      setHeader: vi.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    }
+    await expect(GET(req as never, res as never)).rejects.toThrow(
+      "Buyer capability source unavailable",
+    )
+    expect(req.scope.resolve).not.toHaveBeenCalled()
+  })
+
   it("never automatically chooses the first organisation for an unselected customer", async () => {
     const req = {
       auth_context: { actor_id: "cus_1", app_metadata: { baobab_principal_id: "prn_1" } },
