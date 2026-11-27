@@ -68,7 +68,7 @@ const snapshot = (payment: StoredPayment): PaymentSnapshot => {
     organisationId: payment.organisation_id ?? undefined,
     customerReference: payment.customer_reference ?? undefined,
     marketId: requiredStoredText(payment.market_id, "opaque CP Market ID"),
-    marketRevision: payment.market_revision,
+    marketRevision: exactMinorAmount(payment.market_revision),
     marketKey: requiredStoredText(payment.market_key, "Market key"),
     legalSellerKey: requiredStoredText(payment.legal_seller_key, "legal seller"),
     method: payment.method,
