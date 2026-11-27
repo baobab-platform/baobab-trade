@@ -16,12 +16,24 @@ const request = {
   quantity: 20,
 }
 
-const common = { variantId: "variant-aa", marketKey: "zuribeans_za", currencyCode: "zar" }
+const common = {
+  variantId: "variant-aa",
+  marketKey: "zuribeans_za",
+  currencyCode: "zar",
+  status: "ACTIVE" as const,
+}
 const candidates: PriceCandidate[] = [
   { ...common, kind: "STANDARD_WHOLESALE", amount: 6_150 },
   { ...common, kind: "VOLUME", amount: 5_950, minQuantity: 5, maxQuantity: 19 },
   { ...common, kind: "VOLUME", amount: 5_700, minQuantity: 20 },
-  { ...common, kind: "CONTRACT", amount: 5_500, minQuantity: 20, organisationId: "org-a" },
+  {
+    ...common,
+    kind: "CONTRACT",
+    amount: 5_500,
+    minQuantity: 20,
+    organisationId: "org-a",
+    agreementReference: "contract:org-a:revision-1",
+  },
 ]
 
 describe("PricingDecisionPort policy", () => {
