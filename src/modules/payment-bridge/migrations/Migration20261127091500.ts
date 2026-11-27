@@ -11,6 +11,7 @@ export class Migration20261127091500 extends Migration {
     this.addSql('alter table "commerce_payment" add column if not exists "market_revision" bigint null;')
     this.addSql('alter table "commerce_payment" add column if not exists "raw_market_revision" jsonb null;')
     this.addSql('alter table "commerce_payment" add constraint "commerce_payment_market_revision_check" check ("market_revision" is null or "market_revision" > 0);')
+    this.addSql('alter table "commerce_payment" add constraint "commerce_payment_context_scope_check" check (( "tenant_id" is null and "principal_id" is null and "merchant_account_id" is null and "provider_environment" is null and "market_id" is null and "market_revision" is null ) or ( "tenant_id" is not null and "principal_id" is not null and "merchant_account_id" is not null and "provider_environment" is not null and "market_id" is not null and "market_revision" is not null ));
     this.addSql('alter table "commerce_payment" add column if not exists "provider_environment" text null;')
     this.addSql('alter table "commerce_payment" add constraint "commerce_payment_provider_environment_check" check ("provider_environment" is null or "provider_environment" in (\'SANDBOX\',\'LIVE\'));')
     this.addSql('create index if not exists "IDX_commerce_payment_tenant" on "commerce_payment" ("tenant_id") where "deleted_at" is null;')
@@ -24,6 +25,7 @@ export class Migration20261127091500 extends Migration {
     this.addSql('drop index if exists "IDX_commerce_payment_tenant";')
     this.addSql('alter table "commerce_payment" drop constraint if exists "commerce_payment_provider_environment_check";')
     this.addSql('alter table "commerce_payment" drop column if exists "provider_environment";')
+    this.addSql('alter table "commerce_payment" drop constraint if exists "commerce_payment_context_scope_check";')
     this.addSql('alter table "commerce_payment" drop constraint if exists "commerce_payment_market_revision_check";')
     this.addSql('alter table "commerce_payment" drop column if exists "raw_market_revision";')
     this.addSql('alter table "commerce_payment" drop column if exists "market_revision";')
