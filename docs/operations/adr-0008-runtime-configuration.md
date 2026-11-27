@@ -13,7 +13,7 @@ When `NODE_ENV=production`, these values must be supplied explicitly:
 
 | Category                    | Environment keys                                                    | Validation                                                                                                                |
 | --------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Engine identity             | `BAOBAB_TRADE_ENGINE_ID`, `BAOBAB_TRADE_ENGINE_INSTANCE_ID`         | Nonblank registered engine identifier; instance format `ei_<id>` (CP minted)                                              |
+| Engine identity             | `BAOBAB_TRADE_ENGINE_ID`, `BAOBAB_TRADE_ENGINE_INSTANCE_ID`         | Engine ID is fixed to the registered repository identity `baobab-trade`; instance format `ei_<id>` follows Shared's canonical grammar and must be CP minted |
 | Deployment identity         | `BAOBAB_ENVIRONMENT`, `BAOBAB_REGION`, `BAOBAB_DEPLOYMENT_REVISION` | Recognised environment, stable region and non-placeholder revision; **never** derive the instance from a replica hostname |
 | Required persistence        | `DATABASE_URL`, `REDIS_URL`                                         | PostgreSQL and Redis URL protocols; credentials and values never included in validation errors                            |
 | Runtime credentials         | `JWT_SECRET`, `COOKIE_SECRET`, `BAOBAB_WEBHOOK_SIGNING_SECRET`      | Explicit non-placeholder secrets of at least 32 characters                                                                |
