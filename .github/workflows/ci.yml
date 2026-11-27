@@ -376,6 +376,9 @@ jobs:
           --health-retries 5
     env:
       NODE_ENV: production
+      BAOBAB_IAM_OIDC_ISSUER: https://iam.example.invalid/ta08-fixture
+      BAOBAB_IAM_OIDC_CLIENT_ID: trade-ci-workforce-registration
+      BAOBAB_IAM_OIDC_CALLBACK_URL: https://trade.example.invalid/auth/user/oidc/callback
       DATABASE_URL: postgres://baobab_trade:baobab_trade@localhost:5432/baobab_trade_production_test
       REDIS_URL: redis://localhost:6379
       MEDUSA_FF_CACHING: true
@@ -401,6 +404,11 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --include=dev
+      - name: Set disposable workforce registration for provider startup
+        run: |
+          value=$(openssl rand -hex 32)
+          echo "::add-mask::$value"
+          printf 'BAOBAB_IAM_OIDC_CLIENT_SECRET=%s\n' "$value" >> "$GITHUB_ENV"
       - name: Apply Medusa migrations with production providers
         run: npm run migrate
       - name: Apply search index migrations
@@ -433,7 +441,7 @@ jobs:
           path: .trade-a/cp
           persist-credentials: false
       - name: Set up Go from CP's go.mod
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .trade-a/cp/go.mod
           cache: false

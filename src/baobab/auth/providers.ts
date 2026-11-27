@@ -16,20 +16,42 @@ const protectedRuntime = (environment: NodeJS.ProcessEnv): boolean =>
   environment.NODE_ENV !== "development" && environment.NODE_ENV !== "test"
 
 const exactOIDCEndpoint = (raw: string, field: string, production: boolean): string => {
-  const url = new URL(raw)
+  // URL parsing normalizes dot segments and backslashes. Reject ambiguous
+  // input before parsing so the configured issuer and callback stay exact.
+  if (!/^https?:\/\//.test(raw) || /[\s\\]/.test(raw) || !raw.split("/")[2]) {
+    throw new Error(`${field} must be an absolute HTTP(S) URL`)
+  }
+  if (raw.includes("*")) throw new Error(`${field} must not use wildcards`)
+  if (/[?#]/.test(raw)) throw new Error(`${field} must not include query strings or fragments`)
+  if (raw.split("/")[2].includes("@")) throw new Error(`${field} must not include credentials`)
+  if (
+    raw
+      .split("/")
+      .slice(3)
+      .some((segment) => /^(?:\.|%2e){1,2}$/i.test(segment))
+  ) {
+    throw new Error(`${field} must not contain path traversal`)
+  }
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    throw new Error(`${field} must be an absolute HTTP(S) URL`)
+  }
   if (
     url.protocol !== "https:" &&
     !(url.protocol === "http:" && !production && url.hostname === "localhost")
   ) {
     throw new Error(`${field} must use HTTPS outside local development`)
   }
-  if (url.username || url.password || url.search || url.hash || url.pathname.includes("..")) {
-    throw new Error(`${field} must not contain credentials, query, fragment or traversal`)
-  }
   return raw
 }
 
-const exactCallbackUrls = (configured: string | undefined, fallback: string): string[] => {
+const exactCallbackUrls = (
+  configured: string | undefined,
+  fallback: string,
+  production: boolean,
+): string[] => {
   const values = configured
     ?.split(",")
     .map((value) => value.trim())
@@ -40,19 +62,7 @@ const exactCallbackUrls = (configured: string | undefined, fallback: string): st
   }
 
   for (const value of values) {
-    if (value.includes("*")) {
-      throw new Error("ZuriBeans OIDC callback URLs must not use wildcards")
-    }
-    const url = new URL(value)
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && url.hostname === "localhost")) {
-      throw new Error("ZuriBeans OIDC callback URLs must use HTTPS outside localhost")
-    }
-    if (url.username || url.password) {
-      throw new Error("ZuriBeans OIDC callback URLs must not include credentials")
-    }
-    if (url.search || url.hash) {
-      throw new Error("ZuriBeans OIDC callback URLs must not include query strings or fragments")
-    }
+    exactOIDCEndpoint(value, "ZuriBeans OIDC callback URL", production)
   }
 
   return [...new Set(values)]
@@ -123,12 +133,8 @@ export const buildAuthProviderConfiguration = (
     const allowedCallbackUrls = exactCallbackUrls(
       environment.BAOBAB_IAM_ZURIBEANS_OIDC_ALLOWED_CALLBACK_URLS,
       callbackUrl,
+      production,
     )
-    if (production) {
-      for (const allowed of allowedCallbackUrls) {
-        exactOIDCEndpoint(allowed, "ZuriBeans allowlisted callback", true)
-      }
-    }
     if (!allowedCallbackUrls.includes(callbackUrl)) {
       throw new Error("The default ZuriBeans OIDC callback URL must be present in its allowlist")
     }

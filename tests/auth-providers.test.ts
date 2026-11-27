@@ -134,6 +134,19 @@ describe("ZuriBeans Medusa customer OIDC", () => {
     ).toThrow(/credentials/)
   })
 
+  it.each(["../", "%2e%2e/", "./"])(
+    "rejects normalized callback paths containing %s",
+    (segment) => {
+      expect(() =>
+        buildAuthProviderConfiguration({
+          NODE_ENV: "development",
+          BAOBAB_IAM_ZURIBEANS_OIDC_ISSUER: "https://iam.example.test/realms/baobab",
+          BAOBAB_IAM_ZURIBEANS_OIDC_CALLBACK_URL: `https://trade.example.test/api/${segment}callback`,
+        }),
+      ).toThrow(/path traversal/)
+    },
+  )
+
   it("requires the configured default callback to remain allowlisted", () => {
     expect(() =>
       buildAuthProviderConfiguration({
