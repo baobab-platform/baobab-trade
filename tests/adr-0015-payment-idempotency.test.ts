@@ -12,6 +12,8 @@ const cmd: InitiatePaymentCommand = {
   tenantId: "tn_zaoperator",
   principalId: "principal_za_1",
   organisationId: "org-a",
+  marketId: "mkt_01k9za7b2b",
+  marketRevision: 1,
   marketKey: "zuribeans_za",
   legalSellerKey: "seller-za",
   method: "BANK_TRANSFER",
@@ -52,6 +54,8 @@ describe("ADR-0015 payment idempotency and merchant isolation", () => {
     ["buyer", { organisationId: "org-b" }],
     ["seller", { legalSellerKey: "seller-ug" }],
     ["Market", { marketKey: "zuribeans_ug" }],
+    ["Market ID", { marketId: "mkt_01k9za7b2c" }],
+    ["Market revision", { marketRevision: 2 }],
     ["provider", { providerKey: "adyen" }],
     ["merchant account", { merchantAccountId: "merchant-account-other" }],
     ["provider environment", { providerEnvironment: "LIVE" }],
@@ -72,7 +76,7 @@ describe("ADR-0015 payment idempotency and merchant isolation", () => {
   })
   it("rejects provider-lock readback of a different merchant or seller", async () => {
     const db = repository(undefined)
-    db.create.mockResolvedValueOnce({ ...snapshot, providerKey: "merchant-ug" })
+    db.create.mockResolvedValueOnce({ ...snapshot, merchantAccountId: "merchant-account-ug" })
     await expect(new MedusaPaymentOrchestrationAdapter(db).initiate(cmd)).rejects.toThrow(
       "different financial attempt",
     )
