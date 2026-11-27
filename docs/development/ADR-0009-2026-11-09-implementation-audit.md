@@ -51,7 +51,6 @@ Further required work, in order of risk: **(1)** require live IAM/CP-authoritati
 
 **Merge/acceptance rule:** a green source-level CI run does not qualify ADR-0009 production isolation. Keep independent protected staging/production gates and the existing held Trade #189 acceptance conditions intact.
 
-
 ## 27 November 2026 follow-up
 
 - The current `main` baseline has advanced through Trade PR #239 (merge commit `5063764c4069cba85903452fcff64ec7cd0ec868`) and subsequent main updates. PR #239 removed the then-unbuildable `tests/native-buyer-commit-route.test.ts` while the genuine route remains owned by held PR #189. The test and route are both present in #189's branch; this legacy-isolation PR does not delete, mock or replace them.

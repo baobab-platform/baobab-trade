@@ -31,26 +31,16 @@ const foreign = {
   legal_name: "Foreign buyer",
 }
 const principal = { actor_id: "cus-1", app_metadata: { baobab_principal_id: "principal-1" } }
-const originalTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
-const originalUrl = process.env.ZURIBEANS_PUBLIC_URL
-const originalTemplate = process.env.BAOBAB_BUYER_INVITATION_TEMPLATE
 
 beforeEach(() => {
-  process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tenant-a"
-  process.env.ZURIBEANS_PUBLIC_URL = "https://buyer.example.test"
-  process.env.BAOBAB_BUYER_INVITATION_TEMPLATE = "buyer-invite"
+  vi.stubEnv("BAOBAB_ZURIBEANS_TENANT_ID", "tenant-a")
+  vi.stubEnv("ZURIBEANS_PUBLIC_URL", "https://buyer.example.test")
+  vi.stubEnv("BAOBAB_BUYER_INVITATION_TEMPLATE", "buyer-invite")
 })
 
 afterEach(() => {
   vi.restoreAllMocks()
-  for (const [name, original] of [
-    ["BAOBAB_ZURIBEANS_TENANT_ID", originalTenant],
-    ["ZURIBEANS_PUBLIC_URL", originalUrl],
-    ["BAOBAB_BUYER_INVITATION_TEMPLATE", originalTemplate],
-  ] as const) {
-    if (original === undefined) delete process.env[name]
-    else process.env[name] = original
-  }
+  vi.unstubAllEnvs()
 })
 
 const response = () => {
@@ -113,7 +103,7 @@ describe("ADR-0009 TEN-COM-007/008/009/017 legacy B2B tenant boundaries", () => 
   })
 
   it("fails closed without a configured trusted tenant before touching storage", async () => {
-    delete process.env.BAOBAB_ZURIBEANS_TENANT_ID
+    vi.stubEnv("BAOBAB_ZURIBEANS_TENANT_ID", undefined)
     const service = { retrieveB2BOrganisation: vi.fn(async () => local) }
     await expect(requireLegacyTenantOrganisation(service as never, local.id)).rejects.toThrow(
       "BAOBAB_ZURIBEANS_TENANT_ID",
@@ -122,17 +112,17 @@ describe("ADR-0009 TEN-COM-007/008/009/017 legacy B2B tenant boundaries", () => 
   })
 
   it.each([
-    ["members GET", getMembers, false],
-    ["members invitation POST", inviteMember, true],
-    ["sites GET", getSites, false],
-    ["sites POST", createSite, true],
-    ["tax GET", getTax, false],
-    ["tax POST", createTax, true],
-    ["invitation resend", resend, true],
-    ["invitation revoke", revoke, true],
+    ["members GET", getMembers],
+    ["members invitation POST", inviteMember],
+    ["sites GET", getSites],
+    ["sites POST", createSite],
+    ["tax GET", getTax],
+    ["tax POST", createTax],
+    ["invitation resend", resend],
+    ["invitation revoke", revoke],
   ] as const)(
     "refuses foreign-tenant %s before membership reads or business mutations",
-    async (_name, handler, _mutating) => {
+    async (_name, handler) => {
       const service = {
         retrieveB2BOrganisation: vi.fn(async () => foreign),
         listBuyerMemberships: vi.fn(async () => []),
