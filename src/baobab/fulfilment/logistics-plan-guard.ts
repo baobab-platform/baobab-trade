@@ -1,44 +1,86 @@
 /**
  * ADR-0022 provider-neutral internal logistics plan and booking evidence fence.
  * It does not book a carrier or assert the provider is currently CP-authorised.
- * A trusted logistics adapter must attest provider binding and native readback.
+ * CP must resolve a binding for the exact tenant/Market/Trade Lane/context;
+ * a trusted adapter must authenticate provider evidence and native readback.
  */
-export type LogisticsLeg = {
+export type TransportMode = "ROAD" | "AIR" | "SEA" | "RAIL"
+export type LogisticsProviderRole =
+  | "CARRIER"
+  | "FREIGHT_FORWARDER"
+  | "COURIER"
+  | "CUSTOMS_BROKER"
+  | "WAREHOUSE_OPERATOR"
+  | "THIRD_PARTY_LOGISTICS"
+  | "PORT_AGENT"
+  | "LAST_MILE_PROVIDER"
+export type Incoterm = "EXW" | "FCA" | "FOB" | "CFR" | "CIF" | "DAP" | "DPU" | "DDP"
+
+export type LogisticsLeg = Readonly<{
   legId: string
+  sequence: number
   fromLocationId: string
   toLocationId: string
-  transportMode: "ROAD" | "AIR" | "SEA" | "RAIL"
-  providerRole: "CARRIER" | "FREIGHT_FORWARDER" | "THIRD_PARTY_LOGISTICS"
+  transportMode: TransportMode
+  providerRole: LogisticsProviderRole
+  providerId: string
   providerBindingId: string
+  providerVersion: string
+  bindingVersion: string
   plannedDeparture: string
   plannedArrival: string
-}
-export type ShipmentLogisticsPlan = {
+}>
+
+export type ShipmentLogisticsPlan = Readonly<{
   tenantId: string
   shipmentId: string
   sellerLegalEntityId: string
+  buyerLegalEntityId: string
+  marketId: string
+  marketRevision: number
+  tradeLaneId: string
+  originCountry: string
+  destinationCountry: string
+  incoterm: Incoterm
   originLocationId: string
   destinationLocationId: string
-  planRevision: string
+  planRevision: number
   createdAt: string
   legs: readonly LogisticsLeg[]
-}
-export type BookingIntent = {
+}>
+
+export type BookingIntent = Readonly<{
   tenantId: string
   shipmentId: string
+  sellerLegalEntityId: string
+  buyerLegalEntityId: string
+  marketId: string
+  marketRevision: number
+  tradeLaneId: string
+  incoterm: Incoterm
   legId: string
+  transportMode: TransportMode
+  providerRole: LogisticsProviderRole
+  providerId: string
   providerBindingId: string
+  providerVersion: string
+  bindingVersion: string
   idempotencyKey: string
   quoteReference: string
-  planRevision: string
-}
-export type ProviderBookingEvidence = BookingIntent & {
+  quoteVersion: string
+  quoteCurrency: string
+  quoteAmountMinor: number
+  quoteValidUntil: string
+  planRevision: number
+}>
+
+export type ProviderBookingEvidence = BookingIntent & Readonly<{
   status: "CONFIRMED" | "REJECTED" | "UNKNOWN" | "PENDING"
   providerReference: string
   bookingReference: string
   evidenceReference: string
   observedAt: string
-}
+}>
 
 export class LogisticsRefusal extends Error {
   constructor(readonly reason: string) {
@@ -49,59 +91,135 @@ const deny = (reason: string): never => {
   throw new LogisticsRefusal(reason)
 }
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
-const present = (value: unknown, label: string) => {
+const COUNTRY = /^[A-Z]{2}$/
+const CURRENCY = /^[A-Z]{3}$/
+const modes: readonly TransportMode[] = ["ROAD", "AIR", "SEA", "RAIL"]
+const roles: readonly LogisticsProviderRole[] = [
+  "CARRIER",
+  "FREIGHT_FORWARDER",
+  "COURIER",
+  "CUSTOMS_BROKER",
+  "WAREHOUSE_OPERATOR",
+  "THIRD_PARTY_LOGISTICS",
+  "PORT_AGENT",
+  "LAST_MILE_PROVIDER",
+]
+const incoterms: readonly Incoterm[] = ["EXW", "FCA", "FOB", "CFR", "CIF", "DAP", "DPU", "DDP"]
+const present = (value: unknown, label: string): void => {
   if (typeof value !== "string" || !ID.test(value)) deny("invalid " + label)
 }
-const utc = (value: string, label: string): number => {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value))
-    return deny("invalid UTC " + label)
+const utc = (value: unknown, label: string): number => {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)
+  ) return deny("invalid UTC " + label)
   const date = Date.parse(value)
   if (!Number.isFinite(date) || new Date(date).toISOString().slice(0, 19) !== value.slice(0, 19))
     return deny("invalid UTC " + label)
   return date
 }
-const mode = ["ROAD", "AIR", "SEA", "RAIL"]
-const roles = ["CARRIER", "FREIGHT_FORWARDER", "THIRD_PARTY_LOGISTICS"]
+
+const intentFields: readonly (keyof BookingIntent)[] = [
+  "tenantId",
+  "shipmentId",
+  "sellerLegalEntityId",
+  "buyerLegalEntityId",
+  "marketId",
+  "marketRevision",
+  "tradeLaneId",
+  "incoterm",
+  "legId",
+  "transportMode",
+  "providerRole",
+  "providerId",
+  "providerBindingId",
+  "providerVersion",
+  "bindingVersion",
+  "idempotencyKey",
+  "quoteReference",
+  "quoteVersion",
+  "quoteCurrency",
+  "quoteAmountMinor",
+  "quoteValidUntil",
+  "planRevision",
+]
 const equalIntent = (a: BookingIntent, b: BookingIntent): boolean =>
-  (["tenantId", "shipmentId", "legId", "providerBindingId", "idempotencyKey", "quoteReference", "planRevision"] as const)
-    .every((key) => a[key] === b[key])
+  intentFields.every((key) => a[key] === b[key])
 
 /** A logical shipment may have multiple provider legs, never one implicit carrier. */
 export function validateShipmentPlan(plan: ShipmentLogisticsPlan): ShipmentLogisticsPlan {
-  for (const field of ["tenantId", "shipmentId", "sellerLegalEntityId", "originLocationId", "destinationLocationId", "planRevision"] as const)
-    present(plan[field], field)
-  utc(plan.createdAt, "plan creation")
+  if (!plan || typeof plan !== "object") deny("shipment plan is required")
+  for (const field of [
+    "tenantId",
+    "shipmentId",
+    "sellerLegalEntityId",
+    "buyerLegalEntityId",
+    "marketId",
+    "tradeLaneId",
+    "originLocationId",
+    "destinationLocationId",
+  ] as const) present(plan[field], field)
+  if (
+    !Number.isSafeInteger(plan.marketRevision) ||
+    plan.marketRevision < 1 ||
+    !Number.isSafeInteger(plan.planRevision) ||
+    plan.planRevision < 1 ||
+    !COUNTRY.test(plan.originCountry) ||
+    !COUNTRY.test(plan.destinationCountry) ||
+    !incoterms.includes(plan.incoterm)
+  ) deny("shipment Market, revision, country or Incoterm context is invalid")
+  const created = utc(plan.createdAt, "plan creation")
   if (!Array.isArray(plan.legs) || plan.legs.length < 1 || plan.legs.length > 32)
     deny("shipment requires a bounded ordered set of transport legs")
   const ids = new Set<string>()
   let previous: LogisticsLeg | undefined
-  for (const leg of plan.legs) {
-    for (const field of ["legId", "fromLocationId", "toLocationId", "providerBindingId"] as const)
-      present(leg[field], field)
-    if (!mode.includes(leg.transportMode) || !roles.includes(leg.providerRole))
-      deny("unsupported transport/provider role")
+  for (let index = 0; index < plan.legs.length; index += 1) {
+    const leg = plan.legs[index]
+    if (!leg || typeof leg !== "object") deny("invalid transport leg")
+    for (const field of [
+      "legId",
+      "fromLocationId",
+      "toLocationId",
+      "providerId",
+      "providerBindingId",
+      "providerVersion",
+      "bindingVersion",
+    ] as const) present(leg[field], field)
+    if (
+      !Number.isSafeInteger(leg.sequence) ||
+      leg.sequence !== index + 1 ||
+      !modes.includes(leg.transportMode) ||
+      !roles.includes(leg.providerRole)
+    ) deny("invalid transport leg sequence, mode or provider role")
     if (ids.has(leg.legId)) deny("duplicate transport leg")
     ids.add(leg.legId)
     if (leg.fromLocationId === leg.toLocationId) deny("empty transport leg")
     const departure = utc(leg.plannedDeparture, "departure")
     const arrival = utc(leg.plannedArrival, "arrival")
-    if (departure >= arrival) deny("transport arrival must follow departure")
-    if (previous && (previous.toLocationId !== leg.fromLocationId ||
-        utc(previous.plannedArrival, "previous arrival") > departure))
-      deny("disconnected or temporally inconsistent transport legs")
+    if (departure < created || departure >= arrival)
+      deny("transport departure/arrival is invalid relative to plan creation")
+    if (
+      previous &&
+      (previous.toLocationId !== leg.fromLocationId ||
+        utc(previous.plannedArrival, "previous arrival") > departure)
+    ) deny("disconnected or temporally inconsistent transport legs")
     previous = leg
   }
-  if (plan.legs[0].fromLocationId !== plan.originLocationId ||
-      plan.legs[plan.legs.length - 1].toLocationId !== plan.destinationLocationId)
-    deny("transport plan does not cover full shipment")
+  if (
+    plan.legs[0].fromLocationId !== plan.originLocationId ||
+    plan.legs[plan.legs.length - 1].toLocationId !== plan.destinationLocationId
+  ) deny("transport plan does not cover full shipment")
+  if (
+    plan.originCountry !== plan.destinationCountry &&
+    (!plan.tradeLaneId || !plan.incoterm)
+  ) deny("cross-border shipment requires Trade Lane and Incoterm")
   return structuredClone(plan)
 }
 
 /**
- * Booking confirmation is only adopted after *trusted* provider readback.
- * A timeout, unknown state or rejection is not booked. Evidence ID and
- * original idempotency identity are mandatory. Replays cannot adopt a
- * different native booking.
+ * Booking confirmation is only adopted after trusted provider readback.
+ * Unknown, pending or rejected outcomes are not booked. Replays cannot adopt
+ * a different provider, quote, plan revision or native booking.
  */
 export function adoptLogisticsBooking(
   plan: ShipmentLogisticsPlan,
@@ -109,20 +227,76 @@ export function adoptLogisticsBooking(
   evidence: ProviderBookingEvidence,
   prior?: ProviderBookingEvidence,
 ): ProviderBookingEvidence {
-  validateShipmentPlan(plan)
-  for (const field of ["idempotencyKey", "quoteReference"] as const) present(intent[field], field)
-  const leg = plan.legs.find((x) => x.legId === intent.legId)
-  if (!leg || plan.tenantId !== intent.tenantId || plan.shipmentId !== intent.shipmentId ||
-      plan.planRevision !== intent.planRevision || leg.providerBindingId !== intent.providerBindingId)
-    deny("booking intent does not match authoritative shipment plan")
-  if (!equalIntent(intent, evidence)) deny("foreign booking evidence")
+  const validatedPlan = validateShipmentPlan(plan)
+  if (!intent || typeof intent !== "object") deny("booking intent is required")
+  for (const field of [
+    "tenantId",
+    "shipmentId",
+    "sellerLegalEntityId",
+    "buyerLegalEntityId",
+    "marketId",
+    "tradeLaneId",
+    "legId",
+    "providerId",
+    "providerBindingId",
+    "providerVersion",
+    "bindingVersion",
+    "idempotencyKey",
+    "quoteReference",
+    "quoteVersion",
+  ] as const) present(intent[field], field)
+  if (
+    !Number.isSafeInteger(intent.marketRevision) ||
+    intent.marketRevision < 1 ||
+    !Number.isSafeInteger(intent.planRevision) ||
+    intent.planRevision < 1 ||
+    !incoterms.includes(intent.incoterm) ||
+    !modes.includes(intent.transportMode) ||
+    !roles.includes(intent.providerRole) ||
+    !CURRENCY.test(intent.quoteCurrency) ||
+    !Number.isSafeInteger(intent.quoteAmountMinor) ||
+    intent.quoteAmountMinor <= 0
+  ) deny("booking quote or authority context is invalid")
+  const quoteExpiry = utc(intent.quoteValidUntil, "quote expiry")
+  const leg = validatedPlan.legs.find((item) => item.legId === intent.legId)
+  if (
+    !leg ||
+    validatedPlan.tenantId !== intent.tenantId ||
+    validatedPlan.shipmentId !== intent.shipmentId ||
+    validatedPlan.sellerLegalEntityId !== intent.sellerLegalEntityId ||
+    validatedPlan.buyerLegalEntityId !== intent.buyerLegalEntityId ||
+    validatedPlan.marketId !== intent.marketId ||
+    validatedPlan.marketRevision !== intent.marketRevision ||
+    validatedPlan.tradeLaneId !== intent.tradeLaneId ||
+    validatedPlan.incoterm !== intent.incoterm ||
+    validatedPlan.planRevision !== intent.planRevision ||
+    leg.transportMode !== intent.transportMode ||
+    leg.providerRole !== intent.providerRole ||
+    leg.providerId !== intent.providerId ||
+    leg.providerBindingId !== intent.providerBindingId ||
+    leg.providerVersion !== intent.providerVersion ||
+    leg.bindingVersion !== intent.bindingVersion
+  ) deny("booking intent does not match current shipment plan and CP provider binding")
+  if (!evidence || typeof evidence !== "object" || !equalIntent(intent, evidence))
+    deny("foreign booking evidence")
   if (evidence.status !== "CONFIRMED") deny("no native confirmed provider booking")
   for (const field of ["providerReference", "bookingReference", "evidenceReference"] as const)
     present(evidence[field], field)
   const observed = utc(evidence.observedAt, "booking observation")
-  if (observed < utc(plan.createdAt, "plan creation")) deny("provider evidence predates plan")
-  if (prior && (!equalIntent(intent, prior) || prior.bookingReference !== evidence.bookingReference ||
-      prior.evidenceReference !== evidence.evidenceReference))
-    deny("replayed idempotency key changed native booking")
+  if (
+    observed < utc(validatedPlan.createdAt, "plan creation") ||
+    observed >= quoteExpiry ||
+    observed >= utc(leg.plannedDeparture, "planned departure")
+  ) deny("provider booking evidence is outside the valid quote/plan window")
+  if (prior) {
+    if (
+      prior.status !== "CONFIRMED" ||
+      !equalIntent(intent, prior) ||
+      prior.providerReference !== evidence.providerReference ||
+      prior.bookingReference !== evidence.bookingReference ||
+      prior.evidenceReference !== evidence.evidenceReference ||
+      prior.observedAt !== evidence.observedAt
+    ) deny("replayed idempotency key changed native provider booking")
+  }
   return structuredClone(evidence)
 }
