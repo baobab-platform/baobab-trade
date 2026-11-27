@@ -122,6 +122,7 @@ describe("ADR-0011 Market assortment administrative mutation boundaries", () => 
     )
     expect(res.code).toBe(200)
     expect((res.body as { market_product_eligibility: { regulatory_eligibility: string } }).market_product_eligibility.regulatory_eligibility).toBe("ELIGIBLE")
+    expect((res.body as { sellable_in_market: boolean }).sellable_in_market).toBe(true)
     expect(b2b.createMarketProductEligibilities).not.toHaveBeenCalled()
   })
 
