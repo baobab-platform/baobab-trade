@@ -11,7 +11,7 @@ export class Migration20261127091500 extends Migration {
     this.addSql('alter table "commerce_payment" add constraint "commerce_payment_provider_environment_check" check ("provider_environment" is null or "provider_environment" in (\'SANDBOX\',\'LIVE\'));')
     this.addSql('create index if not exists "IDX_commerce_payment_tenant" on "commerce_payment" ("tenant_id") where "deleted_at" is null;')
     this.addSql('create index if not exists "IDX_commerce_payment_principal" on "commerce_payment" ("principal_id") where "deleted_at" is null;')
-    this.addSql('create unique index if not exists "IDX_commerce_payment_provider_merchant_environment_reference" on "commerce_payment" ("provider_key", "merchant_account_id", "provider_environment", "provider_reference") where "provider_reference" is not null and "deleted_at" is null;')
+    this.addSql('create unique index if not exists "IDX_commerce_payment_provider_merchant_environment_reference" on "commerce_payment" ("provider_key", "merchant_account_id", "provider_environment", "provider_reference") where "provider_reference" is not null and "merchant_account_id" is not null and "provider_environment" is not null and "deleted_at" is null;')
   }
 
   async down(): Promise<void> {
