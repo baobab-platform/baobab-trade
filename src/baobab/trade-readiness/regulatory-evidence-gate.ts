@@ -153,6 +153,7 @@ const validateContext = (
   context: RegulatoryContext,
   required: readonly RequiredRegulatoryCheck[],
 ): void => {
+  if (!context || typeof context !== "object") refuse("regulatory transaction context is required")
   for (const field of [
     "tenantId",
     "transactionReference",
@@ -183,7 +184,7 @@ const validateContext = (
     context.countryOfProduction !== undefined &&
     !COUNTRY.test(context.countryOfProduction)
   ) refuse("invalid country of production")
-  if (required.some((item) => item.check === "PRODUCT_CLASSIFICATION")) {
+  if (required.some((item) => item?.check === "PRODUCT_CLASSIFICATION")) {
     for (const field of [
       "classificationSystem",
       "classificationCode",
@@ -192,7 +193,7 @@ const validateContext = (
     ] as const) requiredText(context[field], field)
   }
   if (
-    required.some((item) => item.check === "ORIGIN") &&
+    required.some((item) => item?.check === "ORIGIN") &&
     (!context.customsOriginCountry || !context.countryOfProduction)
   ) refuse("origin check requires customs origin and country of production")
 }
@@ -213,6 +214,9 @@ export function assertRegulatoryExecutionClearance(
   const now = time(effectiveAt, "effective time")
   if (!Array.isArray(required) || required.length === 0 || !Array.isArray(evidence))
     refuse("no authoritative required-check set")
+  for (const item of required) {
+    if (!item || typeof item !== "object") refuse("invalid required provider binding")
+  }
   validateContext(context, required)
   const requiredByCheck = new Map<RegulatoryCheck, RequiredRegulatoryCheck>()
   for (const item of required) {
