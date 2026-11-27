@@ -10,14 +10,20 @@ export type SelectedOrganisationCapability = {
   status: "ACTIVE"
 }
 
+const timestamp = (value: Date | string | null | undefined): number | null => {
+  if (value == null) return null
+  return value instanceof Date ? value.getTime() : new Date(value).getTime()
+}
+
 const inEffect = (
   from: Date | string | null | undefined,
   to: Date | string | null | undefined,
   now: number,
 ): boolean => {
-  const start = from == null ? -Infinity : new Date(from).getTime()
-  const end = to == null ? Infinity : new Date(to).getTime()
-  return !Number.isNaN(start) && !Number.isNaN(end) && start < end && start <= now && now < end
+  const start = timestamp(from) ?? -Infinity
+  const end = timestamp(to) ?? Infinity
+  return Number.isFinite(now) && !Number.isNaN(start) && !Number.isNaN(end) &&
+    start < end && start <= now && now < end
 }
 
 export async function resolveSelectedOrganisationCapability(
@@ -39,7 +45,11 @@ export async function resolveSelectedOrganisationCapability(
     !principalId ||
     !selectedOrganisationId ||
     !correlationId ||
-    !Number.isFinite(now)
+    !Number.isFinite(now) ||
+    principalId === customerId ||
+    [tenantId, customerId, principalId, selectedOrganisationId, correlationId].some(
+      (value) => !/^[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$/.test(value),
+    )
   )
     return null
   const memberships = await service.listBuyerMemberships({
@@ -76,6 +86,12 @@ export async function resolveSelectedOrganisationCapability(
     o.canonical_organisation_id,
     correlationId,
   )
-  if (!cp.contextId || !cp.expiresAt || !(cp.expiresAt.getTime() > now)) return null
+  if (
+    typeof cp.contextId !== "string" ||
+    !cp.contextId.trim() ||
+    !(cp.expiresAt instanceof Date) ||
+    !Number.isFinite(cp.expiresAt.getTime()) ||
+    !(cp.expiresAt.getTime() > now)
+  ) return null
   return { organisationId: selectedOrganisationId, status: "ACTIVE" }
 }
