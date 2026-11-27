@@ -62,7 +62,7 @@ const port = new ProjectedTradeComplianceAdapter(
 describe("TradeCompliancePort", () => {
   it("holds configured lanes until a qualified regulatory provider clears all checks", async () => {
     const result = await port.evaluate(transaction, new Date("2026-09-09"))
-    expect(result.status).toBe("REVIEW_REQUIRED")
+    expect(result.status).toBe("NO_PROVIDER")
     expect(result.reasons).toContain("REGULATORY_PROVIDER_DECISION_REQUIRED")
     expect(result.source).toContain("NOT_CUSTOMS_AUTHORITY")
   })
