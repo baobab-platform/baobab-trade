@@ -150,6 +150,41 @@ describe("ADR-0016 logistics intent and native transition replay", () => {
     expect(bridge.createFulfilmentStatusTransitions).not.toHaveBeenCalled()
   })
 
+  it("persists source-backed dispatch evidence and verifies native state writeback", async () => {
+    const current = { ...snapshot, status: "ALLOCATED" as const }
+    const evidence = {
+      sourceSystem: "CARRIER" as const,
+      sourceEventReference: "carrier-event-1",
+      shipmentReference: "shipment-1",
+      carrierReference: "carrier-consignment-1",
+      dispatchDate: new Date("2026-11-27T08:00:00.000Z"),
+    }
+    const bridge = {
+      listFulfilmentStatusTransitions: vi.fn(async () => []),
+      listCommerceFulfilments: vi.fn(async () => [storedRow("ALLOCATED")]),
+      createFulfilmentStatusTransitions: vi.fn(async () => ({})),
+      updateCommerceFulfilments: vi.fn(async () =>
+        storedRow("DISPATCHED", {
+          shipment_reference: "shipment-1",
+          carrier_reference: "carrier-consignment-1",
+          dispatch_date: evidence.dispatchDate,
+        }),
+      ),
+    }
+    const locking = { execute: vi.fn(async (_key: string, fn: () => Promise<unknown>) => fn()) }
+    const adapter = new FulfilmentBridgeRecordAdapter(bridge as never, locking as never)
+    const dispatched = await adapter.transition(current, "DISPATCHED", "dispatch-1", evidence)
+    expect(dispatched).toMatchObject({
+      id: "ful_1",
+      status: "DISPATCHED",
+      shipmentReference: "shipment-1",
+      carrierReference: "carrier-consignment-1",
+    })
+    expect(bridge.createFulfilmentStatusTransitions).toHaveBeenCalledWith(
+      expect.objectContaining({ evidence }),
+    )
+  })
+
   it("requires reconciliation when a prior transition log exists but native state is unchanged", async () => {
     const prior = {
       fulfilment_id: "ful_1",
