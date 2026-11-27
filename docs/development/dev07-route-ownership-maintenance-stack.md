@@ -1,12 +1,21 @@
 # DEV-07 native buyer route ownership and maintenance qualification
 
-**2026-11-13 — Integration candidate, not accepted deployment.**
+**Updated 2026-11-27. Integration candidate.**
 
 ## Source ownership and dependency
 
-The guarded Medusa `POST /store/b2b/buyer-commit` route is implemented by Trade #189 in `src/api/store/b2b/buyer-commit/route.ts`. Its paired security regression is `tests/native-buyer-commit-route.test.ts`. Main contains the regression import but not the route: this causes TS2307 in unrelated maintenance PRs. Do not remove the regression or add a stub route to hide the problem.
+Trade #189 owns the guarded Medusa `POST /store/b2b/buyer-commit` route in
+`src/api/store/b2b/buyer-commit/route.ts` and its paired regression in
+`tests/native-buyer-commit-route.test.ts`. Trade #239 restored main to
+a coherent baseline. The native route and its tests are qualified together
+on the owning #189 branch.
 
-This integration branch starts **at the exact Trade #189 head** `d59a500f78038252bd37b27aec22d134a00b36af`, and layers the Shared Foundation workflow pin change from #191 on top. This provides a coherent, compilable source baseline for qualification without activating production checkout or pretending that #189's business acceptance has passed.
+This branch uses Trade #189 at `1c10376ca2c3ffb4106b31f64859bdeaa7d22d99`.
+Foundation and CodeQL use accepted Shared main at
+`5664b1669736ddc0807709c9d2a1646325c4309a` (Shared #470). The Foundation action
+and policy checkout use the same Shared revision. The Python setup pin retains
+the already tested 3.14 scope. Trade #237 is a separate newer setup-action
+candidate. Trade #235 is a separate Shared CodeQL candidate.
 
 ## Security invariants
 
@@ -24,4 +33,4 @@ This integration branch starts **at the exact Trade #189 head** `d59a500f7803825
 3. Only after #189's documented hold is lifted and merged into main, retest the routine maintenance PRs against the resulting main. The Shared workflow upgrade should then be reconciled to #191 or this stacked integration candidate; do not merge a dependency branch containing unaccepted DEV-07 work directly into main.
 4. Major Node, Python, Medusa and OpenTelemetry upgrades require separate native/runtime compatibility evidence.
 
-**Current status:** source baseline reconciled; runtime acceptance and latest-head CI pending. No protected deployment authorisation.
+**Current status:** source baseline reconciled. Runtime acceptance and CI on the updated branch are pending.

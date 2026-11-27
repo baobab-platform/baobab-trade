@@ -519,6 +519,20 @@ describe("approval binding and separation of duties", () => {
         ...change,
       })
 
+    it("refuses missing or superseded policy and inconsistent pending state", () => {
+      expect(asApprover({ approval: { ...pending, policyRevision: null } })).toEqual(
+        denied("CONTEXT_NOT_USABLE"),
+      )
+      for (const record of [pending, approval()]) {
+        expect(asApprover({ approval: { ...record, policyRevision: "superseded" } })).toEqual(
+          denied("TRANSACTION_CHANGED"),
+        )
+      }
+      expect(asApprover({ approval: { ...pending, approverPrincipalId: BOB } })).toEqual(
+        denied("CONTEXT_NOT_USABLE"),
+      )
+    })
+
     it("needs an explicit approval limit; absent or null is DENY, never APPROVAL_REQUIRED", () => {
       expect(asApprover()).toEqual(ALLOW)
       const limit = {
