@@ -9,3 +9,11 @@
 **Remaining:** Actual IAM human token verification for the selected operation, CP estate and Market binding, buyer role grants, spend/approval limits, cart organisation switch and revalidation, cross-org price/product/order IDOR, historical attribution and all ADR §133 connected conformance. Trade #189, #202 and #204 remain separate and unmerged.
 
 **Disposition:** Legacy capability read hardening only; production buyer authority HELD.
+
+
+## 27 November 2026 follow-up
+
+- Membership effective-window evaluation now handles both Date and serialized timestamp values, rejects invalid/reversed intervals and respects the exclusive effective-until boundary.
+- The selector rejects malformed tenant/customer/Principal/organisation/correlation identifiers and refuses a Medusa Customer ID presented as the canonical Principal.
+- The route converts invalid Principal-to-Customer mappings into a generic NOT_ALLOWED response; it does not leak identity-mapping details.
+- CP attestation must include a nonblank context ID and a valid, unexpired Date. The route still exposes only selected-organisation ACTIVE status; it grants no team, catalogue, order, document, spending or approval authority.
