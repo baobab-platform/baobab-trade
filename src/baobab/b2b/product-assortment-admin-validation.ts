@@ -159,7 +159,7 @@ export const validateMarketEligibilityBody = (
       boundaries[field] = null
       continue
     }
-    if (typeof value !== "string" || !isValidIsoTimestamp(value)){
+    if (typeof value !== "string" || !isValidIsoTimestamp(value)) {
       return {
         ok: false,
         error: { field, message: `${field} must be an ISO 8601 timestamp with timezone` },
