@@ -116,6 +116,7 @@ describe("ADR-0012 scoped B2B pricing and money", () => {
       ...base,
       kind: "CONTRACT",
       organisationId: "org-a",
+      agreementReference: "contract:org-a:revision-1",
       amount: 450000,
       effectiveFrom: "2026-11-09T00:00:00Z",
       effectiveUntil: "2026-11-10T00:00:00Z",
