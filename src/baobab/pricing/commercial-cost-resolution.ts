@@ -11,6 +11,7 @@ export type CommercialPricingContext = {
   tenantId: string
   sellerLegalEntityId: string
   marketId: string
+  marketRevision: number
   productId: string
   buyerOrganisationId: string
   currencyCode: string
@@ -22,6 +23,7 @@ export type CostBasisType =
   | "WEIGHTED_AVERAGE"
   | "STANDARD"
   | "REPLACEMENT"
+  | "POLICY_ADJUSTED"
 
 export type CommercialCostEvidence = {
   tenantId: string
@@ -64,6 +66,7 @@ export type CommercialPriceSnapshot = {
   quotedPriceMinor: string
   expectedMarginMinor: string
   state: "ELIGIBLE" | "REQUIRES_APPROVAL"
+  resolverVersion: string
 }
 
 export type CommercialPriceResolution = {
@@ -75,6 +78,7 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
 const MINOR = /^(?:0|[1-9][0-9]{0,23})$/
 const MAX = 10n ** 24n - 1n
 const BASIS = 10_000n
+const RESOLVER_VERSION = "ADR-0020-COMMERCIAL-KERNEL-1"
 
 const deny = (reason: string): never => {
   throw new Error("ADR-0020 pricing refusal: " + reason)
@@ -115,8 +119,6 @@ const bps = (value: unknown, method: CommercialMarginPolicy["method"], label: st
     return deny(label + " must be nonnegative integral basis points")
   if (method === "GROSS_MARGIN" && (value as number) >= 10_000)
     return deny("gross margin must be below 100 percent")
-  if ((value as number) > 1_000_000)
-    return deny(label + " exceeds configured limit")
   return BigInt(value as number)
 }
 const ceilDiv = (n: bigint, d: bigint): bigint => (n + d - 1n) / d
@@ -139,6 +141,11 @@ export function resolveCommercialPrice(
 ): CommercialPriceResolution {
   const at = timestamp(now, "decision time")
   if (!validId(context.buyerOrganisationId)) deny("buyer organisation is required")
+  if (!Number.isSafeInteger(context.marketRevision) || context.marketRevision < 1)
+    deny("Market revision must be a positive safe integer")
+  if (policy.currencyCode !== undefined &&
+      (!validCurrency(policy.currencyCode) || policy.currencyCode !== context.currencyCode))
+    deny("margin policy currency mismatch")
   if (!validCurrency(context.currencyCode) || !validCurrency(cost.currencyCode) ||
       context.currencyCode !== cost.currencyCode) deny("cost/price FX or currency mismatch")
   requireScope(context, cost)
@@ -152,7 +159,7 @@ export function resolveCommercialPrice(
     deny("unknown cost-basis type")
   if (cost.sourceSystem !== "ERP" && cost.sourceSystem !== "GOVERNED_ESTIMATE")
     deny("unknown cost evidence source")
-  if (cost.costBasisType !== "ESTIMATED_LANDED" && cost.costBasisType !== "REPLACEMENT" &&
+  if (!["ESTIMATED_LANDED", "REPLACEMENT", "POLICY_ADJUSTED"].includes(cost.costBasisType) &&
       cost.sourceSystem !== "ERP") deny("actual/accounting cost must originate from ERP")
   if (cost.costBasisType === "ACTUAL_LANDED" && cost.sourceSystem !== "ERP")
     deny("estimated evidence cannot assert actual landed cost")
@@ -191,6 +198,7 @@ export function resolveCommercialPrice(
     quotedPriceMinor: checked(quoted, "quote"),
     expectedMarginMinor: checked(quoted - base, "expected margin"),
     state: belowFloor ? "REQUIRES_APPROVAL" : "ELIGIBLE",
+    resolverVersion: RESOLVER_VERSION,
   }
   return {
     snapshot,
@@ -200,9 +208,23 @@ export function resolveCommercialPrice(
 
 /** Actual costs adjust realised margin; an issued customer price is never rewritten. */
 export function reconcileActualMargin(
-  snapshot: CommercialPriceSnapshot,
+  resolution: CommercialPriceResolution,
   actual: CommercialCostEvidence,
-): { realisedMarginMinor: string; varianceFromExpectedMinor: string; actualCostReference: string } {
+): {
+  realisedMarginMinor: string
+  varianceFromExpectedMinor: string
+  actualCostReference: string
+  actualCostVersion: string
+  actualCostObservedAt: string
+} {
+  const snapshot = resolution.snapshot
+  const expectedFingerprint = createHash("sha256")
+    .update(JSON.stringify(snapshot))
+    .digest("hex")
+  if (expectedFingerprint !== resolution.fingerprint) {
+    deny("historical price snapshot fingerprint mismatch")
+  }
+  timestamp(snapshot.resolvedAt, "historical price resolution")
   requireScope(snapshot.context, actual)
   if (actual.currencyCode !== snapshot.context.currencyCode || !validCurrency(actual.currencyCode))
     deny("actual cost currency mismatch")
@@ -210,8 +232,9 @@ export function reconcileActualMargin(
     deny("realised margin requires ERP actual landed cost")
   if (!validId(actual.sourceReference) || !validId(actual.version))
     deny("actual cost has no verifiable provenance")
-  timestamp(actual.observedAt, "actual cost observation")
-  timestamp(actual.validUntil, "actual cost expiry")
+  const observedAt = timestamp(actual.observedAt, "actual cost observation")
+  const validUntil = timestamp(actual.validUntil, "actual cost expiry")
+  if (observedAt >= validUntil) deny("actual cost validity window is invalid")
   const realised = amount(snapshot.quotedPriceMinor, "historical quote") -
     amount(actual.amountMinor, "actual cost")
   const expected = amount(snapshot.quotedPriceMinor, "historical quote") -
@@ -220,5 +243,7 @@ export function reconcileActualMargin(
     realisedMarginMinor: checked(realised, "realised margin"),
     varianceFromExpectedMinor: checked(realised - expected, "margin variance"),
     actualCostReference: actual.sourceReference,
+    actualCostVersion: actual.version,
+    actualCostObservedAt: actual.observedAt,
   }
 }
