@@ -17,7 +17,7 @@ const tenant: BaobabTenantContext = {
   correlationId: "a465bf79-f962-4b27-9091-e614062acafd",
 }
 const market: BaobabMarket = {
-  market_id: "mkt_za_b2b",
+  market_id: "mkt_01k9za7b2b",
   canonical_key: "operator.za.b2b",
   name: "South African wholesale",
   owner_tenant_id: tenant.tenantId,
@@ -51,7 +51,7 @@ const verify = (
 describe("ADR-0010 §105 CP Market transaction-scope conformance", () => {
   it("allows exact active CP Market, tenant, legal seller, currency and context", () => {
     expect(verify()).toEqual({
-      marketId: "mkt_za_b2b",
+      marketId: "mkt_01k9za7b2b",
       tenantId: "tn_zaoperator",
       contextId: stored.context_id,
       legalSellerCanonicalId: "entity:seller-za",
@@ -64,7 +64,7 @@ describe("ADR-0010 §105 CP Market transaction-scope conformance", () => {
   it("one tenant may serve two markets sharing a country/currency; neither can borrow the other's primary CP context", () => {
     const retail: BaobabMarket = {
       ...market,
-      market_id: "mkt_za_retail",
+      market_id: "mkt_01k9za7b2c",
       canonical_key: "operator.za.retail",
       market_type: "RETAIL",
     }
@@ -77,7 +77,7 @@ describe("ADR-0010 §105 CP Market transaction-scope conformance", () => {
   })
 
   it("refuses requested-market ID substitution even if the CP's stored primary market is valid", () => {
-    expect(() => verify(market, stored, tenant, "mkt_another")).toThrow(
+    expect(() => verify(market, stored, tenant, "mkt_01k9za7b2c")).toThrow(
       "does not match the requested Market",
     )
   })
@@ -86,7 +86,7 @@ describe("ADR-0010 §105 CP Market transaction-scope conformance", () => {
     ["foreign Market owner", { owner_tenant_id: "tn_other" }, {}],
     ["foreign stored Context", {}, { tenant_id: "tn_other" }],
     ["missing stored Market", {}, { market_id: undefined }],
-    ["different stored Market", {}, { market_id: "mkt_other" }],
+    ["different stored Market", {}, { market_id: "mkt_01k9za7b2d" }],
   ] as const)("rejects %s before exposing native projections", (_name, m, c) => {
     expect(() => verify({ ...market, ...m }, { ...stored, ...c })).toThrow()
   })
@@ -161,11 +161,18 @@ describe("ADR-0010 §105 CP Market transaction-scope conformance", () => {
     for (const context of [
       { expires_at: "2026-11-09T10:00:00Z" },
       { expires_at: "2026-11-09T09:59:00Z" },
+      { expires_at: undefined },
       { resolved_at: "2026-11-09T10:00:06Z" },
       { resolved_at: "not-a-time" },
       { expires_at: "not-a-time" },
     ]) {
       expect(() => verify(market, { ...stored, ...context })).toThrow()
+    }
+  })
+
+  it("rejects malformed or non-canonical Control Plane Market IDs", () => {
+    for (const marketId of ["MKT_BAD", "mkt-bad", "mkt__bad", "mkt_" + "x".repeat(64)]) {
+      expect(() => verify({ ...market, market_id: marketId })).toThrow("Market ID")
     }
   })
 
