@@ -58,8 +58,7 @@ describe("ADR-0008 §8–9 production bootstrap and EngineInstance identity", ()
     "COOKIE_SECRET",
     "BAOBAB_WEBHOOK_SIGNING_SECRET",
   ])("rejects a production runtime without %s", (key) => {
-    const env = production()
-    delete env[key]
+    const env = { ...production(), [key]: undefined }
     expect(() => validateTradeStartupConfiguration(env)).toThrow(key)
   })
 
