@@ -14,7 +14,7 @@ const CommercePayment = model.define(
     organisation_id: model.text().index().nullable(),
     customer_reference: model.text().index().nullable(),
     market_id: model.text().nullable(),
-    market_revision: model.number().nullable(),
+    market_revision: model.bigNumber().nullable(),
     market_key: model.text().index(),
     legal_seller_key: model.text(),
     method: model.enum(["BANK_TRANSFER", "MANUAL_SETTLEMENT", "INVOICE_TERMS", "SELECTED_PSP"]),
