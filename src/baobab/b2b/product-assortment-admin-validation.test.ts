@@ -40,13 +40,23 @@ describe("ZB-06 admin payload validation", () => {
     const result = validateMarketEligibilityBody({
       product_id: "prod_1",
       market_key: "zuribeans_ug",
+      status: "ACTIVE",
       regulatory_eligibility: "MAYBE",
     })
     expect(result.ok).toBe(false)
   })
 
   it("does not let Trade admin create regulatory clearance", () => {
-    for (const regulatory_eligibility of ["ELIGIBLE", "ELIGIBLE_WITH_CONDITIONS", "INELIGIBLE"]) {
+    for (const regulatory_eligibility of [
+      "ELIGIBLE",
+      "ELIGIBLE_WITH_CONDITIONS",
+      "PENDING",
+      "REVIEW_REQUIRED",
+      "INELIGIBLE",
+      "SUSPENDED",
+      "EXPIRED",
+      "ERROR",
+    ]) {
       const result = validateMarketEligibilityBody({
         product_id: "prod_1",
         market_key: "zuribeans_za",
