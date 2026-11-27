@@ -1,31 +1,51 @@
+import type { BigNumberInput } from "@medusajs/framework/types"
+import { MathBN } from "@medusajs/framework/utils"
+
 export type InventoryReconciliationInput = {
-  erpOnHand: number
-  medusaStocked: number
-  medusaReserved: number
+  erpOnHand: BigNumberInput
+  medusaStocked: BigNumberInput
+  medusaReserved: BigNumberInput
+  // Supplied by Medusa; never derive this from stocked minus reserved.
+  medusaAvailable: BigNumberInput
 }
 
-export type InventoryReconciliationResult = InventoryReconciliationInput & {
-  delta: number
-  availableToSell: number
+export type InventoryReconciliationResult = {
+  erpOnHand: string
+  medusaStocked: string
+  medusaReserved: string
+  medusaAvailable: string
+  delta: string
   status: "MATCHED" | "VARIANCE"
+}
+
+const exactNonNegativeQuantity = (value: BigNumberInput, name: string): string => {
+  try {
+    const quantity = MathBN.convert(value)
+    if (!quantity.isFinite() || quantity.isNegative()) {
+      throw new Error("invalid")
+    }
+    return quantity.toFixed()
+  } catch {
+    throw new Error(`${name} must be a non-negative exact quantity`)
+  }
 }
 
 export const reconcileInventory = (
   input: InventoryReconciliationInput,
 ): InventoryReconciliationResult => {
-  for (const [name, value] of Object.entries(input)) {
-    if (!Number.isSafeInteger(value) || value < 0)
-      throw new Error(`${name} must be a non-negative integer`)
-  }
-  const delta = input.medusaStocked - input.erpOnHand
-  if (!Number.isSafeInteger(delta)) {
-    throw new Error("Inventory reconciliation delta exceeds exact numeric precision")
-  }
+  const erpOnHand = exactNonNegativeQuantity(input.erpOnHand, "erpOnHand")
+  const medusaStocked = exactNonNegativeQuantity(input.medusaStocked, "medusaStocked")
+  const medusaReserved = exactNonNegativeQuantity(input.medusaReserved, "medusaReserved")
+  const medusaAvailable = exactNonNegativeQuantity(input.medusaAvailable, "medusaAvailable")
+  const delta = MathBN.sub(medusaStocked, erpOnHand)
+
   return {
-    ...input,
-    delta,
-    availableToSell: Math.max(0, input.medusaStocked - input.medusaReserved),
-    status: delta === 0 ? "MATCHED" : "VARIANCE",
+    erpOnHand,
+    medusaStocked,
+    medusaReserved,
+    medusaAvailable,
+    delta: delta.toFixed(),
+    status: MathBN.eq(delta, 0) ? "MATCHED" : "VARIANCE",
   }
 }
 
