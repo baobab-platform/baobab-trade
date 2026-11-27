@@ -161,28 +161,28 @@ describe("ADR-0022 provider-neutral logistics plan and booking evidence", () => 
   })
 
   it("rejects wrong tenant, buyer/seller, Market, lane, plan or provider binding", () => {
-    for (const field of [
-      "tenantId",
-      "shipmentId",
-      "sellerLegalEntityId",
-      "buyerLegalEntityId",
-      "marketId",
-      "marketRevision",
-      "tradeLaneId",
-      "incoterm",
-      "shipmentType",
-      "legId",
-      "providerId",
-      "providerBindingId",
-      "providerVersion",
-      "bindingVersion",
-      "planRevision",
-      "providerRole",
-      "transportMode",
-    ] as const) {
-      const value = field === "marketRevision" || field === "planRevision" ? 99 : "foreign"
+    const changes = [
+      { tenantId: "tenant-other" },
+      { shipmentId: "shipment-other" },
+      { sellerLegalEntityId: "seller-other" },
+      { buyerLegalEntityId: "buyer-other" },
+      { marketId: "market-other" },
+      { marketRevision: 99 },
+      { tradeLaneId: "lane-other" },
+      { incoterm: "DAP" as const },
+      { shipmentType: "SUPPLIER_INBOUND" as const },
+      { legId: "leg-other" },
+      { providerId: "provider-other" },
+      { providerBindingId: "binding-other" },
+      { providerVersion: "provider-v2" },
+      { bindingVersion: "binding-v2" },
+      { planRevision: 99 },
+      { providerRole: "COURIER" as const },
+      { transportMode: "ROAD" as const },
+    ]
+    for (const change of changes) {
       expect(() =>
-        adoptLogisticsBooking(plan, { ...intent, [field]: value }, confirmed),
+        adoptLogisticsBooking(plan, { ...intent, ...change }, confirmed),
       ).toThrow("does not match")
     }
   })
@@ -196,7 +196,10 @@ describe("ADR-0022 provider-neutral logistics plan and booking evidence", () => 
       "quoteAmountMinor",
       "quoteValidUntil",
     ] as const) {
-      const value = field === "quoteAmountMinor" ? 1 : "other"
+      const value =
+        field === "quoteAmountMinor" ? 1 :
+        field === "quoteCurrency" ? "USD" :
+        field === "quoteValidUntil" ? "2026-11-10T11:00:00Z" : "other"
       expect(() =>
         adoptLogisticsBooking(plan, intent, { ...confirmed, [field]: value }),
       ).toThrow("foreign booking evidence")
