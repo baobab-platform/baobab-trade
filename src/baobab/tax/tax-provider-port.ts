@@ -98,11 +98,7 @@ export function roundTaxMinorUnits(
   if (!Number.isSafeInteger(taxableBasisMinor) || taxableBasisMinor < 0) {
     throw new Error("Taxable basis must be an exact non-negative minor-unit integer")
   }
-  if (
-    !Number.isSafeInteger(rateBasisPoints) ||
-    rateBasisPoints < 0 ||
-    rateBasisPoints > 100_000
-  ) {
+  if (!Number.isSafeInteger(rateBasisPoints) || rateBasisPoints < 0 || rateBasisPoints > 100_000) {
     throw new Error("Tax rate basis points are invalid")
   }
   const basis = BigInt(taxableBasisMinor)
@@ -177,10 +173,7 @@ export class EffectiveDatedTaxProviderAdapter implements TaxDeterminationPort {
         ? request.taxableBasisMinor - taxAmountMinor
         : request.taxableBasisMinor
     const grossAmountMinor = netAmountMinor + taxAmountMinor
-    if (
-      !Number.isSafeInteger(netAmountMinor) ||
-      !Number.isSafeInteger(grossAmountMinor)
-    ) {
+    if (!Number.isSafeInteger(netAmountMinor) || !Number.isSafeInteger(grossAmountMinor)) {
       throw new Error("Tax totals exceed exact minor-unit precision")
     }
     return {
