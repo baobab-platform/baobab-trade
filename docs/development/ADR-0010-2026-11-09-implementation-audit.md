@@ -61,3 +61,13 @@ npm run typecheck
 ```
 
 **Promotion disposition:** ADR-0010 remains HELD for connected acceptance. The governed runtime and production approval boundaries are unchanged; this document is an audit ledger, not a declaration of full ADR closure.
+
+
+## 27 November 2026 follow-up
+
+- The pinned Shared Market schema defines `market_id` as a CP-minted opaque identifier with a constrained grammar (min 3, max 63); the consumer guard now enforces that grammar and tests use opaque examples rather than country/business-derived IDs. The guard does not claim to prove opacity or issuance; CP remains the issuer.
+- Shared's PlatformContext schema says an absent `expires_at` is unbounded and is never valid as cross-service authority. The resolver consumes the stored context for subsequent CP mapping calls, so the guard now rejects missing as well as malformed, expired and future context bounds.
+- The Shared PlatformContext schema defines `currency_code` as the primary Market's currency. Equality with `market.default_currency` is therefore deliberate; `allowed_currencies` is not a substitute for a CP-resolved transaction currency. This tranche does not add a client-selectable alternate-currency path.
+- The direct execution-authority guard can validate a CP context for any participating country, but the composed resolver currently asks CP for `market.default_country`. Trusted non-default country selection is not wired through the resolver; the direct multi-country unit case is not end-to-end multi-country transaction proof.
+- The new `resolveCommerceContext` function is not currently called by the Store B2B `context`, `buyer-context`, `assortment` or `capabilities` routes on `main`. Those routes do not import it. This PR is therefore a tested source-level resolver boundary, not an active runtime enforcement point for native Medusa commerce operations. A production route/workflow integration remains a required follow-on before this guard can be treated as enforcing execution authority.
+- Final-head CI and independent review remain pending; the original 66/66 dedicated test result is historical evidence for the pre-correction head only. Protected staging/production activation remains held.
