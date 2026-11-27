@@ -24,18 +24,6 @@ const CONFIDENCES: ClassificationConfidence[] = [
 
 const STATUSES: CommercialAssortmentStatus[] = ["ACTIVE", "SUSPENDED", "WITHDRAWN"]
 
-const REGS: RegulatoryEligibility[] = [
-  "NOT_EVALUATED",
-  "PENDING",
-  "ELIGIBLE",
-  "ELIGIBLE_WITH_CONDITIONS",
-  "REVIEW_REQUIRED",
-  "INELIGIBLE",
-  "SUSPENDED",
-  "EXPIRED",
-  "ERROR",
-]
-
 const requireString = (
   value: unknown,
   field: string,
@@ -108,30 +96,27 @@ export const validateMarketEligibilityBody = (
     if (!r.ok) return r
   }
 
-  let status: CommercialAssortmentStatus = "ACTIVE"
-  if (body.status !== undefined) {
-    if (
-      typeof body.status !== "string" ||
-      !STATUSES.includes(body.status as CommercialAssortmentStatus)
-    ) {
-      return { ok: false, error: { field: "status", message: "invalid status" } }
-    }
-    status = body.status as CommercialAssortmentStatus
+  if (
+    typeof body.status !== "string" ||
+    !STATUSES.includes(body.status as CommercialAssortmentStatus)
+  ) {
+    return { ok: false, error: { field: "status", message: "status is required and must be valid" } }
   }
+  const status = body.status as CommercialAssortmentStatus
 
-  let regulatory: RegulatoryEligibility = "NOT_EVALUATED"
-  if (body.regulatory_eligibility !== undefined) {
-    if (
-      typeof body.regulatory_eligibility !== "string" ||
-      !REGS.includes(body.regulatory_eligibility as RegulatoryEligibility)
-    ) {
-      return {
-        ok: false,
-        error: { field: "regulatory_eligibility", message: "invalid regulatory_eligibility" },
-      }
+  if (
+    body.regulatory_eligibility !== undefined &&
+    body.regulatory_eligibility !== "NOT_EVALUATED"
+  ) {
+    return {
+      ok: false,
+      error: {
+        field: "regulatory_eligibility",
+        message: "regulatory_eligibility is owned by the qualified regulatory provider",
+      },
     }
-    regulatory = body.regulatory_eligibility as RegulatoryEligibility
   }
+  const regulatory: RegulatoryEligibility = "NOT_EVALUATED"
 
   // Store eligibility is temporal policy, not an arbitrarily parseable
   // JavaScript Date. Unqualified/reversed windows must never be activated.
