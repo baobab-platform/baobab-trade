@@ -168,7 +168,7 @@ export const assertSameFulfilmentAttempt = (
   return stored
 }
 
-const validateShipment = (command: RequestFulfilmentCommand): void => {
+export const validateFulfilmentCommand = (command: RequestFulfilmentCommand): void => {
   if (!command || typeof command !== "object" || !command.shipment) {
     throw new Error("Fulfilment shipment metadata is required")
   }
@@ -291,6 +291,13 @@ const validateEvidence = (
   if (evidence.deliveryDate !== undefined && !validDate(evidence.deliveryDate)) {
     throw new Error("Fulfilment delivery evidence must have a valid timestamp")
   }
+  const allowedEvidenceSources = ["CARRIER", "THIRD_PARTY_LOGISTICS", "WMS", "ERP"]
+  if (
+    evidence.sourceSystem !== undefined &&
+    !allowedEvidenceSources.includes(evidence.sourceSystem)
+  ) {
+    throw new Error("Fulfilment execution evidence source is invalid")
+  }
   const requiresExecutionEvidence = to === "DISPATCHED" || to === "DELIVERED"
   if (
     requiresExecutionEvidence &&
@@ -315,7 +322,7 @@ const validateEvidence = (
 export class MedusaFulfilmentAdapter implements FulfilmentPort {
   constructor(private readonly records: FulfilmentRecordRepository) {}
   async request(command: RequestFulfilmentCommand) {
-    validateShipment(command)
+    validateFulfilmentCommand(command)
     const digitalEstate = command.organisationId
       ? ZURIBEANS_DIGITAL_ESTATE_CANONICAL_ID
       : THAMANI_DIGITAL_ESTATE_CANONICAL_ID
