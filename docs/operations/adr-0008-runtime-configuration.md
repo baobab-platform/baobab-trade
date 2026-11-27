@@ -21,7 +21,7 @@ When `NODE_ENV=production`, these values must be supplied explicitly:
 
 Optional configured ERP, Pulse, IAM token and IAM issuer URLs are also validated. Service URLs require HTTPS under `NODE_ENV=production`; local development may use plain HTTP, as supplied by the DevContainer or disposable harness.
 
-The Control Plane remains the **authority** for EngineInstance registration, activation, capability binding, tenant context and isolation. Locally validated variable syntax is **not** CP attestation. A deployer must inject the CP-issued instance ID; Trade does not mint one on restart.
+The Control Plane remains the **authority** for EngineInstance registration, activation, capability binding, tenant context and isolation. Locally validated variable syntax is **not** CP attestation. A deployer must inject the CP-issued instance ID; Trade does not mint one on restart. The revision field is a deployment-supplied identifier: this validator rejects blank and obvious placeholder values but does not prove that the supplied revision is immutable or tied to the running image. That provenance belongs to the deployment and artifact-observation workflow.
 
 ## Security-sensitive feature gates
 
