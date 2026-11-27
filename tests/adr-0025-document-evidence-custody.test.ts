@@ -118,7 +118,8 @@ describe("ADR-0025 trade document and evidence custody", () => {
       "productId",
     ] as const) {
       const value = field === "marketRevision" ? 5 : "foreign"
-      expect(() => release([{ ...invoice, [field]: value }, certificate])).toThrow(
+      const foreignDocument = { ...invoice, [field]: value } as TradeDocumentEvidence
+      expect(() => release([foreignDocument, certificate])).toThrow(
         "foreign document business scope",
       )
     }
