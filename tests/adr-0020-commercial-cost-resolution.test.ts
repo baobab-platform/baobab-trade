@@ -12,6 +12,7 @@ const context: CommercialPricingContext = {
   tenantId: "tenant-zb",
   sellerLegalEntityId: "zb-za",
   marketId: "ZA",
+  marketRevision: 1,
   productId: "coffee-variant",
   buyerOrganisationId: "buyer-a",
   currencyCode: "ZAR",
@@ -35,6 +36,7 @@ const policy: CommercialMarginPolicy = {
   sellerLegalEntityId: context.sellerLegalEntityId,
   marketId: context.marketId,
   productId: context.productId,
+  currencyCode: "ZAR",
   policyReference: "policy-zb-za",
   version: "v3",
   method: "GROSS_MARGIN",
@@ -66,6 +68,7 @@ describe("ADR-0020 commercial cost/price authority seam", () => {
     expect(first).toEqual(decide())
     expect(first.fingerprint).toMatch(/^[a-f0-9]{64}$/)
     expect(decide(context, { ...cost, version: "v2" }).fingerprint).not.toBe(first.fingerprint)
+    expect(first.snapshot.resolverVersion).toBe("ADR-0020-COMMERCIAL-KERNEL-1")
   })
 
   it("rejects cross-tenant, cross-seller, cross-Market and cross-product evidence", () => {
@@ -73,6 +76,17 @@ describe("ADR-0020 commercial cost/price authority seam", () => {
       expect(() => decide(context, { ...cost, [field]: "foreign" })).toThrow("scope mismatch")
       expect(() => decide(context, cost, { ...policy, [field]: "foreign" })).toThrow("scope mismatch")
     }
+  })
+
+  it("requires a positive Market revision and supports policy-adjusted governed cost", () => {
+    expect(() => decide({ ...context, marketRevision: 0 })).toThrow("Market revision")
+    expect(
+      decide(context, {
+        ...cost,
+        costBasisType: "POLICY_ADJUSTED",
+        sourceSystem: "GOVERNED_ESTIMATE",
+      }),
+    ).toBeDefined()
   })
 
   it("refuses a different buyer's policy without inheriting their commercial terms", () => {
@@ -85,6 +99,7 @@ describe("ADR-0020 commercial cost/price authority seam", () => {
     expect(() => decide({ ...context, currencyCode: "USD" })).toThrow("currency mismatch")
     expect(() => decide(context, { ...cost, currencyCode: "USD" })).toThrow("currency mismatch")
     expect(() => decide({ ...context, currencyCode: "zar" })).toThrow("currency mismatch")
+    expect(() => decide(context, cost, { ...policy, currencyCode: "USD" })).toThrow("policy currency")
   })
 
   it("rejects missing provenance, fabricated accounting cost, and invalid source", () => {
@@ -147,10 +162,14 @@ describe("ADR-0020 commercial cost/price authority seam", () => {
     expect(() => decide(context, cost, { ...policy, minimumBasisPoints: 1.5 })).toThrow(
       "integral",
     )
+    expect(
+      decide(context, cost, { ...policy, method: "MARKUP", targetBasisPoints: 1_000_001 }),
+    ).toBeDefined()
   })
 
   it("reconciles realised margin from ERP actual cost without rewriting quote facts", () => {
-    const issued = decide().snapshot
+    const resolution = decide()
+    const issued = resolution.snapshot
     const actual: CommercialCostEvidence = {
       ...cost,
       sourceSystem: "ERP",
@@ -160,17 +179,22 @@ describe("ADR-0020 commercial cost/price authority seam", () => {
       version: "v2",
     }
     const before = structuredClone(issued)
-    expect(reconcileActualMargin(issued, actual)).toEqual({
+    expect(reconcileActualMargin(resolution, actual)).toEqual({
       realisedMarginMinor: "1834",
       varianceFromExpectedMinor: "-1500",
       actualCostReference: "erp-po-441",
+      actualCostVersion: "v2",
+      actualCostObservedAt: "2026-11-09T10:00:00Z",
     })
     expect(issued).toEqual(before)
-    expect(() => reconcileActualMargin(issued, { ...actual, tenantId: "other" })).toThrow(
+    expect(() => reconcileActualMargin(resolution, { ...actual, tenantId: "other" })).toThrow(
       "scope mismatch",
     )
     expect(() =>
-      reconcileActualMargin(issued, { ...actual, sourceSystem: "GOVERNED_ESTIMATE" }),
+      reconcileActualMargin(resolution, { ...actual, sourceSystem: "GOVERNED_ESTIMATE" }),
     ).toThrow("ERP actual")
+    const tampered = decide()
+    tampered.snapshot.quotedPriceMinor = "999999"
+    expect(() => reconcileActualMargin(tampered, actual)).toThrow("fingerprint")
   })
 })
