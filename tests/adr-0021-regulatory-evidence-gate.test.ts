@@ -43,7 +43,6 @@ const required: RequiredRegulatoryCheck[] = checks.map((check) => ({
 const evidence = (check: RegulatoryCheck): RegulatoryEvidence => {
   const binding = required.find((item) => item.check === check)!
   return {
-    ...context,
     context,
     check,
     status: "PASS",
