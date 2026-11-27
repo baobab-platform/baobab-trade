@@ -17,6 +17,8 @@ export type TradeStartupIdentity = Readonly<{
   revision?: string
 }>
 
+const TRADE_ENGINE_ID = "baobab-trade"
+const ENGINE_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 const ENGINE_INSTANCE_ID = /^ei_[a-z0-9]+$/
 const REGION = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 const REVISION = /^[a-zA-Z0-9][a-zA-Z0-9._+-]{0,127}$/
@@ -86,10 +88,14 @@ export const validateTradeStartupConfiguration = (env: NodeJS.ProcessEnv): Trade
     "BAOBAB_RESOURCE_ASSIGNMENT_ENABLED",
   )
 
-  const engineId = env.BAOBAB_TRADE_ENGINE_ID?.trim() || "baobab-trade"
-  if (!/^[a-z][a-z0-9.-]*$/.test(engineId)) {
-    throw new Error("BAOBAB_TRADE_ENGINE_ID must be a registered engine identifier")
+  const configuredEngineId = env.BAOBAB_TRADE_ENGINE_ID?.trim()
+  if (
+    !ENGINE_ID.test(TRADE_ENGINE_ID) ||
+    (configuredEngineId !== undefined && configuredEngineId !== TRADE_ENGINE_ID)
+  ) {
+    throw new Error("BAOBAB_TRADE_ENGINE_ID must identify this registered engine: baobab-trade")
   }
+  const engineId = TRADE_ENGINE_ID
 
   const engineInstanceId = env.BAOBAB_TRADE_ENGINE_INSTANCE_ID?.trim() || undefined
   if (engineInstanceId && !ENGINE_INSTANCE_ID.test(engineInstanceId)) {
