@@ -7,10 +7,16 @@ version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule: {interval: "weekly", day: "monday", time: "06:00", timezone: "Africa/Johannesburg"}
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Africa/Johannesburg"
     open-pull-requests-limit: 5
     labels: ["dependencies", "github-actions"]
-    commit-message: {prefix: "chore", include: "scope"}
+    commit-message:
+      prefix: "chore"
+      include: "scope"
     groups:
       actions-routine:
         applies-to: "version-updates"
@@ -21,21 +27,33 @@ updates:
   # CAA-06b native buyer/price/commitment negatives are mandatory.
   - package-ecosystem: "npm"
     directory: "/"
-    schedule: {interval: "weekly", day: "monday", time: "06:20", timezone: "Africa/Johannesburg"}
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:20"
+      timezone: "Africa/Johannesburg"
     open-pull-requests-limit: 5
     labels: ["dependencies", "javascript"]
     commit-message: {prefix: "chore", include: "scope"}
 
   - package-ecosystem: "docker"
     directory: "/"
-    schedule: {interval: "weekly", day: "monday", time: "06:40", timezone: "Africa/Johannesburg"}
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:40"
+      timezone: "Africa/Johannesburg"
     open-pull-requests-limit: 5
     labels: ["dependencies", "container"]
     commit-message: {prefix: "chore", include: "scope"}
 
   - package-ecosystem: "docker-compose"
     directory: "/"
-    schedule: {interval: "weekly", day: "monday", time: "07:00", timezone: "Africa/Johannesburg"}
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Africa/Johannesburg"
     open-pull-requests-limit: 5
     labels: ["dependencies", "container"]
     commit-message: {prefix: "chore", include: "scope"}
