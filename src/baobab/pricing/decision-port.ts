@@ -93,9 +93,9 @@ export const selectPrice = (
     ) {
       throw new Error("Pricing candidate has an invalid currency code")
     }
-    if (candidate.currencyCode.toLowerCase() !== request.currencyCode.toLowerCase()
-    )
+    if (candidate.currencyCode.toLowerCase() !== request.currencyCode.toLowerCase()) {
       continue
+    }
 
     const privateKind = candidate.kind === "CONTRACT" || candidate.kind === "CUSTOMER_SPECIFIC"
     // An unscoped PRIVATE price is a disclosure, not a public list price.
