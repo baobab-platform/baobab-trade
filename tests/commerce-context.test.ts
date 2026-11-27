@@ -19,7 +19,7 @@ const tenant: BaobabTenantContext = {
 }
 
 const market: BaobabMarket = {
-  market_id: "zuribeans_za_b2b",
+  market_id: "mkt_01k9za7b2b",
   canonical_key: "zuribeans.za.b2b",
   name: "ZuriBeans South Africa B2B",
   owner_tenant_id: tenant.tenantId,
@@ -186,7 +186,7 @@ describe("Baobab commerce context isolation", () => {
     ).rejects.toThrow("Stored context belongs to a tenant other than")
     expect(otherTenant.resolveMapping).not.toHaveBeenCalled()
 
-    const otherMarket = clientFor(market, { ...storedContext, market_id: "thamani_ke_b2c" })
+    const otherMarket = clientFor(market, { ...storedContext, market_id: "mkt_01k9ke7b2c" })
     await expect(
       resolveCommerceContext(otherMarket, selection, "access-token", "corr-1"),
     ).rejects.toThrow("not the Market of the Control Plane's resolved context")
@@ -226,7 +226,7 @@ describe("Baobab commerce context isolation", () => {
   it("does not treat two Markets with the same country/currency as interchangeable", async () => {
     const retailMarket = {
       ...market,
-      market_id: "zuribeans_za_retail",
+      market_id: "mkt_01k9za7b2c",
       canonical_key: "zuribeans.za.retail",
     }
     const client = clientFor(retailMarket, storedContext)
