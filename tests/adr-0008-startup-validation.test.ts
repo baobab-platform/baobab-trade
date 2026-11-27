@@ -69,6 +69,8 @@ describe("ADR-0008 §8–9 production bootstrap and EngineInstance identity", ()
     ["BAOBAB_REGION", "AF SOUTH 1"],
     ["BAOBAB_DEPLOYMENT_REVISION", "unknown"],
     ["BAOBAB_TRADE_ENGINE_ID", "http://trade"],
+    ["BAOBAB_TRADE_ENGINE_ID", "baobab-iam"],
+    ["BAOBAB_TRADE_ENGINE_ID", "baobab..trade"],
   ])("rejects untrusted %s values", (key, value) => {
     expect(() => validateTradeStartupConfiguration({ ...production(), [key]: value })).toThrow(key)
   })
