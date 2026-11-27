@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { parseEnv } from "node:util"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { getBaobabTradeEnvironment } from "../src/baobab/config/environment"
 import {
@@ -25,6 +27,14 @@ afterEach(() => {
 })
 
 describe("ADR-0008 §8–9 production bootstrap and EngineInstance identity", () => {
+  it("accepts the checked-in development environment used by the quickstart", () => {
+    const sample = parseEnv(readFileSync(".env.example", "utf8"))
+    expect(validateTradeStartupConfiguration(sample)).toMatchObject({
+      engineId: "baobab-trade",
+      environment: "development",
+    })
+  })
+
   it("accepts an explicit stable deployment identity without inventing a replica identity", () => {
     expect(validateTradeStartupConfiguration(production())).toEqual({
       engineId: "baobab-trade",
