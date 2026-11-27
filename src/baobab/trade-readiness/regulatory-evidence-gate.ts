@@ -53,6 +53,7 @@ export type RequiredRegulatoryCheck = Readonly<{
   bindingReference: string
   providerVersion: string
   bindingVersion: string
+  context: RegulatoryContext
 }>
 
 export type RegulatoryEvidence = Readonly<{
@@ -227,6 +228,8 @@ export function assertRegulatoryExecutionClearance(
       !validId(item.bindingReference) ||
       !validId(item.providerVersion) ||
       !validId(item.bindingVersion) ||
+      !item.context ||
+      !sameContext(context, item.context) ||
       requiredByCheck.has(item.check)
     ) refuse("invalid or duplicate required provider binding")
     requiredByCheck.set(item.check, item)
