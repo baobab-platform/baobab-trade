@@ -222,15 +222,23 @@ class DependencyMaintenancePolicyTest(unittest.TestCase):
     @unittest.skipIf(IS_ERP, "Trade exception expiry is owned by Trade")
     def test_trade_security_exceptions_must_not_be_expired(self):
         data = yaml.safe_load((ROOT / ".baobab/repository.yaml").read_text())
-        for key in ("dependency-audit", "container-scan"):
-            row = data["exceptions"][key]
-            expiry = row["expires"]
-            if isinstance(expiry, str):
-                expiry = date.fromisoformat(expiry)
-            self.assertGreaterEqual(
-                expiry, date.today(),
-                f"{key} expired: BLOCKED; obtain new independent Security evidence",
-            )
+        exceptions = data.get("exceptions", {})
+        self.assertIsInstance(exceptions, dict)
+        for key, row in exceptions.items():
+            with self.subTest(exception=key):
+                self.assertIsInstance(row, dict)
+                expiry = row.get("expires")
+                self.assertIsNotNone(expiry, f"{key} must declare an expiry")
+                if isinstance(expiry, str):
+                    try:
+                        expiry = date.fromisoformat(expiry)
+                    except ValueError:
+                        self.fail(f"{key} has an invalid ISO expiry date")
+                self.assertIsInstance(expiry, date)
+                self.assertGreaterEqual(
+                    expiry, date.today(),
+                    f"{key} expired: BLOCKED; obtain new independent Security evidence",
+                )
 
     @unittest.skipIf(IS_ERP, "Only Trade has an npm-native security audit")
     def test_trade_native_advisory_scan_is_daily_and_full_tree(self):
