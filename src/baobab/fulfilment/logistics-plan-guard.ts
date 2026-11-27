@@ -15,6 +15,14 @@ export type LogisticsProviderRole =
   | "PORT_AGENT"
   | "LAST_MILE_PROVIDER"
 export type Incoterm = "EXW" | "FCA" | "FOB" | "CFR" | "CIF" | "DAP" | "DPU" | "DDP"
+export type ShipmentType =
+  | "CUSTOMER_DELIVERY"
+  | "SUPPLIER_INBOUND"
+  | "INTER_BRANCH_TRANSFER"
+  | "INTERCOMPANY_TRANSFER"
+  | "RETURN"
+  | "REPLACEMENT"
+  | "SAMPLE"
 
 export type LogisticsLeg = Readonly<{
   legId: string
@@ -38,10 +46,11 @@ export type ShipmentLogisticsPlan = Readonly<{
   buyerLegalEntityId: string
   marketId: string
   marketRevision: number
-  tradeLaneId: string
+  tradeLaneId?: string
   originCountry: string
   destinationCountry: string
-  incoterm: Incoterm
+  incoterm?: Incoterm
+  shipmentType: ShipmentType
   originLocationId: string
   destinationLocationId: string
   planRevision: number
@@ -56,8 +65,9 @@ export type BookingIntent = Readonly<{
   buyerLegalEntityId: string
   marketId: string
   marketRevision: number
-  tradeLaneId: string
-  incoterm: Incoterm
+  tradeLaneId?: string
+  incoterm?: Incoterm
+  shipmentType: ShipmentType
   legId: string
   transportMode: TransportMode
   providerRole: LogisticsProviderRole
@@ -128,6 +138,7 @@ const intentFields: readonly (keyof BookingIntent)[] = [
   "marketRevision",
   "tradeLaneId",
   "incoterm",
+  "shipmentType",
   "legId",
   "transportMode",
   "providerRole",
@@ -155,7 +166,6 @@ export function validateShipmentPlan(plan: ShipmentLogisticsPlan): ShipmentLogis
     "sellerLegalEntityId",
     "buyerLegalEntityId",
     "marketId",
-    "tradeLaneId",
     "originLocationId",
     "destinationLocationId",
   ] as const) present(plan[field], field)
@@ -166,8 +176,10 @@ export function validateShipmentPlan(plan: ShipmentLogisticsPlan): ShipmentLogis
     plan.planRevision < 1 ||
     !COUNTRY.test(plan.originCountry) ||
     !COUNTRY.test(plan.destinationCountry) ||
-    !incoterms.includes(plan.incoterm)
-  ) deny("shipment Market, revision, country or Incoterm context is invalid")
+    !["CUSTOMER_DELIVERY", "SUPPLIER_INBOUND", "INTER_BRANCH_TRANSFER", "INTERCOMPANY_TRANSFER", "RETURN", "REPLACEMENT", "SAMPLE"].includes(plan.shipmentType) ||
+    (plan.incoterm !== undefined && !incoterms.includes(plan.incoterm)) ||
+    (plan.tradeLaneId !== undefined && !ID.test(plan.tradeLaneId))
+  ) deny("shipment Market, revision, country, type or Incoterm context is invalid")
   const created = utc(plan.createdAt, "plan creation")
   if (!Array.isArray(plan.legs) || plan.legs.length < 1 || plan.legs.length > 32)
     deny("shipment requires a bounded ordered set of transport legs")
@@ -211,7 +223,7 @@ export function validateShipmentPlan(plan: ShipmentLogisticsPlan): ShipmentLogis
   ) deny("transport plan does not cover full shipment")
   if (
     plan.originCountry !== plan.destinationCountry &&
-    (!plan.tradeLaneId || !plan.incoterm)
+    (!plan.tradeLaneId || !ID.test(plan.tradeLaneId) || !plan.incoterm || !incoterms.includes(plan.incoterm))
   ) deny("cross-border shipment requires Trade Lane and Incoterm")
   return structuredClone(plan)
 }
@@ -250,7 +262,8 @@ export function adoptLogisticsBooking(
     intent.marketRevision < 1 ||
     !Number.isSafeInteger(intent.planRevision) ||
     intent.planRevision < 1 ||
-    !incoterms.includes(intent.incoterm) ||
+    (intent.incoterm !== undefined && !incoterms.includes(intent.incoterm)) ||
+    !["CUSTOMER_DELIVERY", "SUPPLIER_INBOUND", "INTER_BRANCH_TRANSFER", "INTERCOMPANY_TRANSFER", "RETURN", "REPLACEMENT", "SAMPLE"].includes(intent.shipmentType) ||
     !modes.includes(intent.transportMode) ||
     !roles.includes(intent.providerRole) ||
     !CURRENCY.test(intent.quoteCurrency) ||
@@ -269,6 +282,7 @@ export function adoptLogisticsBooking(
     validatedPlan.marketRevision !== intent.marketRevision ||
     validatedPlan.tradeLaneId !== intent.tradeLaneId ||
     validatedPlan.incoterm !== intent.incoterm ||
+    validatedPlan.shipmentType !== intent.shipmentType ||
     validatedPlan.planRevision !== intent.planRevision ||
     leg.transportMode !== intent.transportMode ||
     leg.providerRole !== intent.providerRole ||
