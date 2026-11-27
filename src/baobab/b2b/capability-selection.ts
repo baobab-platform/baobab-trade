@@ -10,7 +10,11 @@ export type SelectedOrganisationCapability = {
   status: "ACTIVE"
 }
 
-const inEffect = (from: Date | string | null | undefined, to: Date | string | null | undefined, now: number): boolean => {
+const inEffect = (
+  from: Date | string | null | undefined,
+  to: Date | string | null | undefined,
+  now: number,
+): boolean => {
   const start = from == null ? -Infinity : new Date(from).getTime()
   const end = to == null ? Infinity : new Date(to).getTime()
   return !Number.isNaN(start) && !Number.isNaN(end) && start < end && start <= now && now < end
@@ -30,9 +34,14 @@ export async function resolveSelectedOrganisationCapability(
 ): Promise<SelectedOrganisationCapability | null> {
   const { tenantId, customerId, principalId, selectedOrganisationId, correlationId } = args
   if (
-    !tenantId || !customerId || !principalId ||
-    !selectedOrganisationId || !correlationId || !Number.isFinite(now)
-  ) return null
+    !tenantId ||
+    !customerId ||
+    !principalId ||
+    !selectedOrganisationId ||
+    !correlationId ||
+    !Number.isFinite(now)
+  )
+    return null
   const memberships = await service.listBuyerMemberships({
     organisation_id: selectedOrganisationId,
     customer_id: customerId,
@@ -46,7 +55,8 @@ export async function resolveSelectedOrganisationCapability(
     m.principal_id !== principalId ||
     m.status !== "ACTIVE" ||
     !inEffect(m.effective_from, m.effective_until, now)
-  ) return null
+  )
+    return null
 
   const organisations = await service.listB2BOrganisations({ id: [selectedOrganisationId] })
   if (organisations.length !== 1) return null
@@ -56,7 +66,8 @@ export async function resolveSelectedOrganisationCapability(
     o.tenant_id !== tenantId ||
     o.status !== "ACTIVE" ||
     !o.canonical_organisation_id
-  ) return null
+  )
+    return null
 
   // Only after membership is proven do we ask CP to attest that the selected
   // canonical buyer organisation belongs to the seller-side tenant.

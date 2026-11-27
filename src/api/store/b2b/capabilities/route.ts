@@ -5,7 +5,10 @@
 import { randomUUID } from "node:crypto"
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
-import { resolveBuyerTenantId, principalIdFromAuthContext } from "../../../../baobab/b2b/onboarding-policy"
+import {
+  resolveBuyerTenantId,
+  principalIdFromAuthContext,
+} from "../../../../baobab/b2b/onboarding-policy"
 import { resolveSelectedOrganisationCapability } from "../../../../baobab/b2b/capability-selection"
 import { getWorkloadTenantVerifier } from "../../../../baobab/control-plane/workload-tenant-verifier"
 import { B2B_MODULE } from "../../../../modules/b2b"
@@ -19,7 +22,10 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   }
   const value = req.query.organisation_id
   if (value !== undefined && (typeof value !== "string" || !value.trim())) {
-    throw new MedusaError(MedusaError.Types.INVALID_DATA, "organisation_id must be a selected identifier")
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "organisation_id must be a selected identifier",
+    )
   }
 
   let authorised: Awaited<ReturnType<typeof resolveSelectedOrganisationCapability>> = null
