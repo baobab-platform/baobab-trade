@@ -25,7 +25,10 @@ const snapshot: OrderSnapshot = { ...command, id: "order_1", status: "PENDING" }
 const repository = (stored: OrderSnapshot | undefined) => {
   const repo = {
     findByIdempotencyKey: vi.fn(
-      async (_key: string, _scope: { tenantId: string; principalId: string }) => stored,
+      async (
+        _key: string,
+        _scope: { tenantId: string; principalId: string; organisationId: string },
+      ) => stored,
     ),
     create: vi.fn(async (_c: OrderCommand) => snapshot),
     retrieve: vi.fn(async () => snapshot),
@@ -44,6 +47,7 @@ describe("ADR-0014 immutable purchase idempotency scope", () => {
     expect(repo.findByIdempotencyKey).toHaveBeenCalledWith("cart-commit-1", {
       tenantId: "tn_zaoperator",
       principalId: "principal_za_1",
+      organisationId: "buyer-za",
     })
     expect(repo.create).not.toHaveBeenCalled()
   })
