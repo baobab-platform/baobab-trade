@@ -24,7 +24,10 @@ export type OrderCommand = {
 }
 export type OrderSnapshot = OrderCommand & { id: string; status: string }
 
-export type OrderIdempotencyScope = Pick<OrderCommand, "tenantId" | "principalId">
+export type OrderIdempotencyScope = Pick<
+  OrderCommand,
+  "tenantId" | "principalId" | "organisationId"
+>
 
 export interface OrderRecordRepository {
   findByIdempotencyKey(
@@ -115,7 +118,11 @@ export class MedusaOrderOrchestrationAdapter implements OrderOrchestrationPort {
       throw new Error("Checkout requires canonical CP Market identity and key")
     }
 
-    const scope = { tenantId: command.tenantId, principalId: command.principalId }
+    const scope = {
+      tenantId: command.tenantId,
+      principalId: command.principalId,
+      organisationId: command.organisationId,
+    }
     const stored = await this.records.findByIdempotencyKey(command.idempotencyKey, scope)
     if (stored) return assertUnchangedOrderAttempt(command, stored)
     const created = await this.records.create(command)
