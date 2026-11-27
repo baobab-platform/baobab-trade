@@ -56,6 +56,30 @@ describe("ADR-0012 scoped B2B pricing and money", () => {
       ]).amount,
     ).toBe(615000)
   })
+  it("requires explicit active status, contract identity and volume-tier bounds", () => {
+    const missingStatus = { ...base, status: undefined } as unknown as PriceCandidate
+    expect(() => selectPrice(request, [missingStatus])).toThrow("No authorised price")
+
+    const contractWithoutReference = {
+      ...base,
+      kind: "CONTRACT" as const,
+      organisationId: "org-a",
+      agreementReference: " ",
+    }
+    expect(selectPrice(request, [base, contractWithoutReference]).kind).toBe("STANDARD_WHOLESALE")
+
+    const volumeWithoutMinimum = { ...base, kind: "VOLUME" as const }
+    expect(() => selectPrice(request, [volumeWithoutMinimum])).toThrow(
+      "explicit minimum quantity tier",
+    )
+  })
+
+  it("rejects malformed candidate currency codes", () => {
+    expect(() => selectPrice(request, [{ ...base, currencyCode: "ZZZZ" }])).toThrow(
+      "invalid currency code",
+    )
+  })
+
   it("rejects ambiguous same-precedence quantity tiers independently of returned ordering", () => {
     const a = { ...base, kind: "VOLUME" as const, amount: 480000, minQuantity: 10, maxQuantity: 30 }
     const b = { ...base, kind: "VOLUME" as const, amount: 490000, minQuantity: 15, maxQuantity: 40 }
