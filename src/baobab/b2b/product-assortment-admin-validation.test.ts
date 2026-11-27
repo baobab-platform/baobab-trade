@@ -76,6 +76,16 @@ describe("ZB-06 admin payload validation", () => {
     ).toBe(false)
   })
 
+  it("rejects impossible calendar dates even when their timestamp shape is ISO-like", () => {
+    const result = validateMarketEligibilityBody({
+      product_id: "prod_1",
+      market_key: "zuribeans_za",
+      status: "SUSPENDED",
+      effective_from: "2026-02-30T08:00:00Z",
+    })
+    expect(result.ok).toBe(false)
+  })
+
   it("rejects purchase constraint with non-positive MOQ", () => {
     const result = validatePurchaseConstraintBody({
       variant_id: "var_1",
