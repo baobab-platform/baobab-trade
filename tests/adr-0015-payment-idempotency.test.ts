@@ -9,12 +9,16 @@ import {
 const cmd: InitiatePaymentCommand = {
   paymentReference: "pay-1",
   orderReference: "order-1",
+  tenantId: "tn_zaoperator",
+  principalId: "principal_za_1",
   organisationId: "org-a",
-  marketKey: "zuribeans-za",
+  marketKey: "zuribeans_za",
   legalSellerKey: "seller-za",
   method: "BANK_TRANSFER",
   terms: "PREPAID",
-  providerKey: "merchant-za",
+  providerKey: "stripe",
+  merchantAccountId: "merchant-account-za",
+  providerEnvironment: "SANDBOX",
   currency: "ZAR",
   amountMinor: 150000,
   idempotencyKey: "pay-attempt-a",
@@ -43,10 +47,14 @@ describe("ADR-0015 payment idempotency and merchant isolation", () => {
     expect(db.create).not.toHaveBeenCalled()
   })
   it.each([
+    ["tenant", { tenantId: "tn_ugoperator" }],
+    ["Principal", { principalId: "principal_za_2" }],
     ["buyer", { organisationId: "org-b" }],
     ["seller", { legalSellerKey: "seller-ug" }],
-    ["Market", { marketKey: "zuribeans-ug" }],
-    ["merchant", { providerKey: "merchant-other" }],
+    ["Market", { marketKey: "zuribeans_ug" }],
+    ["provider", { providerKey: "adyen" }],
+    ["merchant account", { merchantAccountId: "merchant-account-other" }],
+    ["provider environment", { providerEnvironment: "LIVE" }],
     ["currency", { currency: "UGX" }],
     ["amount", { amountMinor: 145000 }],
     ["terms", { terms: "NET_30" as const, method: "INVOICE_TERMS" as const }],
@@ -80,6 +88,27 @@ describe("ADR-0015 payment idempotency and merchant isolation", () => {
       ),
     ).toThrow("different financial attempt")
   })
+  it("does not resolve UNKNOWN without provider evidence", async () => {
+    const unknown = { ...snapshot, status: "UNKNOWN" as const }
+    const db = repository(unknown)
+    const adapter = new MedusaPaymentOrchestrationAdapter(db)
+    await expect(adapter.transition(unknown, "FAILED", "resolve-unknown")).rejects.toThrow(
+      "provider reference and status evidence",
+    )
+    db.transition.mockResolvedValueOnce({
+      ...unknown,
+      status: "FAILED",
+      providerReference: "psp-txn-1",
+      providerStatus: "DECLINED",
+    })
+    await expect(
+      adapter.transition(unknown, "FAILED", "resolve-unknown", {
+        reference: "psp-txn-1",
+        status: "DECLINED",
+      }),
+    ).resolves.toMatchObject({ status: "FAILED", providerReference: "psp-txn-1" })
+  })
+
   it("does not treat a changed invoice due date as identical financial terms", () => {
     const dated = { ...snapshot, dueAt: new Date("2026-12-09T00:00:00Z") }
     expect(() =>
