@@ -104,6 +104,10 @@ type ReservationRow = {
   resource_version: number
   status: string
   expires_at: Date | string
+  tenant_id?: string
+  purchase_reference?: string | null
+  hold_revision?: number
+  amount_minor?: Money
 }
 type HoldRow = {
   budget_policy_id: string
@@ -319,13 +323,26 @@ export async function loadBuyerOperationPolicy(
     reservationId === undefined
       ? undefined
       : await attempt(async (): Promise<ReservationFact | undefined> => {
-          const [row] = await store.listSpendReservations({
+          const rows = await store.listSpendReservations({
             id: reservationId,
             organisation_id: request.organisationId,
           })
+          if (rows.length > 1) throw new MalformedRow()
+          const [row] = rows
           if (!row) return undefined
+          if (row.id !== reservationId || row.organisation_id !== request.organisationId)
+            throw new MalformedRow()
           const holds = await store.listSpendReservationHolds({ reservation_id: row.id })
           return {
+            reservationId: row.id,
+            ...(row.tenant_id !== undefined ? { tenantId: row.tenant_id } : {}),
+            ...(row.purchase_reference != null
+              ? { purchaseReference: row.purchase_reference }
+              : {}),
+            ...(row.hold_revision !== undefined ? { holdRevision: row.hold_revision } : {}),
+            ...(row.amount_minor !== undefined
+              ? { amountMinor: strictMinorUnits(row.amount_minor) }
+              : {}),
             status: oneOf(row.status, ["ACTIVE", "COMMITTED", "RELEASED", "EXPIRED"] as const),
             membershipId: row.membership_id,
             marketKey: row.market_key,

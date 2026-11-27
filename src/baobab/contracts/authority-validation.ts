@@ -126,6 +126,25 @@ export const buyerOperationDecisionSchema = validator(
   "trade/v2/buyer-execution-context.schema.json",
   "BuyerOperationDecision",
 )
+// CAA-06b: validation is necessary but never sufficient for a current
+// IAM/CP-authorised native buyer commitment. The database consumes it once.
+export const buyerAuthorityReceiptSchema = validator(
+  "trade/v2/buyer-authority-receipt.schema.json",
+  "BuyerAuthorityReceipt",
+)
+// Decision 7's canonical valuation is a fact shape, never buyer permission.
+export const buyerCommitmentValuationSchema = validator(
+  "trade/v2/buyer-commitment-valuation.schema.json",
+  "BuyerCommitmentValuation",
+)
+
+// DEV-07/DEV-11: this is the immutable, pinned ERP consequence *data*
+// contract. Schema validity alone never authorises a native order or posting.
+const erpOrderConsequence = ajv.getSchema(
+  "https://contracts.baobab-platform.com/erp/v1/commerce-order-consequence.schema.json",
+)
+if (!erpOrderConsequence) throw new Error("Pinned Shared ERP consequence schema unavailable")
+export const erpOrderConsequenceSchema = erpOrderConsequence
 export const buyerAssurancePolicySchema = validator(
   "identity/v1/assurance-policy.schema.json",
   "BuyerAssurancePolicy",

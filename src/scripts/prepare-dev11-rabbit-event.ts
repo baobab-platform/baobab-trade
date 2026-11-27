@@ -101,21 +101,28 @@ export default async function ({ container }: ExecArgs): Promise<void> {
       // ACTUAL publisher process after broker confirmation but before its
       // PostgreSQL settlement; the recovered dispatcher must reclaim its
       // expired native lease and the ERP consumer must deduplicate delivery.
-      const ambiguousId = randomUUID()
-      const ambiguous = {
-        ...event,
-        id: ambiguousId,
-        subject: "commerce-order/dev11-ambiguous-" + ambiguousId,
-        time: new Date().toISOString(),
-        idempotencykey: "dev11-rabbit-ambiguous:" + ambiguousId,
-        data: {
-          ...event.data,
-          commerce_order_id: "order_dev11_ambiguous_" + ambiguousId,
-        },
-      }
-      const ambiguousRow = await outbox.enqueue(ambiguous)
-      if (ambiguousRow.eventId !== ambiguousId || ambiguousRow.status !== "PENDING") {
-        throw new Error("DEV11_NATIVE_AMBIGUOUS_OUTBOX_CREATE_FAILED")
+      for (const scenario of ["ambiguous", "outage", "exhausted"]) {
+        await withIncomingTradeTrace(undefined, "EVENT_PUBLISH", async () => {
+          const scenarioId = randomUUID()
+          const scenarioEvent = {
+            ...event,
+            id: scenarioId,
+            subject: "commerce-order/dev11-" + scenario + "-" + scenarioId,
+            time: new Date().toISOString(),
+            correlationid: randomUUID(),
+            causationid: randomUUID(),
+            traceparent: currentTraceparent(),
+            idempotencykey: "dev11-rabbit-" + scenario + ":" + scenarioId,
+            data: {
+              ...event.data,
+              commerce_order_id: "order_dev11_" + scenario + "_" + scenarioId,
+            },
+          }
+          const row = await outbox.enqueue(scenarioEvent)
+          if (row.eventId !== scenarioId || row.status !== "PENDING") {
+            throw new Error("DEV11_NATIVE_SCENARIO_OUTBOX_CREATE_FAILED")
+          }
+        })
       }
       container
         .resolve("logger")

@@ -1,4 +1,4 @@
-import { outboundTraceparent } from "../observability/tracing"
+import { withTradeCpHttpSpan } from "../observability/tracing"
 /**
  * ADR-SHARED-039 Trade-A TA-03: Trade's clients for the two CP operations an
  * order commitment needs.
@@ -180,21 +180,21 @@ export class HttpTradeOrderAuthorityClient implements TradeOrderAuthorityPort {
     token: string,
     correlationId: string,
   ): Promise<unknown> {
-    const parent = outboundTraceparent()
-    const traceHeaders = parent ? { traceparent: parent } : {}
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
-      method: "POST",
-      redirect: "error",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "x-correlation-id": correlationId,
-        "cache-control": "no-store",
-        ...traceHeaders,
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeoutMs),
-    })
+    const response = await withTradeCpHttpSpan(async (parent) =>
+      fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
+        method: "POST",
+        redirect: "error",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-correlation-id": correlationId,
+          "cache-control": "no-store",
+          ...(parent ? { traceparent: parent } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      }),
+    )
     if (response.status !== 200)
       throw new Error("Control Plane Trade authority unavailable or refused")
     return response.json()

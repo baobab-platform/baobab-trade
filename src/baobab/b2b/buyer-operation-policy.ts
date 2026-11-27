@@ -155,6 +155,14 @@ export type BudgetFact = {
 
 /** The purchase's own reservation from formal submission (b2b_spend_reservation) and its holds. */
 export type ReservationFact = {
+  /** Persisted purchase binding when the caller is the native commit owner.
+   * Discovery policy callers need not consume these fields. Missing bindings
+   * never qualify a CAA-06b receipt or its under-lock recheck. */
+  reservationId?: string
+  tenantId?: string
+  purchaseReference?: string
+  holdRevision?: number
+  amountMinor?: bigint
   status: "ACTIVE" | "COMMITTED" | "RELEASED" | "EXPIRED"
   membershipId: string
   marketKey: string
@@ -221,9 +229,10 @@ export type BuyerOperationFacts = {
   marketKey?: string
   /**
    * CP's current answer to whether this Market is active and permitted for the
-   * seller-side Tenant and this buyer relationship. Trade has no such source
-   * yet, so callers supply UNAVAILABLE and market-scoped operations cannot
-   * ALLOW.
+   * seller-side Tenant and this buyer relationship. Only a fresh CP runtime
+   * participation and canonical Market read may attest this. The current
+   * native buyer authority composition supplies them; other callers without
+   * that source must supply UNAVAILABLE.
    */
   marketAuthority: "ATTESTED" | "DENIED" | "UNAVAILABLE"
   sites: SiteUse[]
@@ -528,14 +537,21 @@ function evaluateApprovalDecision(facts: BuyerOperationFacts): BuyerOperationDec
   if (!tx || !approval || tx.amountMinor <= 0n || !facts.marketKey)
     return deny("CONTEXT_NOT_USABLE")
   if (approval.organisationId !== facts.organisationId) return deny("BUYER_NOT_AUTHORISED")
-  if (!approval.initiatorPrincipalId) return deny("CONTEXT_NOT_USABLE")
+  if (!approval.initiatorPrincipalId || approval.policyRevision === null)
+    return deny("CONTEXT_NOT_USABLE")
   // Separation of duties: whatever roles they hold, nobody approves their own transaction.
   if (approval.initiatorPrincipalId === facts.principalId) return deny("SEPARATION_OF_DUTIES")
-  if (!boundTo(approval, tx, facts.marketKey)) return deny("TRANSACTION_CHANGED")
+  if (
+    !boundTo(approval, tx, facts.marketKey) ||
+    approval.policyRevision !== BUYER_OPERATION_POLICY_REVISION
+  ) {
+    return deny("TRANSACTION_CHANGED")
+  }
   // Deciding is for a PENDING approval; re-evaluating at commit is for an APPROVED one by its own approver.
   const reevaluation =
     approval.status === "APPROVED" && approval.approverPrincipalId === facts.principalId
-  if (approval.status !== "PENDING" && !reevaluation) return deny("CONTEXT_NOT_USABLE")
+  const pending = approval.status === "PENDING" && approval.approverPrincipalId === null
+  if (!pending && !reevaluation) return deny("CONTEXT_NOT_USABLE")
 
   // Approver authority: exactly one in-effect approval limit for this Market
   // and currency. Absent or NULL is never unlimited, and never APPROVAL_REQUIRED.

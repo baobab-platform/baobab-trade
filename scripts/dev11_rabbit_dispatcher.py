@@ -16,6 +16,7 @@ import hmac
 import json
 import os
 import re
+import uuid
 from dataclasses import dataclass
 from opentelemetry import trace
 from opentelemetry.propagate import extract
@@ -93,15 +94,35 @@ class Claimed:
     idempotency_key: str | None = None
 
 
+# Expired claims must consume the same finite budget as explicit failures.
+# Exhausted rows remain available to an operator as ambiguous delivery evidence.
+EXHAUSTED_SQL = """
+WITH exhausted AS (
+    SELECT id FROM event_outbox
+    WHERE deleted_at IS NULL AND event_type = ANY(%(types)s::text[])
+      AND (%(only_event_id)s::text IS NULL OR event_id = %(only_event_id)s)
+      AND attempt_count >= %(max_attempts)s
+      AND (status IN ('PENDING','RETRY')
+        OR (status = 'PUBLISHING' AND lease_expires_at <= now()))
+    ORDER BY next_attempt_at, id
+    FOR UPDATE SKIP LOCKED LIMIT 50
+)
+UPDATE event_outbox AS o
+SET status = 'DEAD_LETTER', last_error_code = 'BROKER_ATTEMPT_BUDGET_EXHAUSTED',
+    lease_expires_at = NULL, updated_at = now()
+FROM exhausted WHERE o.id = exhausted.id
+"""
+
 CLAIM_SQL = """
 WITH next AS (
     SELECT id FROM event_outbox
     WHERE deleted_at IS NULL
       AND event_type = ANY(%(types)s::text[])
       AND (%(only_event_id)s::text IS NULL OR event_id = %(only_event_id)s)
+      AND attempt_count < %(max_attempts)s
       AND (
         (status IN ('PENDING','RETRY') AND next_attempt_at <= now())
-        OR (status = 'PUBLISHING' AND lease_expires_at < now())
+        OR (status = 'PUBLISHING' AND lease_expires_at <= now())
       )
     ORDER BY next_attempt_at, id
     FOR UPDATE SKIP LOCKED LIMIT 1
@@ -176,10 +197,10 @@ def claim_next(db, *, only_event_id: str | None = None, lease_seconds: int = LEA
             os.environ.get("BAOBAB_DEV11_RABBIT_CONNECTED_REQUIRED") != "true"):
         raise ValueError("TRADE_OUTBOX_LEASE_POLICY_UNAPPROVED")
     with db.transaction():
-        row = db.execute(CLAIM_SQL, {
-            "types": list(TYPES), "lease": lease_seconds,
-            "only_event_id": only_event_id,
-        }).fetchone()
+        scope = {"types": list(TYPES), "only_event_id": only_event_id,
+                 "max_attempts": MAX_ATTEMPTS}
+        db.execute(EXHAUSTED_SQL, scope)
+        row = db.execute(CLAIM_SQL, {**scope, "lease": lease_seconds}).fetchone()
     return Claimed(row["id"], row["event_id"], row["event_type"],
                    row["envelope"], row["attempt_count"], row["tenant_id"],
                    row["idempotency_key"]) if row else None
@@ -265,7 +286,14 @@ def one(db, channel, secret: str, *, only_event_id: str | None = None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--max", type=int, default=50)
+    parser.add_argument("--event-id", help="Dispatch only this existing immutable outbox event")
     args = parser.parse_args()
+    if args.event_id is not None:
+        try:
+            if str(uuid.UUID(args.event_id)) != args.event_id:
+                raise ValueError
+        except (ValueError, AttributeError):
+            raise RuntimeError("TRADE_DISPATCH_EVENT_ID_INVALID") from None
     if not 1 <= args.max <= 500:
         raise RuntimeError("TRADE_DISPATCH_LIMIT_INVALID")
     environment = os.environ.get("BAOBAB_ENVIRONMENT", "")
@@ -280,13 +308,13 @@ def main():
         raise RuntimeError("TRADE_SIGNING_KEY_AND_POSTGRES_REQUIRED")
     provider = configure_otel(environment)
     try:
-        dispatch(database, url, secret, args.max)
+        dispatch(database, url, secret, args.max, only_event_id=args.event_id)
     finally:
         if provider is not None:
             provider.shutdown()
 
 
-def dispatch(database, url, secret, limit):
+def dispatch(database, url, secret, limit, *, only_event_id=None):
     with psycopg.connect(database, autocommit=True, row_factory=dict_row) as db:
         broker = pika.BlockingConnection(pika.URLParameters(url))
         try:
@@ -298,7 +326,7 @@ def dispatch(database, url, secret, limit):
             channel.confirm_delivery()
             counts = {}
             for _ in range(limit):
-                outcome = one(db, channel, secret)
+                outcome = one(db, channel, secret, only_event_id=only_event_id)
                 counts[outcome] = counts.get(outcome, 0) + 1
                 if outcome == "NO_DUE":
                     break

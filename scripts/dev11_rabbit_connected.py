@@ -21,7 +21,8 @@ import psycopg
 from psycopg.rows import dict_row
 
 from dev11_rabbit_dispatcher import (
-    CONTENT_TYPE, EXCHANGE, Claimed, one, publish_confirmed, configure_otel,
+    CONTENT_TYPE, EXCHANGE, MAX_ATTEMPTS, Claimed, claim_next, one,
+    publish_confirmed, configure_otel, settle,
 )
 
 QUEUE = "baobab.erp.trade-order.v1"
@@ -56,6 +57,85 @@ def fetch_message(channel, queue=DEAD):
             return method, properties, body
         time.sleep(0.25)
     raise RuntimeError("DEV11_REAL_RABBIT_DLQ_EVIDENCE_ABSENT")
+
+
+def wait_until(check, code):
+    for _ in range(45):
+        if check():
+            return
+        time.sleep(.25)
+    raise RuntimeError(code)
+
+
+def observe_publisher_failures(trade, erp_url, rabbit_url, channel, secret, consumer):
+    def fixture(label):
+        rows = trade.execute(
+            """SELECT id, event_id, status, envelope FROM event_outbox
+               WHERE idempotency_key LIKE %s AND deleted_at IS NULL""",
+            ("dev11-rabbit-" + label + ":%",),
+        ).fetchall()
+        demand(len(rows) == 1 and rows[0]["status"] == "PENDING",
+               "DEV11_RABBIT_FAILURE_FIXTURE_NOT_UNIQUE")
+        return rows[0]
+
+    def state(event):
+        return trade.execute(
+            """SELECT status, attempt_count, envelope, last_error_code,
+                      next_attempt_at <= now() AS due
+               FROM event_outbox WHERE id=%s""", (event["id"],),
+        ).fetchone()
+
+    def inbox_count(event):
+        with psycopg.connect(erp_url) as erp:
+            return erp.execute(
+                "SELECT count(*) FROM baobab.event_inbox WHERE event_id=%s::uuid",
+                (event["event_id"],),
+            ).fetchone()[0]
+
+    outage = fixture("outage")
+    # Disconnect a real dedicated publisher transport. The broker and ERP
+    # remain alive to independently observe absence and subsequent recovery.
+    with pika.BlockingConnection(pika.URLParameters(rabbit_url)) as interrupted:
+        disconnected_channel = interrupted.channel()
+        disconnected_channel.confirm_delivery()
+    demand(one(trade, disconnected_channel, secret, only_event_id=outage["event_id"]) == "RETRY",
+           "DEV11_PUBLISHER_OUTAGE_NOT_RETRIED")
+    failed = state(outage)
+    demand(failed["status"] == "RETRY" and failed["attempt_count"] == 1
+           and failed["last_error_code"] == "BROKER_UNKNOWN_OUTCOME"
+           and failed["envelope"] == outage["envelope"] and inbox_count(outage) == 0,
+           "DEV11_PUBLISHER_OUTAGE_CHANGED_EVENT_OR_CREATED_EFFECT")
+    wait_until(lambda: state(outage)["due"], "DEV11_PUBLISHER_BACKOFF_NOT_ELAPSED")
+    demand(one(trade, channel, secret, only_event_id=outage["event_id"]) == "PUBLISHED",
+           "DEV11_PUBLISHER_OUTAGE_NOT_RECOVERED")
+    await_erp_record(erp_url, outage["envelope"], consumer)
+    wait_durable_ack(channel, consumer, minimum_ack=5)
+    recovered = state(outage)
+    demand(recovered["status"] == "PUBLISHED" and recovered["attempt_count"] == 2
+           and recovered["envelope"] == outage["envelope"] and inbox_count(outage) == 1,
+           "DEV11_PUBLISHER_OUTAGE_RECOVERY_NOT_EXACTLY_ONCE")
+
+    exhausted = fixture("exhausted")
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        claim = claim_next(trade, only_event_id=exhausted["event_id"], lease_seconds=3)
+        demand(claim is not None and claim.attempt == attempt,
+               "DEV11_PUBLISHER_ABANDONED_ATTEMPT_NOT_COUNTED")
+        wait_until(lambda: publisher_lease_expired(trade, exhausted["id"]),
+                   "DEV11_PUBLISHER_ABANDONED_LEASE_NOT_EXPIRED")
+        try:
+            settle(trade, claim, confirmed=True)
+        except RuntimeError as error:
+            if str(error) != "TRADE_OUTBOX_LEASE_FENCE_LOST":
+                raise
+        else:
+            raise RuntimeError("DEV11_STALE_PUBLISHER_SETTLED_EVENT")
+    demand(one(trade, channel, secret, only_event_id=exhausted["event_id"]) == "NO_DUE",
+           "DEV11_PUBLISHER_EXHAUSTED_ROW_RECLAIMED")
+    terminal = state(exhausted)
+    demand(terminal["status"] == "DEAD_LETTER" and terminal["attempt_count"] == MAX_ATTEMPTS
+           and terminal["last_error_code"] == "BROKER_ATTEMPT_BUDGET_EXHAUSTED"
+           and terminal["envelope"] == exhausted["envelope"] and inbox_count(exhausted) == 0,
+           "DEV11_PUBLISHER_EXHAUSTION_NOT_TERMINAL_OR_CREATED_EFFECT")
 
 
 def await_erp_record(erp_url, event, consumer, *, allow_crash=False):
@@ -297,6 +377,8 @@ def main():
             demand(ambiguous_rows == 1,
                    "DEV11_REAL_BROKER_REDELIVERY_DUPLICATED_ERP_ADMISSION")
 
+            observe_publisher_failures(trade, erp_url, rabbit_url, channel, secret, consumer)
+
             def signed(doc):
                 body = json.dumps(doc, sort_keys=True, separators=(",", ":")).encode()
                 return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
@@ -337,6 +419,12 @@ def main():
             channel.basic_ack(delivery_tag=invalid1[0].delivery_tag)
             invalid2 = fetch_message(channel, DEAD)
             channel.basic_ack(delivery_tag=invalid2[0].delivery_tag)
+            dead_letters = [(json.loads(item[2]), item[1].headers.get(SIGN))
+                            for item in (invalid1, invalid2)]
+            demand((changed, signed(changed)) in dead_letters
+                   and (original, "sha256=" + "0" * 64) in dead_letters,
+                   "DEV11_RABBIT_DLQ_DID_NOT_CONTAIN_EXACT_REFUSED_MESSAGES")
+            await_erp_record(erp_url, original, consumer)
             # Broker returns messages on failed mandatory routing rather than
             # letting confirmed publish imply routing to a consumer.
             unroutable = {**original, "type": "com.baobab-platform.trade.customer.projected.v1"}
@@ -360,6 +448,10 @@ def main():
                 "unchanged_event_redelivery_deduplicated": True,
                 "changed_business_replay_rejected": True,
                 "bad_signature_rejected_to_dlx": True,
+                "publisher_transport_outage_recovered_one_durable_admission": True,
+                "expired_publisher_claim_cannot_settle": True,
+                "abandoned_publisher_claims_bounded": True,
+                "synthetic_source_events": True,
                 "mandatory_unroutable_rejected": True,
                 "native_erp_business_effect_qualified": False,
                 "independent_exported_span_graph_qualified": False,

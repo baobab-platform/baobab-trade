@@ -29,7 +29,11 @@ export type StoredContextOptions = {
 }
 
 export interface ControlPlaneClient {
-  resolveContext(accessToken: string, correlationId: string): Promise<BaobabTenantContext>
+  resolveContext(
+    accessToken: string,
+    correlationId: string,
+    tenantId?: string,
+  ): Promise<BaobabTenantContext>
   /**
    * Resolves and stores a platform context (POST /v1/platform-context/resolve)
    * and returns its `context_id`, which `resolveMapping` redeems. Never
@@ -122,13 +126,22 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
    * cache miss or expiry re-resolves rather than serving a stale result
    * (fail closed, per contracts.lock.yaml `fail_on_unresolved_tenant_context`).
    */
-  async resolveContext(accessToken: string, correlationId: string): Promise<BaobabTenantContext> {
+  async resolveContext(
+    accessToken: string,
+    correlationId: string,
+    tenantId?: string,
+  ): Promise<BaobabTenantContext> {
     if (!accessToken.trim()) {
       throw new Error("An access token is required to resolve tenant context")
     }
 
-    const cached = this.contextCache.get(accessToken)
-    if (cached && cached.expiresAtMs > this.now()) {
+    const cacheKey = tenantId === undefined ? accessToken : `${tenantId}\u0000${accessToken}`
+    const cached = this.contextCache.get(cacheKey)
+    if (
+      cached &&
+      cached.expiresAtMs > this.now() &&
+      (tenantId === undefined || cached.context.correlationId === correlationId)
+    ) {
       return cached.context
     }
 
@@ -140,12 +153,17 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
         "x-correlation-id": correlationId,
         ...outgoingTraceHeaders(),
       },
-      body: JSON.stringify({ product_id: this.productId }),
+      body: JSON.stringify({
+        product_id: this.productId,
+        ...(tenantId ? { tenant_id: tenantId } : {}),
+      }),
+      redirect: "error",
+      cache: "no-store",
       signal: AbortSignal.timeout(this.timeoutMs),
     })
 
     if (!response.ok) {
-      this.contextCache.delete(accessToken)
+      this.contextCache.delete(cacheKey)
       await readProblemOrThrow(response)
     }
 
@@ -155,8 +173,14 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
     }
 
     const context = assertTradeEntitlement(fromContextResolutionResponse(candidate))
+    if (
+      tenantId !== undefined &&
+      (context.tenantId !== tenantId || context.correlationId !== correlationId)
+    ) {
+      throw new Error("Control Plane resolved a different tenant request")
+    }
     const ttlSeconds = Math.min(context.cacheTtlSeconds, MAX_CACHE_TTL_SECONDS)
-    this.contextCache.set(accessToken, {
+    this.contextCache.set(cacheKey, {
       context,
       expiresAtMs: this.now() + ttlSeconds * 1000,
     })
@@ -185,6 +209,8 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
         "x-correlation-id": correlationId,
         ...outgoingTraceHeaders(),
       },
+      redirect: "error",
+      cache: "no-store",
       signal: AbortSignal.timeout(this.timeoutMs),
     })
 

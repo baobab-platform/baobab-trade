@@ -36,6 +36,8 @@ const roots = [
   "contracts/trade/v2/native-commitment-classification.schema.json",
   // Decision 9.
   "contracts/control-plane/v1/estate-resource-assignment.schema.json",
+  // DEV-07 / DEV-11: validate real native source facts before persisting the ERP event.
+  "contracts/erp/v1/commerce-order-consequence.schema.json",
 ]
 const schemas = new Map()
 const discover = (path) => {
