@@ -58,13 +58,17 @@ const MARKET_ID = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/
 const MARKET_KEY = /^[a-z][a-z0-9]*(?:[._][a-z0-9]+)*$/
 const ORDER_ID = /^order_[A-Za-z0-9]+$/
 
+const isBoundedReference = (value: unknown): value is string =>
+  typeof value === "string" && REFERENCE.test(value)
+
 export const assertUnchangedOrderAttempt = (
   command: OrderCommand,
   stored: OrderSnapshot,
 ): OrderSnapshot => {
   if (
     !stored ||
-    !ORDER_ID.test(stored.id ?? "") ||
+    !isBoundedReference(stored.id) ||
+    !ORDER_ID.test(stored.id) ||
     BOUND_FIELDS.some((field) => stored[field] !== command[field])
   ) {
     throw new Error("Checkout replay refused: the idempotency key belongs to a different purchase")
@@ -82,7 +86,7 @@ export class MedusaOrderOrchestrationAdapter implements OrderOrchestrationPort {
     if (!Number.isSafeInteger(command.marketRevision) || command.marketRevision < 1) {
       throw new Error("Order Market revision must be a positive integer")
     }
-    if (!/^[A-Z]{3}$/.test(command.currencyCode)) {
+    if (typeof command.currencyCode !== "string" || !/^[A-Z]{3}$/.test(command.currencyCode)) {
       throw new Error("Order currency must use an uppercase ISO 4217 code")
     }
     for (const field of [
@@ -94,14 +98,16 @@ export class MedusaOrderOrchestrationAdapter implements OrderOrchestrationPort {
       "idempotencyKey",
       "correlationId",
     ] as const) {
-      if (!REFERENCE.test(command[field] ?? "")) {
+      if (!isBoundedReference(command[field])) {
         throw new Error("Checkout requires nonempty and bounded authority identifiers")
       }
     }
     if (
+      typeof command.marketId !== "string" ||
       command.marketId.length < 3 ||
       command.marketId.length > 63 ||
       !MARKET_ID.test(command.marketId) ||
+      typeof command.marketKey !== "string" ||
       command.marketKey.length < 3 ||
       command.marketKey.length > 128 ||
       !MARKET_KEY.test(command.marketKey)
@@ -119,7 +125,9 @@ export class MedusaOrderOrchestrationAdapter implements OrderOrchestrationPort {
   }
 
   async retrieve(id: string): Promise<OrderSnapshot> {
-    if (!ORDER_ID.test(id ?? "")) throw new Error("Order identifier is invalid")
+    if (typeof id !== "string" || !ORDER_ID.test(id)) {
+      throw new Error("Order identifier is invalid")
+    }
     const stored = await this.records.retrieve(id)
     if (!stored || stored.id !== id) {
       throw new Error("Native Order retrieval returned a different order")
