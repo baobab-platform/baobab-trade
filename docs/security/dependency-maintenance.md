@@ -17,11 +17,11 @@ Monday Africa/Johannesburg schedules are staggered; bounded PR limits, labels an
 
 **Toolchain**: Trade DEV-10 PR [#186](https://github.com/baobab-platform/baobab-trade/pull/186) is a separate Node 26/npm migration, and DEV-07/DEV-11 Trade PR [#189](https://github.com/baobab-platform/baobab-trade/pull/189) has held native buyer/transaction acceptance. This policy PR changes neither branch's runtime engine, protected flags nor business transaction code. Preserve versioned CLI/lockfile coupling and re-evaluate major candidates on those owner PRs.
 
-## P0 — expiring native dependency and image-scan exceptions
+## P0 — scan exceptions and prior remediation
 
-Current `.baobab/repository.yaml` declares `dependency-audit` and `container-scan` exceptions for upstream Medusa `braces` and `@graphql-tools/utils` dependencies, each with **expires: 2026-11-09** and `approved_by: @bjnabs`. This is a **source declaration**, NOT independent proof that the approver was authorised, that the vulnerabilities are unreachable or that the exemptions meet Shared policy §12's full required metadata (ID, exact versions/paths, exploitation/exposure, compensating control, owner, remediation issue, independent approval). No new exception, renewal or waiver is invented.
+Trade's two historical `dependency-audit` and `container-scan` exception entries were removed from `.baobab/repository.yaml` by Trade PR [#239](https://github.com/baobab-platform/baobab-trade/pull/239), merged at `5063764c4069cba85903452fcff64ec7cd0ec868` on 27 November 2026. The same change updated vulnerable lockfile entries, including `@graphql-tools/utils` to 12.0.2, `body-parser` to 1.20.9, `follow-redirects` to 1.16.2, `multer` to 2.5.0 and `zod` to 4.6.6. The current `main` manifest contains no active exceptions.
 
-On **10 November 2026**, the recorded expiry is in the past. The local BA-SEC-DEP-001 test then fails closed until the owner remediates or a new independent, complete, time-bounded decision is recorded. An expired waiver is BLOCKED, never PASSED.
+This source change does **not** prove the complete dependency tree is free of advisories or that the current native scan and Foundation image scan pass. Those remain separate mandatory checks. The regression test accepts an absent exception map and fails closed for any declared exception with missing, invalid or expired `expires` metadata. Any future exception must satisfy Shared BA-SEC-DEP-001 §12, including exact affected dependency identity, rationale and exposure, compensating control, accountable owner, remediation issue, independent Security approval and a bounded expiry. No exception is inferred from historical source declarations.
 
 ## Daily native security scan
 
