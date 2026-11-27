@@ -6,34 +6,43 @@ import {
   reconcileInventory,
 } from "../src/baobab/inventory/reconciliation"
 
+const { createReservationRun, deleteReservationRun } = vi.hoisted(() => ({
+  createReservationRun: vi.fn(),
+  deleteReservationRun: vi.fn(),
+}))
+
+vi.mock("@medusajs/medusa/core-flows", () => ({
+  createReservationsWorkflow: vi.fn(() => ({ run: createReservationRun })),
+  deleteReservationsWorkflow: vi.fn(() => ({ run: deleteReservationRun })),
+}))
+
 const native = (rows: Record<string, unknown>[]) => ({
   listInventoryLevels: vi.fn(async () => rows),
-  createReservationItems: vi.fn(async () => ({ id: "res_1" })),
-  deleteReservationItems: vi.fn(async () => undefined),
 })
 const row = {
   inventory_item_id: "iitem_za",
   location_id: "loc_za",
-  stocked_quantity: 30,
-  reserved_quantity: 10,
-  incoming_quantity: 5,
-  available_quantity: 17,
+  stocked_quantity: "30.5",
+  reserved_quantity: "10.25",
+  incoming_quantity: "5.75",
+  available_quantity: "17.125",
 }
+const container = {} as never
 const adapter = (db: ReturnType<typeof native>) =>
-  new MedusaInventoryAvailabilityAdapter(db as unknown as IInventoryService)
+  new MedusaInventoryAvailabilityAdapter(db as unknown as IInventoryService, container)
 
 describe("ADR-0013 native Commerce inventory authority guards", () => {
-  it("preserves Medusa computed ATS, not physical stock minus reserved or incoming", async () => {
+  it("preserves Medusa computed ATS and exact fractional inventory quantities", async () => {
     const db = native([row])
     const result = await adapter(db).getAvailability("iitem_za", ["loc_za"])
     expect(result).toEqual([
       {
         inventoryItemId: "iitem_za",
         locationId: "loc_za",
-        stockedQuantity: 30,
-        reservedQuantity: 10,
-        incomingQuantity: 5,
-        availableQuantity: 17,
+        stockedQuantity: "30.5",
+        reservedQuantity: "10.25",
+        incomingQuantity: "5.75",
+        availableQuantity: "17.125",
       },
     ])
   })
@@ -50,14 +59,14 @@ describe("ADR-0013 native Commerce inventory authority guards", () => {
       "foreign or ambiguous",
     )
   })
-  it("does not expose malformed, fractional, negative, NaN or unsafe stock projections", async () => {
+  it("does not expose malformed or negative stock projections", async () => {
     for (const field of [
       "stocked_quantity",
       "reserved_quantity",
       "incoming_quantity",
       "available_quantity",
     ]) {
-      for (const value of [-1, 1.25, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+      for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY, "not-a-number"]) {
         const db = native([{ ...row, [field]: value }])
         await expect(adapter(db).getAvailability("iitem_za")).rejects.toThrow(
           "Invalid native Inventory",
@@ -72,38 +81,106 @@ describe("ADR-0013 native Commerce inventory authority guards", () => {
     }
     expect(db.listInventoryLevels).not.toHaveBeenCalled()
   })
-  it("refuses invalid reservation identity and quantity before any native effect", async () => {
-    const db = native([])
+  it("uses Medusa's native reservation workflow with exact decimal inventory quantity", async () => {
+    createReservationRun.mockResolvedValue({
+      result: [
+        {
+          id: "res_1",
+          inventory_item_id: "iitem_za",
+          location_id: "loc_za",
+          quantity: "1.25",
+        },
+      ],
+    })
+    const result = await adapter(native([])).reserve({
+      inventoryItemId: "iitem_za",
+      locationId: "loc_za",
+      quantity: "1.25",
+      lineItemId: "line_1",
+      correlationId: "corr_1",
+    })
+    expect(result).toBe("res_1")
+    expect(createReservationRun).toHaveBeenCalledWith({
+      input: {
+        reservations: [
+          {
+            inventory_item_id: "iitem_za",
+            location_id: "loc_za",
+            quantity: "1.25",
+            line_item_id: "line_1",
+            allow_backorder: false,
+            created_by: "baobab-trade",
+            metadata: { correlation_id: "corr_1" },
+          },
+        ],
+      },
+    })
+  })
+  it("rejects invalid reservation identity and quantity before any native workflow", async () => {
+    createReservationRun.mockClear()
     const positive = {
       inventoryItemId: "iitem_za",
       locationId: "loc_za",
-      quantity: 1,
+      quantity: "1.25",
       correlationId: "corr",
     }
     for (const change of [
-      { quantity: Number.MAX_SAFE_INTEGER + 1 },
+      { quantity: 0 },
+      { quantity: -1 },
+      { quantity: "NaN" },
+      { quantity: Number.POSITIVE_INFINITY },
       { inventoryItemId: "" },
       { locationId: "" },
       { correlationId: "" },
       { lineItemId: "" },
     ]) {
-      await expect(adapter(db).reserve({ ...positive, ...change })).rejects.toThrow()
+      await expect(adapter(native([])).reserve({ ...positive, ...change })).rejects.toThrow()
     }
-    expect(db.createReservationItems).not.toHaveBeenCalled()
+    expect(createReservationRun).not.toHaveBeenCalled()
   })
-  it("rejects empty reservation ID before delete", async () => {
-    const db = native([])
-    await expect(adapter(db).release("")).rejects.toThrow("identifier")
-    expect(db.deleteReservationItems).not.toHaveBeenCalled()
+  it("releases through Medusa's native reservation workflow", async () => {
+    deleteReservationRun.mockResolvedValue({ result: undefined })
+    await adapter(native([])).release("res_1")
+    expect(deleteReservationRun).toHaveBeenCalledWith({ input: { ids: ["res_1"] } })
   })
-  it("rejects unsafe reconciled facts and sequence values", () => {
+  it("rejects empty reservation ID before invoking the native workflow", async () => {
+    deleteReservationRun.mockClear()
+    await expect(adapter(native([])).release("")).rejects.toThrow("identifier")
+    expect(deleteReservationRun).not.toHaveBeenCalled()
+  })
+  it("reconciles exact decimal quantities and preserves Medusa's available_quantity", () => {
+    const result = reconcileInventory({
+      erpOnHand: "12.25",
+      medusaStocked: "12.5",
+      medusaReserved: "2.25",
+      medusaAvailable: "9.875",
+    })
+    expect(result).toEqual({
+      erpOnHand: "12.25",
+      medusaStocked: "12.5",
+      medusaReserved: "2.25",
+      medusaAvailable: "9.875",
+      delta: "0.25",
+      status: "VARIANCE",
+    })
+  })
+  it("rejects invalid reconciliation quantities and sequence values", () => {
     expect(() =>
       reconcileInventory({
-        erpOnHand: Number.MAX_SAFE_INTEGER + 1,
-        medusaStocked: 1,
-        medusaReserved: 0,
+        erpOnHand: "NaN",
+        medusaStocked: "12",
+        medusaReserved: "2",
+        medusaAvailable: "10",
       }),
-    ).toThrow("non-negative integer")
+    ).toThrow("erpOnHand")
+    expect(() =>
+      reconcileInventory({
+        erpOnHand: "-1",
+        medusaStocked: "12",
+        medusaReserved: "2",
+        medusaAvailable: "10",
+      }),
+    ).toThrow("erpOnHand")
     expect(() => assertProjectionSequence(null, Number.MAX_SAFE_INTEGER + 1)).toThrow(
       "positive integer",
     )
