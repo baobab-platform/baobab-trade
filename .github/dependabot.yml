@@ -34,7 +34,9 @@ updates:
       timezone: "Africa/Johannesburg"
     open-pull-requests-limit: 5
     labels: ["dependencies", "javascript"]
-    commit-message: {prefix: "chore", include: "scope"}
+    commit-message:
+      prefix: "chore"
+      include: "scope"
 
   - package-ecosystem: "docker"
     directory: "/"
@@ -45,7 +47,9 @@ updates:
       timezone: "Africa/Johannesburg"
     open-pull-requests-limit: 5
     labels: ["dependencies", "container"]
-    commit-message: {prefix: "chore", include: "scope"}
+    commit-message:
+      prefix: "chore"
+      include: "scope"
 
   - package-ecosystem: "docker-compose"
     directory: "/"
@@ -56,4 +60,6 @@ updates:
       timezone: "Africa/Johannesburg"
     open-pull-requests-limit: 5
     labels: ["dependencies", "container"]
-    commit-message: {prefix: "chore", include: "scope"}
+    commit-message:
+      prefix: "chore"
+      include: "scope"
