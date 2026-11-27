@@ -199,7 +199,7 @@ export class MedusaPaymentOrchestrationAdapter implements PaymentOrchestrationPo
     idempotencyKey: string,
     provider: { reference?: string; status?: string } = {},
   ): Promise<PaymentSnapshot> {
-    if (!payment || !PAYMENT_ID.test(payment.id ?? "")) {
+    if (!payment || typeof payment.id !== "string" || !PAYMENT_ID.test(payment.id)) {
       throw new Error("Payment identifier is invalid")
     }
     if (!isBoundedReference(idempotencyKey)) {
