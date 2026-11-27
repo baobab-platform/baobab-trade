@@ -1,17 +1,17 @@
 # BA-SEC-DEP-001 — Trade dependency security-maintenance adoption
 
-**Policy:** [Approved Shared v1.0](https://github.com/baobab-platform/shared/pull/429). Strict implementation in Shared #429 is still unmerged and must not be treated as a released validator.
-**As reviewed:** 7 November 2026. **State:** SOURCE_COMMITTED; CI_VERIFIED, SECURITY_ALERT_PATH_VERIFIED and CONSUMER_QUALIFIED remain NOT VERIFIED.
+**Policy:** [Approved Shared v1.0](https://github.com/baobab-platform/shared/pull/429). Shared #429 merged on 8 November 2026; this Trade adoption pins the current strict validator by immutable commit SHA.
+**As reviewed:** 27 November 2026. **State:** SOURCE_COMMITTED; CI_VERIFIED, SECURITY_ALERT_PATH_VERIFIED and CONSUMER_QUALIFIED remain NOT VERIFIED.
 **Owners:** Trade Engineering, Baobab Platform Engineering and independent Security.
 
 ## Actual source inventory
 
-| Actual input | Dependabot coverage | Qualification boundary |
-| --- | --- | --- |
-| `.github/workflows/*.yml` | `github-actions` at `/` | SHA-pinned Actions and reused Shared workflow provenance |
-| `package.json` / `package-lock.json`; npm/MedusaJS | `npm` at `/` | Native Medusa runtime, buyer/seller authority, reservations, outbox/idempotency |
-| Root `Dockerfile`, `Dockerfile.dev07*`, `Dockerfile.dev11-rabbit-dispatcher` | `docker` at `/` | Runtime image, Node ABI, single business transaction, publisher/consumer |
-| `docker-compose.yml` root PostgreSQL17/Redis development topology | `docker-compose` at `/` (**new**) | Real local topology, no production approval |
+| Actual input                                                                 | Dependabot coverage               | Qualification boundary                                                          |
+| ---------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------- |
+| `.github/workflows/*.yml`                                                    | `github-actions` at `/`           | SHA-pinned Actions and reused Shared workflow provenance                        |
+| `package.json` / `package-lock.json`; npm/MedusaJS                           | `npm` at `/`                      | Native Medusa runtime, buyer/seller authority, reservations, outbox/idempotency |
+| Root `Dockerfile`, `Dockerfile.dev07*`, `Dockerfile.dev11-rabbit-dispatcher` | `docker` at `/`                   | Runtime image, Node ABI, single business transaction, publisher/consumer        |
+| `docker-compose.yml` root PostgreSQL17/Redis development topology            | `docker-compose` at `/` (**new**) | Real local topology, no production approval                                     |
 
 Monday Africa/Johannesburg schedules are staggered; bounded PR limits, labels and commit prefixes are retained. The duplicate `target-branch: main` overrides are removed. A minor/patch-only Actions version group has explicit `applies-to: version-updates`; npm/Medusa and Docker version changes are deliberately left ungrouped for native owner review. Security patches are independent of routine cadence, and no blanket ignore was added.
 
@@ -27,7 +27,7 @@ This source change does **not** prove the complete dependency tree is free of ad
 
 The existing `.github/workflows/security.yml` now runs a **daily full-tree npm advisory audit**, using the repository-owned `.nvmrc`, `npm ci --ignore-scripts` and `npm audit --audit-level=high` without `--omit=dev` or blanket ignore. Security threat-model/PII negatives, CodeQL and existing Foundation security hooks remain. A native advisory failure is not silently waived by this new job: the affected dependency must be fixed, dispositioned via independently approved, current policy, or held.
 
-The Actions pinning and accepted immutable Shared Dependabot structure gate remain, complemented by **local negative source tests**. The new Shared #429 strict validator is NOT pinned while unmerged.
+The Actions pinning and accepted immutable Shared Dependabot structure gate remain, complemented by **local negative source tests**. Trade invokes the merged Shared strict validator at the verified immutable commit recorded in `.github/workflows/enforce-dependabot-config.yml`; the local negative tests add Trade-specific manifest and exception coverage.
 
 ## Qualification before merge or protected promotion
 
