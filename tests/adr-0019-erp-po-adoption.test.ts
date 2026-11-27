@@ -10,7 +10,11 @@ const award: ApprovedSupplierAward = {
   procurementCommitmentId: "pc-1",
   approvedAwardId: "award-1",
   approvedSupplierCanonicalId: "supplier-a",
-  buyerLegalEntityId: "seller-za",
+  supplierLegalEntityId: "supplier-legal-a",
+  supplierRegistrationReference: "supplier-registration-a",
+  buyerLegalEntityId: "buyer-za",
+  marketId: "mkt_za_1",
+  marketRevision: 1,
   currency: "ZAR",
   totalMinor: 125000,
   idempotencyKey: "pc-1:erp-po",
@@ -23,7 +27,11 @@ const evidence: ErpPurchaseOrderEvidence = {
   approvedAwardId: "award-1",
   tenantId: "tn_za",
   supplierCanonicalId: "supplier-a",
-  buyerLegalEntityId: "seller-za",
+  supplierLegalEntityId: "supplier-legal-a",
+  supplierRegistrationReference: "supplier-registration-a",
+  buyerLegalEntityId: "buyer-za",
+  marketId: "mkt_za_1",
+  marketRevision: 1,
   currency: "ZAR",
   committedTotalMinor: 125000,
   idempotencyKey: "pc-1:erp-po",
@@ -47,7 +55,11 @@ describe("ADR-0019 Trade award is not the ERP purchase order", () => {
   it.each([
     { tenantId: "tn_ug" },
     { supplierCanonicalId: "supplier-b" },
-    { buyerLegalEntityId: "seller-ug" },
+    { buyerLegalEntityId: "buyer-ug" },
+    { supplierLegalEntityId: "supplier-legal-b" },
+    { supplierRegistrationReference: "supplier-registration-b" },
+    { marketId: "mkt_ug_1" },
+    { marketRevision: 2 },
     { currency: "UGX" },
     { committedTotalMinor: 500 },
     { procurementCommitmentId: "pc-2" },
@@ -88,6 +100,47 @@ describe("ADR-0019 Trade award is not the ERP purchase order", () => {
       ),
     ).toThrow("conflicts")
   })
+  it("does not regress a reconciliation-required projection when ERP evidence is still absent", () => {
+    const prior = {
+      procurementCommitmentId: "pc-1",
+      erpPurchaseOrderId: null,
+      status: "ERP_RECONCILIATION_REQUIRED" as const,
+      evidenceEventId: "erp-event-unknown",
+    }
+    expect(reconcileSupplierAwardToErp(award, null, prior)).toBe(prior)
+    expect(
+      reconcileSupplierAwardToErp(award, { ...evidence, status: "UNKNOWN" }, prior),
+    ).toBe(prior)
+  })
+
+  it("does not replace a native PO ID already recorded during reconciliation", () => {
+    const prior = {
+      procurementCommitmentId: "pc-1",
+      erpPurchaseOrderId: "C_Order-100",
+      status: "ERP_RECONCILIATION_REQUIRED" as const,
+      evidenceEventId: "erp-event-unknown",
+    }
+    expect(() =>
+      reconcileSupplierAwardToErp(
+        award,
+        { ...evidence, erpPurchaseOrderId: "C_Order-other" },
+        prior,
+      ),
+    ).toThrow("conflicts")
+  })
+
+  it("rejects malformed Market revision, currency and non-exact ERP amount", () => {
+    expect(() =>
+      reconcileSupplierAwardToErp({ ...award, marketRevision: 0 }, evidence),
+    ).toThrow("valid, authorised")
+    expect(() =>
+      reconcileSupplierAwardToErp({ ...award, currency: "zar" }, evidence),
+    ).toThrow("valid, authorised")
+    expect(() =>
+      reconcileSupplierAwardToErp({ ...award, totalMinor: Number.MAX_SAFE_INTEGER + 1 }, evidence),
+    ).toThrow("valid, authorised")
+  })
+
   it("refuses unsafe financial award and wrong previous commitment", () => {
     expect(() => reconcileSupplierAwardToErp({ ...award, totalMinor: 1.5 }, evidence)).toThrow(
       "valid, authorised",
