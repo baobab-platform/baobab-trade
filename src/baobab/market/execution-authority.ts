@@ -15,6 +15,7 @@ import type { BaobabTenantContext } from "../contracts/tenant-context"
 import { assertTradeEntitlement } from "../contracts/tenant-context"
 import { isCanonicalEntityId } from "../contracts/canonical-mapping"
 
+const MARKET_ID = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/
 const CURRENCY = /^[A-Z]{3}$/
 const COUNTRY = /^[A-Z]{2}$/
 const MAX_FUTURE_CLOCK_SKEW_MS = 5_000
@@ -49,8 +50,14 @@ export function assertAuthorisedMarketExecution(
   nowMs = Date.now(),
 ): AuthorisedMarketExecution {
   assertTradeEntitlement(tenant)
-  if (!requestedMarketId || market.market_id !== requestedMarketId) {
-    throw new Error("ADR-0010: CP Market does not match the requested Market")
+  if (
+    !requestedMarketId ||
+    market.market_id !== requestedMarketId ||
+    market.market_id.length < 3 ||
+    market.market_id.length > 63 ||
+    !MARKET_ID.test(market.market_id)
+  ) {
+    throw new Error("ADR-0010: CP Market ID is invalid or does not match the requested Market")
   }
   if (market.owner_tenant_id !== tenant.tenantId || context.tenant_id !== tenant.tenantId) {
     throw new Error("ADR-0010: Market/Context tenant boundary mismatch")
@@ -106,11 +113,12 @@ export function assertAuthorisedMarketExecution(
   if (resolvedAt > nowMs + MAX_FUTURE_CLOCK_SKEW_MS) {
     throw new Error("ADR-0010: CP Context was resolved in the future")
   }
-  if (context.expires_at !== undefined) {
-    const expiresAt = timestamp(context.expires_at, "Context expires_at")
-    if (expiresAt <= nowMs || expiresAt <= resolvedAt) {
-      throw new Error("ADR-0010: CP Context has expired")
-    }
+  if (context.expires_at === undefined) {
+    throw new Error("ADR-0010: unbounded CP Context cannot authorize cross-service mapping")
+  }
+  const expiresAt = timestamp(context.expires_at, "Context expires_at")
+  if (expiresAt <= nowMs || expiresAt <= resolvedAt) {
+    throw new Error("ADR-0010: CP Context has expired")
   }
 
   if (!context.context_id) {
