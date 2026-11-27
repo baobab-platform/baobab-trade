@@ -5,6 +5,10 @@ const CommercePayment = model.define(
   {
     id: model.id({ prefix: "pay" }).primaryKey(),
     digital_estate: model.text(),
+    tenant_id: model.text().index().nullable(),
+    principal_id: model.text().index().nullable(),
+    merchant_account_id: model.text().nullable(),
+    provider_environment: model.enum(["SANDBOX", "LIVE"]).nullable(),
     payment_reference: model.text().unique(),
     order_reference: model.text().index(),
     organisation_id: model.text().index().nullable(),
