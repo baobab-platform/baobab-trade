@@ -98,14 +98,28 @@ const TRANSITIONS: Record<FulfilmentStatus, readonly FulfilmentStatus[]> = {
 }
 
 const SHIPMENT_FIELDS = [
-  "originCountry", "destinationCountry", "exporterOrganisationId",
-  "importerOrganisationId", "complianceDecisionId", "incoterm",
-  "grossWeightKg", "packageCount", "exportReference", "customsReference",
+  "originCountry",
+  "destinationCountry",
+  "exporterOrganisationId",
+  "importerOrganisationId",
+  "complianceDecisionId",
+  "incoterm",
+  "grossWeightKg",
+  "packageCount",
+  "exportReference",
+  "customsReference",
 ] as const
 const REQUEST_FIELDS = [
-  "fulfilmentReference", "orderReference", "organisationId", "customerReference",
-  "marketKey", "legalSellerKey", "sourceLocationKey", "mode",
-  "providerKey", "idempotencyKey",
+  "fulfilmentReference",
+  "orderReference",
+  "organisationId",
+  "customerReference",
+  "marketKey",
+  "legalSellerKey",
+  "sourceLocationKey",
+  "mode",
+  "providerKey",
+  "idempotencyKey",
 ] as const
 
 /**
