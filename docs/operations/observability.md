@@ -38,5 +38,10 @@ PostgreSQL or remote services: an unhealthy dependency is not a crashed process.
 
 The local Vitest pack `tests/adr-0007-readiness.test.ts` covers successful,
 failed, absent and timed-out database connections, missing configuration, and
-the HTTP 200/503 response boundary. Deployment-level readiness and failover
+the HTTP 200/503 response boundary. The `production-infrastructure-integration`
+job also runs `verify:readiness` through Medusa's actual container against its
+disposable PostgreSQL 17 service, exercising the registered `PG_CONNECTION`
+and the real Knex query timeout. This verifies PostgreSQL connectivity and
+configuration presence only; it does not prove remote CP health, registration,
+or protected-environment readiness. Deployment-level readiness and failover
 remain separately qualified under the protected environment gates.
