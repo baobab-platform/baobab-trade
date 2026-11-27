@@ -14,7 +14,8 @@ afterEach(() => {
 
 describe("ADR-0007 §47: live PostgreSQL readiness", () => {
   it("accepts a responding PostgreSQL connection and a configured Control Plane", async () => {
-    const raw = vi.fn().mockResolvedValue([{ "?column?": 1 }])
+    const queryTimeout = vi.fn().mockResolvedValue([{ "?column?": 1 }])
+    const raw = vi.fn().mockReturnValue({ timeout: queryTimeout })
     const result = await checkTradeReadiness({
       database: { raw },
       controlPlaneConfigured: true,
@@ -22,6 +23,7 @@ describe("ADR-0007 §47: live PostgreSQL readiness", () => {
 
     expect(raw).toHaveBeenCalledTimes(1)
     expect(raw).toHaveBeenCalledWith("SELECT 1")
+    expect(queryTimeout).toHaveBeenCalledWith(1500, { cancel: true })
     expect(result).toEqual({
       status: "ready",
       dependencies: {
@@ -34,7 +36,11 @@ describe("ADR-0007 §47: live PostgreSQL readiness", () => {
 
   it("refuses traffic when the PostgreSQL query fails without exposing the error", async () => {
     const result = await checkTradeReadiness({
-      database: { raw: () => Promise.reject(new Error("postgres://secret-password@db")) },
+      database: {
+        raw: () => ({
+          timeout: () => Promise.reject(new Error("postgres://secret-password@db")),
+        }),
+      },
       controlPlaneConfigured: true,
     })
 
@@ -46,13 +52,15 @@ describe("ADR-0007 §47: live PostgreSQL readiness", () => {
   it("refuses traffic if PostgreSQL never responds, within the configured deadline", async () => {
     vi.useFakeTimers()
     const pending = new Promise<never>(() => undefined)
+    const queryTimeout = vi.fn(() => pending)
     const check = checkTradeReadiness({
-      database: { raw: () => pending },
+      database: { raw: () => ({ timeout: queryTimeout }) },
       controlPlaneConfigured: true,
       timeoutMs: 25,
     })
 
     await vi.advanceTimersByTimeAsync(25)
+    expect(queryTimeout).toHaveBeenCalledWith(25, { cancel: true })
     expect((await check).dependencies.postgres).toBe("down")
   })
 
@@ -70,7 +78,7 @@ describe("ADR-0007 §47: live PostgreSQL readiness", () => {
 
   it("refuses traffic when the Control Plane is not configured even with a healthy database", async () => {
     const result = await checkTradeReadiness({
-      database: { raw: () => Promise.resolve(1) },
+      database: { raw: () => ({ timeout: () => Promise.resolve(1) }) },
       controlPlaneConfigured: false,
     })
 
@@ -115,7 +123,9 @@ describe("ADR-0007 §47: /readiness traffic-admission endpoint", () => {
     } as ReturnType<typeof getBaobabTradeEnvironment>)
 
     const res = await invoke(() => ({
-      raw: () => Promise.reject(new Error("private database diagnostic")),
+      raw: () => ({
+        timeout: () => Promise.reject(new Error("private database diagnostic")),
+      }),
     }))
 
     expect(res.status).toHaveBeenCalledWith(503)
@@ -135,11 +145,13 @@ describe("ADR-0007 §47: /readiness traffic-admission endpoint", () => {
       controlPlaneBaseUrl: "http://control-plane.local",
       controlPlaneContextPath: "/v1/context/resolve",
     } as ReturnType<typeof getBaobabTradeEnvironment>)
-    const raw = vi.fn().mockResolvedValue(1)
+    const queryTimeout = vi.fn().mockResolvedValue(1)
+    const raw = vi.fn().mockReturnValue({ timeout: queryTimeout })
 
     const res = await invoke(() => ({ raw }))
     expect(raw).toHaveBeenCalledTimes(1)
     expect(raw).toHaveBeenCalledWith("SELECT 1")
+    expect(queryTimeout).toHaveBeenCalledWith(1500, { cancel: true })
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: "ready" }))
   })
@@ -149,7 +161,7 @@ describe("ADR-0007 §47: /readiness traffic-admission endpoint", () => {
       throw new Error("BAOBAB_SECRET_VALUE")
     })
 
-    const res = await invoke(() => ({ raw: () => Promise.resolve(1) }))
+    const res = await invoke(() => ({ raw: () => ({ timeout: () => Promise.resolve(1) }) }))
     expect(res.status).toHaveBeenCalledWith(503)
     expect(JSON.stringify(res.json.mock.calls)).not.toContain("BAOBAB_SECRET_VALUE")
   })
