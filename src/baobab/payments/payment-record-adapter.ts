@@ -48,7 +48,11 @@ const snapshot = (payment: StoredPayment): PaymentSnapshot => {
   if (providerEnvironment !== "SANDBOX" && providerEnvironment !== "LIVE") {
     throw new Error("Stored Payment has no valid provider environment")
   }
-  const dueAt = payment.due_at ? new Date(payment.due_at) : undefined
+  const dueAt = payment.due_at
+    ? payment.due_at instanceof Date
+      ? payment.due_at
+      : new Date(String(payment.due_at))
+    : undefined
   if (dueAt && !Number.isFinite(dueAt.getTime())) {
     throw new Error("Stored Payment has an invalid due date")
   }
@@ -195,8 +199,8 @@ export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
       if (
         updated.id !== paymentId ||
         updated.status !== to ||
-        updated.providerReference !== providerReference ||
-        updated.providerStatus !== providerStatus
+        (updated.providerReference ?? undefined) !== providerReference ||
+        (updated.providerStatus ?? undefined) !== providerStatus
       ) {
         throw new Error("Payment transition writeback did not match the requested provider evidence")
       }
