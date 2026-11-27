@@ -132,8 +132,8 @@ describe("ADR-0023 federated supplier master readiness", () => {
       { canonicalSupplierOrganisationId: "supplier-other" },
       { productId: "product-other" },
       { supplierProductReference: "supplier-sku-other" },
-      { originCountry: "KE" },
-      { destinationCountry: "ZA" },
+      { originCountry: "KE", tradeLaneId: "lane-ke-ug" },
+      { destinationCountry: "ZA", tradeLaneId: "lane-ug-za" },
       { tradeLaneId: "lane-other" },
     ]
     for (const change of changes) {
