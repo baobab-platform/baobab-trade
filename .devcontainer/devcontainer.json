@@ -7,10 +7,7 @@
   "postCreateCommand": "node --version",
   "customizations": {
     "vscode": {
-      "extensions": [
-        "github.vscode-github-actions",
-        "redhat.vscode-yaml"
-      ]
+      "extensions": ["github.vscode-github-actions", "redhat.vscode-yaml"]
     }
   },
   "features": {
