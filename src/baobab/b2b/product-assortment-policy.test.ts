@@ -28,7 +28,7 @@ describe("product-assortment-policy", () => {
     expect(isRegulatoryBlocking("EXPIRED")).toBe(true)
     expect(isRegulatoryBlocking("ERROR")).toBe(true)
     expect(isRegulatoryBlocking("ELIGIBLE")).toBe(false)
-    expect(isRegulatoryBlocking("ELIGIBLE_WITH_CONDITIONS")).toBe(false)
+    expect(isRegulatoryBlocking("ELIGIBLE_WITH_CONDITIONS")).toBe(true)
   })
 
   it("does not treat catalogue ACTIVE as sellable without regulatory clearance", () => {
@@ -69,8 +69,7 @@ describe("product-assortment-policy", () => {
           regulatoryEligibility: reg,
           requireRegulatoryClearance: true,
         })
-        const expected =
-          status === "ACTIVE" && (reg === "ELIGIBLE" || reg === "ELIGIBLE_WITH_CONDITIONS")
+        const expected = status === "ACTIVE" && reg === "ELIGIBLE"
         expect(sellable).toBe(expected)
       }
     }
@@ -100,8 +99,22 @@ describe("product-assortment-policy", () => {
     ).toBe(false)
   })
 
-  it("allows ELIGIBLE_WITH_CONDITIONS as permissive", () => {
-    expect(isRegulatoryPermissive("ELIGIBLE_WITH_CONDITIONS")).toBe(true)
+  it("blocks conditional eligibility until its conditions are modelled and verified", () => {
+    expect(isRegulatoryPermissive("ELIGIBLE_WITH_CONDITIONS")).toBe(false)
+    expect(
+      isMarketAssortmentSellable({
+        assortmentStatus: "ACTIVE",
+        regulatoryEligibility: "ELIGIBLE_WITH_CONDITIONS",
+        requireRegulatoryClearance: true,
+      }),
+    ).toBe(false)
+    expect(
+      isMarketAssortmentSellable({
+        assortmentStatus: "ACTIVE",
+        regulatoryEligibility: "ELIGIBLE_WITH_CONDITIONS",
+        requireRegulatoryClearance: false,
+      }),
+    ).toBe(false)
   })
 
   it("requires verified classification for automated trade", () => {
@@ -149,12 +162,13 @@ describe("product-assortment-policy", () => {
       { requireRegulatoryClearance: true },
     )
 
-    expect(partition.sellable_product_ids).toEqual(["prod_ok", "prod_conditions"])
+    expect(partition.sellable_product_ids).toEqual(["prod_ok"])
     expect(partition.blocked.map((b) => b.product_id).sort()).toEqual([
+      "prod_conditions",
       "prod_suspended",
       "prod_uneval",
     ])
-    expect(partition.counts).toEqual({ evaluated: 4, sellable: 2, blocked: 2 })
+    expect(partition.counts).toEqual({ evaluated: 4, sellable: 1, blocked: 3 })
   })
 
   it("partition soft mode includes NOT_EVALUATED when commercially ACTIVE", () => {
