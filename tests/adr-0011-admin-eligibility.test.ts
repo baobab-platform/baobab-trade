@@ -37,7 +37,7 @@ const response = () => {
 const service = (rows: Record<string, unknown>[] = []) => ({
   listMarketProductEligibilities: vi.fn(async () => rows),
   updateMarketProductEligibilities: vi.fn(async (input: Record<string, unknown>) => ({
-    ...record,
+    ...(rows[0] ?? record),
     ...input,
   })),
   createMarketProductEligibilities: vi.fn(async (input: Record<string, unknown>) => ({
