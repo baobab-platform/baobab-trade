@@ -18,7 +18,6 @@ Two-Market and two-currency _native Medusa_ prices, B2B negotiated price read is
 
 **Disposition:** This PR is a narrow development hardening tranche, not complete ADR-0012 qualification.
 
-
 ## 27 November 2026 follow-up
 
 - Candidate validation now requires explicit `ACTIVE` status, an organisation binding for private candidates, an agreement reference for `CONTRACT`, an explicit `minQuantity` for `VOLUME`, valid currency-code syntax, and safe integer minor-unit amounts. These checks prevent missing state/provenance/tier fields from silently participating.

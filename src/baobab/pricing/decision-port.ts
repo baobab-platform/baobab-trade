@@ -82,15 +82,9 @@ export const selectPrice = (
   const eligible: PriceCandidate[] = []
   for (const candidate of candidates) {
     // An engine/native price is never allowed to cross its variant or Market.
-    if (
-      candidate.variantId !== request.variantId ||
-      candidate.marketKey !== request.marketKey
-    )
+    if (candidate.variantId !== request.variantId || candidate.marketKey !== request.marketKey)
       continue
-    if (
-      typeof candidate.currencyCode !== "string" ||
-      !/^[a-z]{3}$/i.test(candidate.currencyCode)
-    ) {
+    if (typeof candidate.currencyCode !== "string" || !/^[a-z]{3}$/i.test(candidate.currencyCode)) {
       throw new Error("Pricing candidate has an invalid currency code")
     }
     if (candidate.currencyCode.toLowerCase() !== request.currencyCode.toLowerCase()) {
