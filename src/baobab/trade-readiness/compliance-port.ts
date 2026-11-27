@@ -1,7 +1,16 @@
 import { validateCrossBorderMetadata, type CrossBorderTransactionMetadata } from "./trade-metadata"
 export type ComplianceDecision = {
   decisionReference: string
-  status: "APPROVED" | "REJECTED" | "REVIEW_REQUIRED"
+  status:
+    | "NOT_EVALUATED"
+    | "PENDING"
+    | "PASS"
+    | "PASS_WITH_CONDITIONS"
+    | "REVIEW_REQUIRED"
+    | "BLOCKED"
+    | "EXPIRED"
+    | "ERROR"
+    | "NO_PROVIDER"
   policyReference: string
   policyVersion: string
   reasons: string[]
@@ -87,7 +96,9 @@ export class ProjectedTradeComplianceAdapter implements TradeCompliancePort {
     if (verified.some((value) => !value)) reasons.push("HS_CLASSIFICATION_UNVERIFIED")
     return {
       decisionReference: `${transaction.transactionReference}:${policy.policyVersion}`,
-      status: reasons.length ? "REVIEW_REQUIRED" : "APPROVED",
+      status: reasons.some((reason) => reason !== "REGULATORY_PROVIDER_DECISION_REQUIRED")
+        ? "REVIEW_REQUIRED"
+        : "NO_PROVIDER",
       policyReference: policy.policyReference,
       policyVersion: policy.policyVersion,
       reasons,
