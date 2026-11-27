@@ -16,7 +16,7 @@ export type PriceCandidate = {
   minQuantity?: number
   maxQuantity?: number
   organisationId?: string
-  status?: "ACTIVE" | "DRAFT" | "SUSPENDED" | "EXPIRED"
+  status: "ACTIVE" | "DRAFT" | "SUSPENDED" | "EXPIRED"
   effectiveFrom?: Date | string | null
   effectiveUntil?: Date | string | null
   agreementReference?: string
@@ -84,8 +84,16 @@ export const selectPrice = (
     // An engine/native price is never allowed to cross its variant or Market.
     if (
       candidate.variantId !== request.variantId ||
-      candidate.marketKey !== request.marketKey ||
-      candidate.currencyCode.toLowerCase() !== request.currencyCode.toLowerCase()
+      candidate.marketKey !== request.marketKey
+    )
+      continue
+    if (
+      typeof candidate.currencyCode !== "string" ||
+      !/^[a-z]{3}$/i.test(candidate.currencyCode)
+    ) {
+      throw new Error("Pricing candidate has an invalid currency code")
+    }
+    if (candidate.currencyCode.toLowerCase() !== request.currencyCode.toLowerCase()
     )
       continue
 
@@ -93,7 +101,16 @@ export const selectPrice = (
     // An unscoped PRIVATE price is a disclosure, not a public list price.
     if (privateKind && !candidate.organisationId) continue
     if (candidate.organisationId && candidate.organisationId !== request.organisationId) continue
-    if (candidate.status !== undefined && candidate.status !== "ACTIVE") continue
+    if (candidate.status !== "ACTIVE") continue
+    if (
+      candidate.kind === "CONTRACT" &&
+      (typeof candidate.agreementReference !== "string" || !candidate.agreementReference.trim())
+    ) {
+      continue
+    }
+    if (candidate.kind === "VOLUME" && candidate.minQuantity === undefined) {
+      throw new Error("Volume pricing must declare an explicit minimum quantity tier")
+    }
     const from = boundary(candidate.effectiveFrom, -Infinity)
     const until = boundary(candidate.effectiveUntil, Infinity)
     if (!Number.isFinite(from) && from !== -Infinity) continue
