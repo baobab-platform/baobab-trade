@@ -22,8 +22,10 @@ PostgreSQL or remote services: an unhealthy dependency is not a crashed process.
 `GET /readiness` is a traffic-admission signal and implements ADR-0007 §47:
 
 - It resolves Medusa's own PostgreSQL connection from the request container
-  and runs `SELECT 1`, with a 1.5-second maximum wait. Missing connection,
-  failed query or timeout returns HTTP 503 rather than a misleading HTTP 200.
+  and runs `SELECT 1` through Medusa's registered Knex connection. The query
+  uses Knex's PostgreSQL timeout cancellation and a 1.5-second HTTP response
+  deadline. Missing connection, failed query or timeout returns HTTP 503
+  rather than a misleading HTTP 200.
 - Missing required Control Plane configuration also returns 503. The
   `control_plane: configured` field means **configuration is present**, not
   that a remote Control Plane health check or authorization succeeded.
