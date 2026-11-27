@@ -30,7 +30,12 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
 
   let authorised: Awaited<ReturnType<typeof resolveSelectedOrganisationCapability>> = null
   if (typeof value === "string") {
-    const principal = principalIdFromAuthContext(req.auth_context)
+    let principal: string | null
+    try {
+      principal = principalIdFromAuthContext(req.auth_context)
+    } catch {
+      throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "Buyer capability source unavailable")
+    }
     if (principal) {
       const verifier = getWorkloadTenantVerifier()
       if (!verifier) {
