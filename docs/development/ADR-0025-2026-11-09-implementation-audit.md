@@ -21,3 +21,12 @@ Validation:
     npm run format:check
 
 Draft; no merge while custody/provider and documentary release authority remain unqualified.
+
+
+## 27 November 2026 follow-up
+
+- Mandatory-document requirements now arrive through a versioned, effective-dated policy bound to tenant, legal entity/role, transaction, Market ID/revision and optional shipment/Trade Lane/product scope.
+- Each requirement explicitly constrains accepted source systems and issuer authorities, with optional exact issuer-reference allowlists. The package must cover the required set exactly; missing, duplicate and extra document types are refused.
+- Evidence must preserve canonical and source document identities, version, issuer authority/reference, issue/effective dates, content reference/checksum, custody-verification reference, ISSUED status and VERIFIED state. Expiry is optional for non-expiring documents; where supplied, it is enforced.
+- The result preserves the requirement-policy reference/version and each accepted document's canonical/source identity, version, issuer, content checksum and custody reference.
+- **Connected custody remains outstanding:** the gate does not retrieve bytes, recompute checksums, authenticate signatures, validate the custody provider, verify issuer authority against external registries, persist canonical documents/versions/relationships, enforce retention/legal hold, or prove tenant/legal-entity access controls. The policy is caller-supplied and not authenticated. No PostgreSQL 17/object-storage connected acceptance is established.
