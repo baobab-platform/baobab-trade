@@ -23,6 +23,8 @@ export type InitiatePaymentCommand = {
   principalId: string
   organisationId?: string
   customerReference?: string
+  marketId: string
+  marketRevision: number
   marketKey: string
   legalSellerKey: string
   method: PaymentMethod
@@ -80,6 +82,7 @@ const TRANSITIONS: Record<PaymentStatus, readonly PaymentStatus[]> = {
 }
 
 const REFERENCE = /^[A-Za-z0-9][A-Za-z0-9_:.-]{0,199}$/
+const MARKET_ID = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/
 const MARKET_KEY = /^[a-z][a-z0-9]*(?:[._][a-z0-9]+)*$/
 const PAYMENT_ID = /^pay_[A-Za-z0-9]+$/
 
@@ -98,6 +101,8 @@ const REPLAY_FIELDS = [
   "principalId",
   "organisationId",
   "customerReference",
+  "marketId",
+  "marketRevision",
   "marketKey",
   "legalSellerKey",
   "method",
@@ -150,7 +155,14 @@ export class MedusaPaymentOrchestrationAdapter implements PaymentOrchestrationPo
     ) {
       throw new Error("Payment provider environment must be explicit")
     }
+    if (!Number.isSafeInteger(command.marketRevision) || command.marketRevision < 1) {
+      throw new Error("Payment Market revision must be a positive integer")
+    }
     if (
+      typeof command.marketId !== "string" ||
+      command.marketId.length < 3 ||
+      command.marketId.length > 63 ||
+      !MARKET_ID.test(command.marketId) ||
       typeof command.marketKey !== "string" ||
       command.marketKey.length < 3 ||
       command.marketKey.length > 128 ||
