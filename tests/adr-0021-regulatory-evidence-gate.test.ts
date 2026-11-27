@@ -39,6 +39,7 @@ const required: RequiredRegulatoryCheck[] = checks.map((check) => ({
   bindingReference: "binding-" + check,
   providerVersion: "provider-v1",
   bindingVersion: "binding-v1",
+  context,
 }))
 const evidence = (check: RegulatoryCheck): RegulatoryEvidence => {
   const binding = required.find((item) => item.check === check)!
@@ -164,6 +165,21 @@ describe("ADR-0021 provider regulatory clearance", () => {
         ...resolved().slice(1),
       ], now),
     ).toThrow("invalid decision time")
+  })
+
+  it("rejects a CP provider binding resolved for a different tenant or Market", () => {
+    const foreignBinding = {
+      ...required[0],
+      context: { ...context, tenantId: "tenant-other" },
+    }
+    expect(() =>
+      assertRegulatoryExecutionClearance(
+        context,
+        [foreignBinding, ...required.slice(1)],
+        resolved(),
+        now,
+      ),
+    ).toThrow("invalid or duplicate required provider binding")
   })
 
   it("requires exact provider ID, CP binding, provider version and binding version", () => {
