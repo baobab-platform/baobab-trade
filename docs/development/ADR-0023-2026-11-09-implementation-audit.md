@@ -25,3 +25,12 @@ This tranche is not the complete ADR-0023 Definition of Done and may not be repr
     npm run format:check
 
 Keep draft until the ADR status is reconciled and connected acceptance is available. No merge.
+
+
+## 27 November 2026 follow-up
+
+- Readiness scope now binds tenant, buyer and supplier LegalEntities, Market ID/revision, canonical supplier Organisation, canonical product, supplier product reference, origin/destination and Trade Lane where cross-border.
+- Separate owner receipts are required for CP canonical supplier role, Trade relationship, Trade product capability, Trade market eligibility, ERP vendor readiness and compliance clearance; IAM portal access is required only for supplier-portal operations.
+- Qualification requirements now arrive as a scope-bound, versioned Trade policy. Each required type must have exactly one current PASSED receipt with evidence, approval reference, Trade decider role/authority, and a different submitter. PASSED_WITH_CONDITIONS, WAIVED and all other non-PASSED states remain non-ready.
+- The returned readiness snapshot preserves the policy reference/version, owner authority/reference/version/effective window and qualification approval/evidence references.
+- **Authority and release blockers remain:** owner receipts and the qualification policy are still caller-supplied and not authenticated against CP, Trade, ERP, Compliance or IAM. The readiness snapshot is not persisted or signed. Supplier registration/onboarding, supplier organisation projection, duplicate resolution, bank-change maker-checker, ERP C_BPartner provisioning/readback, IAM provisioning, sanctions/product screening, event idempotency/reconciliation and PostgreSQL 17 connected tests remain unimplemented.
