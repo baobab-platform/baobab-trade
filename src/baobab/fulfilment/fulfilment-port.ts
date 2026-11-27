@@ -108,6 +108,14 @@ const MARKET_ID = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/
 const MARKET_KEY = /^[a-z][a-z0-9]*(?:[._][a-z0-9]+)*$/
 const FULFILMENT_ID = /^ful_[A-Za-z0-9]+$/
 const COUNTRY_CODE = /^[A-Z]{2}$/
+const MODES = [
+  "LOCAL_DELIVERY",
+  "PARCEL_SHIPMENT",
+  "BULK_FREIGHT",
+  "CROSS_BORDER",
+  "CUSTOMER_COLLECTION",
+] as const
+const INCOTERMS = ["EXW", "FCA", "FOB", "CFR", "CIF", "DAP", "DPU", "DDP"] as const
 
 const isBoundedReference = (value: unknown): value is string =>
   typeof value === "string" && REFERENCE.test(value)
@@ -172,6 +180,9 @@ export const validateFulfilmentCommand = (command: RequestFulfilmentCommand): vo
   if (!command || typeof command !== "object" || !command.shipment) {
     throw new Error("Fulfilment shipment metadata is required")
   }
+  if (!MODES.includes(command.mode)) {
+    throw new Error("Fulfilment mode is invalid")
+  }
   if (
     Boolean(command.organisationId) === Boolean(command.customerReference) ||
     (command.organisationId !== undefined && !isBoundedReference(command.organisationId)) ||
@@ -209,6 +220,9 @@ export const validateFulfilmentCommand = (command: RequestFulfilmentCommand): vo
     throw new Error("Fulfilment requires an explicit CP Market identity, revision and canonical key")
   }
   const shipment = command.shipment
+  if (shipment.incoterm !== undefined && !INCOTERMS.includes(shipment.incoterm)) {
+    throw new Error("Shipment Incoterm is invalid")
+  }
   if (
     typeof shipment.originCountry !== "string" ||
     !COUNTRY_CODE.test(shipment.originCountry) ||
