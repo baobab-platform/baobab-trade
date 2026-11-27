@@ -12,18 +12,23 @@ export default async function ({ container }: ExecArgs) {
   let statusCode: number | undefined
   let body: unknown
   const headers: Record<string, string> = {}
-  const response = {
-    setHeader(name: string, value: string) {
+  type ReadinessResponse = {
+    setHeader(name: string, value: string): ReadinessResponse
+    status(code: number): ReadinessResponse
+    json(value: unknown): ReadinessResponse
+  }
+  const response: ReadinessResponse = {
+    setHeader(name, value) {
       headers[name.toLowerCase()] = value
-      return response
+      return this
     },
-    status(code: number) {
+    status(code) {
       statusCode = code
-      return response
+      return this
     },
-    json(value: unknown) {
+    json(value) {
       body = value
-      return response
+      return this
     },
   }
 
