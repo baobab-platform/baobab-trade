@@ -1,5 +1,5 @@
 import type { ExecArgs, IInventoryService, IStockLocationService } from "@medusajs/framework/types"
-import { Modules } from "@medusajs/framework/utils"
+import { MathBN, Modules } from "@medusajs/framework/utils"
 import { MedusaInventoryAvailabilityAdapter } from "../baobab/inventory"
 import { findByMetadataKey } from "../baobab/market/mapping"
 import { THAMANI_CATALOGUE } from "../baobab/thamani/catalogue"
@@ -83,18 +83,20 @@ export default async function verifyThamaniInventory({ container }: ExecArgs): P
   const item = items[0]
   const location = locations[0]
   const [before] = await adapter.getAvailability(item.id, [location.id])
-  const reservationId = await adapter.reserve({
-    inventoryItemId: item.id,
-    locationId: location.id,
+  // Exercise the native reservation service in this disposable verification.
+  const reservation = await inventory.createReservationItems({
+    inventory_item_id: item.id,
+    location_id: location.id,
     quantity: 1,
-    correlationId: "thamani-gate-10-reservation-check",
+    allow_backorder: false,
+    metadata: { correlation_id: "thamani-gate-10-reservation-check" },
   })
   try {
     const [during] = await adapter.getAvailability(item.id, [location.id])
-    if (during.reservedQuantity !== before.reservedQuantity + 1)
+    if (!MathBN.eq(during.reservedQuantity, MathBN.add(before.reservedQuantity, 1)))
       throw new Error("Reservation was not reflected in Thamani inventory")
   } finally {
-    await adapter.release(reservationId)
+    await inventory.deleteReservationItems(reservation.id)
   }
   container
     .resolve("logger")

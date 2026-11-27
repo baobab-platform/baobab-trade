@@ -22,6 +22,12 @@ const requiredIdentity = (value: unknown, name: string): void => {
 
 const exactNonNegativeQuantity = (value: unknown, field: string): string => {
   try {
+    if (
+      value == null ||
+      (typeof value === "number" && Number.isInteger(value) && !Number.isSafeInteger(value))
+    ) {
+      throw new Error("invalid")
+    }
     const quantity = MathBN.convert(value as BigNumberInput)
     if (!quantity.isFinite() || quantity.isNegative()) {
       throw new Error("invalid")

@@ -20,6 +20,12 @@ export type InventoryReconciliationResult = {
 
 const exactNonNegativeQuantity = (value: BigNumberInput, name: string): string => {
   try {
+    if (
+      value == null ||
+      (typeof value === "number" && Number.isInteger(value) && !Number.isSafeInteger(value))
+    ) {
+      throw new Error("invalid")
+    }
     const quantity = MathBN.convert(value)
     if (!quantity.isFinite() || quantity.isNegative()) {
       throw new Error("invalid")
@@ -48,6 +54,24 @@ export const reconcileInventory = (
     status: MathBN.eq(delta, 0) ? "MATCHED" : "VARIANCE",
   }
 }
+
+// The existing Inventory Bridge stores projection reconciliation in PostgreSQL
+// integer columns. Reject unsupported values before persistence.
+const storedQuantity = (quantity: string): number => {
+  const value = Number(quantity)
+  if (!/^-?\d+$/.test(quantity) || value < -2147483648 || value > 2147483647) {
+    throw new Error("Inventory Bridge reconciliation quantity is outside its integer storage range")
+  }
+  return value
+}
+
+export const inventoryReconciliationColumns = (result: InventoryReconciliationResult) => ({
+  erp_on_hand_quantity: storedQuantity(result.erpOnHand),
+  medusa_stocked_quantity: storedQuantity(result.medusaStocked),
+  medusa_reserved_quantity: storedQuantity(result.medusaReserved),
+  delta_quantity: storedQuantity(result.delta),
+  status: result.status,
+})
 
 export const assertProjectionSequence = (
   currentSequence: number | null,

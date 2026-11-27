@@ -13,6 +13,7 @@ import { ZURIBEANS_CATALOGUE } from "../baobab/catalogue"
 import {
   ZURIBEANS_INVENTORY_LOCATIONS,
   inventoryLocationMetadata,
+  inventoryReconciliationColumns,
   reconcileInventory,
 } from "../baobab/inventory"
 import { findByMetadataKey } from "../baobab/market/mapping"
@@ -142,16 +143,13 @@ export default async function bootstrapInventory({ container }: ExecArgs): Promi
           erpOnHand: projection.on_hand_quantity,
           medusaStocked: level.stocked_quantity,
           medusaReserved: level.reserved_quantity,
+          medusaAvailable: level.available_quantity,
         })
         await inventoryBridge.createInventoryReconciliations({
           projection_id: projection.id,
           inventory_item_id: inventoryItem.id,
           stock_location_id: location.id,
-          erp_on_hand_quantity: reconciliation.erpOnHand,
-          medusa_stocked_quantity: reconciliation.medusaStocked,
-          medusa_reserved_quantity: reconciliation.medusaReserved,
-          delta_quantity: reconciliation.delta,
-          status: reconciliation.status,
+          ...inventoryReconciliationColumns(reconciliation),
           observed_at: new Date(),
         })
       }

@@ -58,7 +58,15 @@ describe("ADR-0013 native Commerce inventory authority guards", () => {
       "incoming_quantity",
       "available_quantity",
     ]) {
-      for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY, "not-a-number"]) {
+      for (const value of [
+        null,
+        undefined,
+        -1,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+        Number.MAX_SAFE_INTEGER + 1,
+        "not-a-number",
+      ]) {
         const db = native([{ ...row, [field]: value }])
         await expect(adapter(db).getAvailability("iitem_za")).rejects.toThrow(
           "Invalid native Inventory",

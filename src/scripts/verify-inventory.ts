@@ -1,5 +1,5 @@
 import type { ExecArgs, IInventoryService, IStockLocationService } from "@medusajs/framework/types"
-import { Modules } from "@medusajs/framework/utils"
+import { MathBN, Modules } from "@medusajs/framework/utils"
 import { ZURIBEANS_CATALOGUE } from "../baobab/catalogue"
 import {
   MedusaInventoryAvailabilityAdapter,
@@ -54,19 +54,21 @@ export default async function verifyInventory({ container }: ExecArgs): Promise<
   const item = items[0]
   const location = projectedLocations[0]
   const [before] = await adapter.getAvailability(item.id, [location.id])
-  const reservationId = await adapter.reserve({
-    inventoryItemId: item.id,
-    locationId: location.id,
+  // Exercise the native reservation service in this disposable verification.
+  const reservation = await inventoryService.createReservationItems({
+    inventory_item_id: item.id,
+    location_id: location.id,
     quantity: 1,
-    correlationId: "gate-7-ci-reservation-check",
+    allow_backorder: false,
+    metadata: { correlation_id: "gate-7-ci-reservation-check" },
   })
   try {
     const [reserved] = await adapter.getAvailability(item.id, [location.id])
-    if (reserved.reservedQuantity !== before.reservedQuantity + 1) {
+    if (!MathBN.eq(reserved.reservedQuantity, MathBN.add(before.reservedQuantity, 1))) {
       throw new Error("Medusa reservation did not reduce commerce availability")
     }
   } finally {
-    await adapter.release(reservationId)
+    await inventoryService.deleteReservationItems(reservation.id)
   }
   const [released] = await adapter.getAvailability(item.id, [location.id])
   if (released.reservedQuantity !== before.reservedQuantity) {
