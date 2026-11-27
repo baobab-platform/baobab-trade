@@ -52,7 +52,6 @@
 
 **Release decision:** the new development tests and CI are necessary regression barriers. They are **not** live CP/IAM or cross-engine acceptance evidence. Do not merge based only on source-level tests; do not promote or enable the restricted route in production until G1–G4 are qualified.
 
-
 ## 27 November 2026 follow-up
 
 - ADR-0024 §§18–20 and 54–60 make regulatory eligibility contextual and provider-owned; where no mandatory provider exists, the result is `NOT_READY` and the system SHALL NOT assume eligibility. A `policy_reference` string is not a provider decision or evidence.

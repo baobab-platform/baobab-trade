@@ -132,7 +132,10 @@ export const validateMarketEligibilityBody = (
     typeof body.status !== "string" ||
     !STATUSES.includes(body.status as CommercialAssortmentStatus)
   ) {
-    return { ok: false, error: { field: "status", message: "status is required and must be valid" } }
+    return {
+      ok: false,
+      error: { field: "status", message: "status is required and must be valid" },
+    }
   }
   const status = body.status as CommercialAssortmentStatus
 
