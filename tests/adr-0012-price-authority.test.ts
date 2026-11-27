@@ -72,6 +72,7 @@ describe("ADR-0012 scoped B2B pricing and money", () => {
       kind: "CONTRACT",
       amount: 400000,
       organisationId: "org-a",
+      agreementReference: "contract:org-a:revision-1",
     }
     const now = Date.parse("2026-11-09T10:00:00Z")
     for (const override of [
