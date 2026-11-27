@@ -179,13 +179,13 @@ class DependencyMaintenancePolicyTest(unittest.TestCase):
         text = (ROOT / ".github/workflows/enforce-dependabot-config.yml").read_text()
         self.assertIn(
             "enforce-dependabot-config.yml@"
-            "31de2bc3dcd56128c019c640dc7e12c10ae9ca69", text
+            "5664b1669736ddc0807709c9d2a1646325c4309a", text
         )
         import re
         actual = re.search(r'required-ecosystems:\s*"([^"]+)"', text)
         self.assertIsNotNone(actual)
         self.assertEqual({e for e, _ in REQUIRED}, set(actual.group(1).split(",")))
-        self.assertNotIn('policy-level: "strict"', text)
+        self.assertIn('policy-level: "strict"', text)
 
     def test_security_and_platform_codeowners_present(self):
         path = ROOT / (("CODEOWNERS") if IS_ERP else ".github/CODEOWNERS")
