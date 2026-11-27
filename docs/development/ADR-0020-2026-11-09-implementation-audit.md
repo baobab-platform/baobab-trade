@@ -46,3 +46,13 @@ CI should execute these checks on the actual PR head. No claims of successful co
 - ADR-0018: PR #211 — tax provenance; a landed-cost kernel does not determine tax.
 - ADR-0019: PR #212 — ERP PO evidence adoption, still an unqualified provider integration.
 - Keep this PR draft until review, CI and higher-order authority tests establish release readiness. Do not infer full ADR-0020 completion from the source tests.
+
+
+## 27 November 2026 follow-up
+
+- The pricing context now retains the positive CP Market revision alongside tenant, seller LegalEntity, Market, product, buyer and currency. A margin policy may optionally be currency-scoped; when it is, the currency must match exactly.
+- Added the ADR-0020 POLICY_ADJUSTED cost-basis type. Actual/accounting, weighted-average and standard costs remain ERP-sourced; governed estimates remain explicit and cannot assert ACTUAL_LANDED.
+- Removed the unsupported global markup ceiling. Gross margin remains strictly below 100%; final monetary precision is bounded by the exact minor-unit representation.
+- Added an explicit resolver version to the price snapshot. Actual-margin reconciliation now accepts the snapshot plus fingerprint, verifies that the historical snapshot has not changed, and returns actual-cost source reference, version and observation time without mutating the quote.
+- This remains an internal arithmetic kernel only. The quote snapshot is not persisted or signed; the digest detects change but is not independent authorization or ERP authenticity.
+- ADR-0020 P0 remains incomplete: no canonical cost/policy contracts, connected ERP projection, CP/IAM attestation, FX, UOM conversion, freight/customs allocation, tax/price-list/customer-term composition, approved override, native quote persistence, atomic order/outbox composition or multi-market connected simulations are implemented here.
