@@ -50,14 +50,19 @@ export function reconcileSupplierAwardToErp(
   prior?: PurchaseOrderProjection | null,
 ): PurchaseOrderProjection {
   const fields = [
-    award.tenantId, award.procurementCommitmentId, award.approvedAwardId,
-    award.approvedSupplierCanonicalId, award.buyerLegalEntityId, award.idempotencyKey,
+    award.tenantId,
+    award.procurementCommitmentId,
+    award.approvedAwardId,
+    award.approvedSupplierCanonicalId,
+    award.buyerLegalEntityId,
+    award.idempotencyKey,
   ]
   if (
     award.status !== "APPROVED" ||
     fields.some((field) => !identifier(field)) ||
     !/^[A-Z]{3}$/.test(award.currency) ||
-    !Number.isSafeInteger(award.totalMinor) || award.totalMinor < 0
+    !Number.isSafeInteger(award.totalMinor) ||
+    award.totalMinor < 0
   ) {
     throw new Error("Procurement award is not a valid, authorised commercial commitment")
   }
@@ -67,8 +72,12 @@ export function reconcileSupplierAwardToErp(
   if (evidence === null) {
     return prior?.status === "ERP_CONFIRMED"
       ? prior
-      : { procurementCommitmentId: award.procurementCommitmentId,
-          erpPurchaseOrderId: null, status: "ERP_PENDING", evidenceEventId: null }
+      : {
+          procurementCommitmentId: award.procurementCommitmentId,
+          erpPurchaseOrderId: null,
+          status: "ERP_PENDING",
+          evidenceEventId: null,
+        }
   }
   if (
     evidence.source !== "ERP" ||
@@ -87,9 +96,12 @@ export function reconcileSupplierAwardToErp(
   if (evidence.status !== "CREATED" && evidence.status !== "APPROVED") {
     return prior?.status === "ERP_CONFIRMED"
       ? prior
-      : { procurementCommitmentId: award.procurementCommitmentId,
-          erpPurchaseOrderId: null, status: "ERP_RECONCILIATION_REQUIRED",
-          evidenceEventId: evidence.sourceEventId }
+      : {
+          procurementCommitmentId: award.procurementCommitmentId,
+          erpPurchaseOrderId: null,
+          status: "ERP_RECONCILIATION_REQUIRED",
+          evidenceEventId: evidence.sourceEventId,
+        }
   }
   if (!identifier(evidence.erpPurchaseOrderId)) {
     throw new Error("ERP did not attest a native purchase order identity")
