@@ -33,3 +33,13 @@ This is an internal provider-neutral guard, not a live TMS, carrier API, booking
     npm run format:check
 
 Draft until independent connected qualification. No merge authority implied.
+
+
+## 27 November 2026 follow-up
+
+- Shipment plans now bind tenant, shipment, seller/buyer LegalEntities, CP Market ID/revision, shipment type, Trade Lane/Incoterm where cross-border, origin/destination and ordered transport legs.
+- Each leg has an explicit sequence, mode, provider role, provider ID, CP binding ID, provider version and binding version. Route continuity, sequence, departure/arrival ordering and plan-creation bounds are validated.
+- Booking intent binds the exact shipment/plan revision, legal parties, Market/Trade Lane, leg, provider binding/version, idempotency key and quote reference/version/currency/amount/expiry.
+- Provider evidence must be CONFIRMED, match the complete intent, carry native provider/booking/evidence references, and be observed after plan creation but before quote expiry and planned departure. Replay must preserve the exact native booking identity and observation.
+- Domestic plans may omit Trade Lane/Incoterm; cross-border plans may not.
+- **Connected acceptance remains outstanding:** provider IDs/bindings and evidence are caller-supplied and not authenticated against CP/provider signatures; no native provider readback, live carrier/forwarder booking, freight quote service, booking persistence, event reconciliation, cost allocation, shipment lifecycle or PostgreSQL 17 integration test is implemented. This guard does not create or confirm an external booking.
