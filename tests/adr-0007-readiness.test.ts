@@ -74,6 +74,14 @@ describe("ADR-0007 §47: live PostgreSQL readiness", () => {
         })
       ).dependencies.postgres,
     ).toBe("down")
+    expect(
+      (
+        await checkTradeReadiness({
+          database: { raw: () => ({}) } as never,
+          controlPlaneConfigured: true,
+        })
+      ).dependencies.postgres,
+    ).toBe("down")
   })
 
   it("refuses traffic when the Control Plane is not configured even with a healthy database", async () => {
