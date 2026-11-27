@@ -1,7 +1,7 @@
 # BA-SEC-DEP-001 source-conformance gate.
-# Do not pin the unmerged strict validator from Shared #429.
-# This accepted baseline plus offline negatives verifies source configuration,
-# not real Dependabot job execution, private access or alert enablement.
+# Shared PR #429 merged on 2026-11-08. Trade opts into the strict validator
+# after adding repository-specific manifest and exception regression tests.
+# Source conformance does not prove live Dependabot alerts or security updates.
 name: Enforce Dependency Maintenance Policy
 
 on:
@@ -33,9 +33,10 @@ jobs:
   baseline:
     permissions:
       contents: read
-    uses: baobab-platform/shared/.github/workflows/enforce-dependabot-config.yml@31de2bc3dcd56128c019c640dc7e12c10ae9ca69 # accepted Shared v2.3.0
+    uses: baobab-platform/shared/.github/workflows/enforce-dependabot-config.yml@5664b1669736ddc0807709c9d2a1646325c4309a # Shared main, verified 2026-11-27
     with:
       required-ecosystems: "github-actions,npm,docker,docker-compose"
+      policy-level: "strict"
 
   policy-regression:
     name: Manifest coverage and BA-SEC-DEP-001 negative cases
