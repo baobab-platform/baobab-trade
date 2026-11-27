@@ -8,7 +8,7 @@ export class Migration20261127091500 extends Migration {
     this.addSql('alter table "commerce_payment" add column if not exists "principal_id" text null;')
     this.addSql('alter table "commerce_payment" add column if not exists "merchant_account_id" text null;')
     this.addSql('alter table "commerce_payment" add column if not exists "market_id" text null;')
-    this.addSql('alter table "commerce_payment" add column if not exists "market_revision" integer null;')
+    this.addSql('alter table "commerce_payment" add column if not exists "market_revision" bigint null;')
     this.addSql('alter table "commerce_payment" add constraint "commerce_payment_market_revision_check" check ("market_revision" is null or "market_revision" > 0);')
     this.addSql('alter table "commerce_payment" add column if not exists "provider_environment" text null;')
     this.addSql('alter table "commerce_payment" add constraint "commerce_payment_provider_environment_check" check ("provider_environment" is null or "provider_environment" in (\'SANDBOX\',\'LIVE\'));')
