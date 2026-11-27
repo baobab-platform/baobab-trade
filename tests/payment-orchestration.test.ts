@@ -12,6 +12,8 @@ const command: InitiatePaymentCommand = {
   tenantId: "tn_ugoperator",
   principalId: "principal_ug_1",
   organisationId: "org-1",
+  marketId: "mkt_01k9ug7b2b",
+  marketRevision: 1,
   marketKey: "zuribeans_ug",
   legalSellerKey: "zuribeans-uganda",
   method: "INVOICE_TERMS",
