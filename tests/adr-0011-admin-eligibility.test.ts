@@ -6,7 +6,7 @@ const valid = {
   product_id: "prod_za",
   market_key: "zuribeans_za",
   status: "ACTIVE",
-  regulatory_eligibility: "ELIGIBLE",
+  regulatory_eligibility: "NOT_EVALUATED",
   policy_reference: "policy:za-wholesale-v1",
   effective_from: "2026-11-09T08:00:00Z",
   effective_until: "2026-12-09T08:00:00Z",
@@ -97,13 +97,17 @@ describe("ADR-0011 Market assortment administrative mutation boundaries", () => 
     expect(b2b.updateMarketProductEligibilities).not.toHaveBeenCalled()
   })
 
-  it("updates exactly the current scoped row with validated Date objects and no foreign payload", async () => {
-    const b2b = service([record])
+  it("updates commercial state without overwriting provider-owned regulatory clearance", async () => {
+    const providerCleared = { ...record, regulatory_eligibility: "ELIGIBLE" }
+    const b2b = service([providerCleared])
     const res = response()
     await POST(request(b2b) as never, res as never)
     expect(b2b.listMarketProductEligibilities).toHaveBeenCalledWith(
       { product_id: "prod_za", market_key: "zuribeans_za" },
       { take: 2 },
+    )
+    expect(b2b.updateMarketProductEligibilities).toHaveBeenCalledWith(
+      expect.not.objectContaining({ regulatory_eligibility: expect.anything() }),
     )
     expect(b2b.updateMarketProductEligibilities).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -116,6 +120,7 @@ describe("ADR-0011 Market assortment administrative mutation boundaries", () => 
       }),
     )
     expect(res.code).toBe(200)
+    expect((res.body as { market_product_eligibility: { regulatory_eligibility: string } }).market_product_eligibility.regulatory_eligibility).toBe("ELIGIBLE")
     expect(b2b.createMarketProductEligibilities).not.toHaveBeenCalled()
   })
 
@@ -123,15 +128,21 @@ describe("ADR-0011 Market assortment administrative mutation boundaries", () => 
     const b2b = service()
     const res = response()
     await POST(request(b2b) as never, res as never)
-    expect(b2b.createMarketProductEligibilities).toHaveBeenCalledOnce()
+    expect(b2b.createMarketProductEligibilities).toHaveBeenCalledWith(
+      expect.objectContaining({ regulatory_eligibility: "NOT_EVALUATED" }),
+    )
     expect(b2b.updateMarketProductEligibilities).not.toHaveBeenCalled()
     expect(res.code).toBe(201)
+    expect(
+      (res.body as { sellable_in_market: boolean }).sellable_in_market,
+    ).toBe(false)
   })
 
   it("allows explicitly unbounded dates and rejects a policy-controlled unknown status", () => {
     const allowed = validateMarketEligibilityBody({
       product_id: "prod_za",
       market_key: "zuribeans_za",
+      status: "SUSPENDED",
       effective_from: null,
       effective_until: null,
     })
