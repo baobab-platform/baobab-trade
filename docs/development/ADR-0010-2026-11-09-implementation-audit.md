@@ -62,7 +62,6 @@ npm run typecheck
 
 **Promotion disposition:** ADR-0010 remains HELD for connected acceptance. The governed runtime and production approval boundaries are unchanged; this document is an audit ledger, not a declaration of full ADR closure.
 
-
 ## 27 November 2026 follow-up
 
 - The pinned Shared Market schema defines `market_id` as a CP-minted opaque identifier with a constrained grammar (min 3, max 63); the consumer guard now enforces that grammar and tests use opaque examples rather than country/business-derived IDs. The guard does not claim to prove opacity or issuance; CP remains the issuer.

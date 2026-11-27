@@ -398,7 +398,7 @@ describe("HttpControlPlaneClient.getMarket (ADR-0010 exact Market identity)", ()
     vi.stubGlobal("fetch", fetchMock)
     const response = await mappingClient().getMarket("mkt_01k9za7b2b", "workload", "corr-1")
     expect(response.market_id).toBe("mkt_01k9za7b2b")
-    expect(fetchMock.mock.calls[0][0]).toBe("http://control-plane.local/v1/markets/mkt_za_b2b")
+    expect(fetchMock.mock.calls[0][0]).toBe("http://control-plane.local/v1/markets/mkt_01k9za7b2b")
   })
 
   it("refuses a syntactically valid 200 document for a different Market", async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { resolveCommerceContext } from "../src/baobab/context/resolver"
 import type { ControlPlaneClient } from "../src/baobab/control-plane/client"
 import type { MappingResolutionResponse } from "../src/baobab/contracts/canonical-mapping"
@@ -38,6 +38,7 @@ const storedContext: RawPlatformContextResolutionResponse = {
   context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",
   tenant_id: tenant.tenantId,
   resolved_at: "2026-09-07T10:00:00Z",
+  expires_at: "2026-09-07T10:02:00Z",
   market_id: market.market_id,
   country_code: "ZA",
   currency_code: "ZAR",
@@ -87,6 +88,15 @@ const clientFor = (
 const selection = { marketId: market.market_id, digitalEstateCanonicalId: "estate:zuribeans-b2b" }
 
 describe("Baobab commerce context isolation", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-09-07T10:00:30Z"))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("resolves Market, Legal Seller, Digital Estate, canonical IDs and external references", async () => {
     const client = clientFor()
     const context = await resolveCommerceContext(
@@ -245,7 +255,7 @@ describe("Baobab commerce context isolation", () => {
     const cases = [
       { selected: market, stored: { ...storedContext, currency_code: "UGX" } },
       { selected: market, stored: { ...storedContext, country_code: "UG" } },
-      { selected: { ...market, effective_to: "2026-10-01T00:00:00Z" }, stored: storedContext },
+      { selected: { ...market, effective_to: "2026-09-07T10:00:29Z" }, stored: storedContext },
     ]
     for (const item of cases) {
       const client = clientFor(item.selected, item.stored)
