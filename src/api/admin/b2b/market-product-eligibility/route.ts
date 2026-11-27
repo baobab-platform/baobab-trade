@@ -21,8 +21,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   const productId = validated.data.product_id as string
   const marketKey = validated.data.market_key as string
   const status = validated.data.status as CommercialAssortmentStatus
-  const regulatory = validated.data.regulatory_eligibility as RegulatoryEligibility
-
   const b2b = req.scope.resolve<B2BModuleService>(B2B_MODULE)
   const existing = await b2b.listMarketProductEligibilities(
     { product_id: productId, market_key: marketKey },
@@ -43,7 +41,6 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     product_id: productId,
     market_key: marketKey,
     status,
-    regulatory_eligibility: regulatory,
     policy_reference: validated.data.policy_reference as string | null,
     effective_from: validated.data.effective_from as Date | null,
     effective_until: validated.data.effective_until as Date | null,
@@ -52,13 +49,16 @@ export const POST = async (req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   const row =
     existing.length > 0
       ? await b2b.updateMarketProductEligibilities({ id: existing[0].id, ...payload })
-      : await b2b.createMarketProductEligibilities(payload)
+      : await b2b.createMarketProductEligibilities({
+          ...payload,
+          regulatory_eligibility: "NOT_EVALUATED",
+        })
 
   res.status(existing.length > 0 ? 200 : 201).json({
     market_product_eligibility: row,
     sellable_in_market: isMarketAssortmentSellable({
-      assortmentStatus: status,
-      regulatoryEligibility: regulatory,
+      assortmentStatus: row.status as CommercialAssortmentStatus,
+      regulatoryEligibility: row.regulatory_eligibility as RegulatoryEligibility,
       requireRegulatoryClearance: true,
     }),
   })
