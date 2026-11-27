@@ -60,3 +60,8 @@
 - The Store B2B assortment endpoint still fails closed because no genuine IAM/CP catalogue-access provider is registered. Provider-backed regulatory resolution (ADR-0021) also remains an external dependency. No product enumeration, regulatory approval or protected activation is claimed.
 - The existing composite unique index on `(product_id, market_key)` protects the admin upsert from concurrent duplicate rows; the handler also refuses ambiguous returned rows.
 - Final-head full CI and independent review remain pending. The original 64/64 isolated test result is historical evidence for the pre-correction head only.
+
+The disposable DEV-07 regression reads native Market eligibility and tests the
+partition against persisted records. It separately exercises route refusal
+without a registered buyer authority port. The connected entitled catalogue
+case remains blocked until the real IAM/CP provider is qualified.
