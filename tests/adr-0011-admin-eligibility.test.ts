@@ -56,6 +56,7 @@ describe("ADR-0011 Market assortment administrative mutation boundaries", () => 
     ["non-ISO date", { effective_from: "November 9, 2026" }],
     ["missing timezone", { effective_from: "2026-11-09T08:00:00" }],
     ["invalid effective-from", { effective_from: "invalid" }],
+    ["invalid calendar date", { effective_from: "2026-02-30T08:00:00Z" }],
     ["invalid effective-until", { effective_until: "not a timestamp" }],
     ["wrong type", { effective_from: 1762675200000 }],
     ["reversed window", { effective_from: "2026-12-20T08:00:00Z" }],
