@@ -9,12 +9,18 @@ import {
 const command: InitiatePaymentCommand = {
   paymentReference: "pay-1",
   orderReference: "order-1",
+  tenantId: "tn_ugoperator",
+  principalId: "principal_ug_1",
   organisationId: "org-1",
-  marketKey: "zuribeans-ug",
+  marketId: "mkt_01k9ug7b2b",
+  marketRevision: 1,
+  marketKey: "zuribeans_ug",
   legalSellerKey: "zuribeans-uganda",
   method: "INVOICE_TERMS",
   terms: "NET_30",
   providerKey: "medusa-manual-ug",
+  merchantAccountId: "merchant-account-ug",
+  providerEnvironment: "SANDBOX",
   currency: "UGX",
   amountMinor: 1000,
   idempotencyKey: "init-1",
@@ -31,10 +37,17 @@ class MemoryRepository implements PaymentRecordRepository {
     this.records.set(input.idempotencyKey, payment)
     return payment
   }
-  async transition(id: string, from: PaymentSnapshot["status"], to: PaymentSnapshot["status"]) {
+  async transition(
+    id: string,
+    from: PaymentSnapshot["status"],
+    to: PaymentSnapshot["status"],
+    _idempotencyKey: string,
+    providerReference?: string,
+    providerStatus?: string,
+  ) {
     const current = [...this.records.values()].find((record) => record.id === id)
     if (!current) throw new Error("Payment does not exist")
-    const payment = { ...current, status: to }
+    const payment = { ...current, status: to, providerReference, providerStatus }
     this.records.set(current.idempotencyKey, payment)
     return payment
   }
@@ -71,7 +84,7 @@ describe("PaymentOrchestrationPort", () => {
         organisationId: undefined,
         customerReference: "customer-1",
       }),
-    ).rejects.toThrow(/reused across Digital Estates/)
+    ).rejects.toThrow(/different financial attempt/)
   })
 
   it("rejects invalid transitions and terms disguised as settlement", async () => {
@@ -79,7 +92,7 @@ describe("PaymentOrchestrationPort", () => {
     const payment = await adapter.initiate(command)
     await expect(adapter.transition(payment, "SETTLED", "settled-1")).rejects.toThrow(/Invalid/)
     await expect(adapter.initiate({ ...command, method: "BANK_TRANSFER" })).rejects.toThrow(
-      /INVOICE_TERMS/,
+      /payment method must agree/,
     )
   })
 })

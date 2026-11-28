@@ -15,27 +15,78 @@ const isUniqueConstraintViolation = (error: unknown): boolean =>
 
 type StoredPayment = Awaited<ReturnType<PaymentBridgeModuleService["listCommercePayments"]>>[number]
 
-const snapshot = (payment: StoredPayment): PaymentSnapshot => ({
-  id: payment.id,
-  digitalEstate: payment.digital_estate,
-  paymentReference: payment.payment_reference,
-  orderReference: payment.order_reference,
-  organisationId: payment.organisation_id ?? undefined,
-  customerReference: payment.customer_reference ?? undefined,
-  marketKey: payment.market_key,
-  legalSellerKey: payment.legal_seller_key,
-  method: payment.method,
-  terms: payment.terms,
-  providerKey: payment.provider_key,
-  providerReference: payment.provider_reference,
-  providerStatus: payment.provider_status,
-  currency: payment.currency_code,
-  amountMinor: Number(payment.amount_minor),
-  status: payment.status,
-  idempotencyKey: payment.source_idempotency_key,
-  correlationId: payment.correlation_id,
-  dueAt: payment.due_at ?? undefined,
-})
+const requiredStoredText = (value: unknown, field: string): string => {
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
+    throw new Error(`Stored Payment is missing authoritative ${field}`)
+  }
+  return value
+}
+
+const exactMinorAmount = (value: unknown): number => {
+  const raw =
+    typeof value === "string"
+      ? value
+      : typeof value === "number" && Number.isSafeInteger(value)
+        ? String(value)
+        : value !== null &&
+            typeof value === "object" &&
+            typeof (value as { toString?: unknown }).toString === "function"
+          ? (value as { toString(): string }).toString()
+          : ""
+  if (!/^(0|[1-9][0-9]*)$/.test(raw)) {
+    throw new Error("Stored Payment amount_minor is not an exact non-negative integer")
+  }
+  const exact = BigInt(raw)
+  if (exact > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Stored Payment amount_minor exceeds the safe integer boundary")
+  }
+  return Number(exact)
+}
+
+const snapshot = (payment: StoredPayment): PaymentSnapshot => {
+  const providerEnvironment = payment.provider_environment
+  if (providerEnvironment !== "SANDBOX" && providerEnvironment !== "LIVE") {
+    throw new Error("Stored Payment has no valid provider environment")
+  }
+  const dueAt = payment.due_at
+    ? payment.due_at instanceof Date
+      ? payment.due_at
+      : new Date(String(payment.due_at))
+    : undefined
+  if (dueAt && !Number.isFinite(dueAt.getTime())) {
+    throw new Error("Stored Payment has an invalid due date")
+  }
+  return {
+    id: requiredStoredText(payment.id, "native Payment ID"),
+    digitalEstate: requiredStoredText(payment.digital_estate, "Digital Estate"),
+    tenantId: requiredStoredText(payment.tenant_id, "tenant"),
+    principalId: requiredStoredText(payment.principal_id, "initiating Principal"),
+    merchantAccountId: requiredStoredText(payment.merchant_account_id, "merchant account"),
+    providerEnvironment,
+    paymentReference: requiredStoredText(payment.payment_reference, "payment reference"),
+    orderReference: requiredStoredText(payment.order_reference, "order reference"),
+    organisationId: payment.organisation_id ?? undefined,
+    customerReference: payment.customer_reference ?? undefined,
+    marketId: requiredStoredText(payment.market_id, "opaque CP Market ID"),
+    marketRevision: exactMinorAmount(payment.market_revision),
+    marketKey: requiredStoredText(payment.market_key, "Market key"),
+    legalSellerKey: requiredStoredText(payment.legal_seller_key, "legal seller"),
+    method: payment.method,
+    terms: payment.terms,
+    providerKey: requiredStoredText(payment.provider_key, "provider"),
+    providerReference: payment.provider_reference,
+    providerStatus: payment.provider_status,
+    currency: requiredStoredText(payment.currency_code, "currency"),
+    amountMinor: exactMinorAmount(payment.amount_minor),
+    status: payment.status,
+    idempotencyKey: requiredStoredText(payment.source_idempotency_key, "idempotency key"),
+    correlationId: requiredStoredText(payment.correlation_id, "correlation ID"),
+    dueAt,
+  }
+}
+
+const REFERENCE = /^[A-Za-z0-9][A-Za-z0-9_:.-]{0,199}$/
+const PAYMENT_ID = /^pay_[A-Za-z0-9]+$/
 
 export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
   constructor(
@@ -44,6 +95,9 @@ export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
   ) {}
 
   async findByIdempotencyKey(key: string): Promise<PaymentSnapshot | undefined> {
+    if (typeof key !== "string" || !REFERENCE.test(key)) {
+      throw new Error("Payment idempotency key is invalid")
+    }
     const [payment] = await this.bridge.listCommercePayments({ source_idempotency_key: key })
     return payment ? snapshot(payment) : undefined
   }
@@ -51,11 +105,6 @@ export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
   async create(
     command: InitiatePaymentCommand & { digitalEstate: string },
   ): Promise<PaymentSnapshot> {
-    // Two concurrent initiate() calls sharing an idempotency key can both pass the port's
-    // findByIdempotencyKey check before either has created a row — this lock (keyed on the
-    // idempotency key, not the not-yet-assigned payment id) closes that gap by serializing the
-    // check-then-create sequence itself. The unique-constraint catch below is defense in depth
-    // for a lock provider that isn't fully distributed.
     return this.locking.execute(`payment-idempotency:${command.idempotencyKey}`, async () => {
       const existing = await this.findByIdempotencyKey(command.idempotencyKey)
       if (existing) return existing
@@ -63,10 +112,16 @@ export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
         return snapshot(
           await this.bridge.createCommercePayments({
             digital_estate: command.digitalEstate,
+            tenant_id: command.tenantId,
+            principal_id: command.principalId,
+            merchant_account_id: command.merchantAccountId,
+            provider_environment: command.providerEnvironment,
             payment_reference: command.paymentReference,
             order_reference: command.orderReference,
             organisation_id: command.organisationId,
             customer_reference: command.customerReference,
+            market_id: command.marketId,
+            market_revision: command.marketRevision,
             market_key: command.marketKey,
             legal_seller_key: command.legalSellerKey,
             method: command.method,
@@ -97,11 +152,9 @@ export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
     providerReference?: string,
     providerStatus?: string,
   ): Promise<PaymentSnapshot> {
-    // Two concurrent transitions for the SAME payment — e.g. a legitimate "captured" webhook
-    // racing a stale "failed"/timeout one, each with its own idempotency key — could otherwise
-    // both read the same prior status, both pass the `current.status !== from` check, and the
-    // later write win regardless of which event was actually correct. Locking on the payment id
-    // (not the idempotency key) serializes every transition attempt for this payment.
+    if (!PAYMENT_ID.test(paymentId) || !REFERENCE.test(idempotencyKey)) {
+      throw new Error("Payment transition identity is invalid")
+    }
     return this.locking.execute(`payment:${paymentId}`, async () => {
       const [existingTransition] = await this.bridge.listPaymentStatusTransitions({
         idempotency_key: idempotencyKey,
@@ -109,14 +162,27 @@ export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
       const [current] = await this.bridge.listCommercePayments({ id: paymentId })
       if (!current) throw new Error("Payment does not exist")
       if (existingTransition) {
-        // An idempotency key is meant to replay the exact same transition, not silently no-op a
-        // different one that happens to reuse it — that would hide a real caller bug.
-        if (existingTransition.from_status !== from || existingTransition.to_status !== to)
+        if (
+          existingTransition.payment_id !== paymentId ||
+          existingTransition.from_status !== from ||
+          existingTransition.to_status !== to ||
+          (existingTransition.provider_reference ?? undefined) !== providerReference ||
+          (existingTransition.provider_status ?? undefined) !== providerStatus
+        ) {
           throw new Error("Payment idempotency key reused for a different transition")
+        }
+        if (
+          current.status !== to ||
+          (current.provider_reference ?? undefined) !== providerReference ||
+          (current.provider_status ?? undefined) !== providerStatus
+        ) {
+          throw new Error("Payment transition log and current state disagree; reconciliation is required")
+        }
         return snapshot(current)
       }
-      if (current.status !== from)
+      if (current.status !== from) {
         throw new Error("Payment state changed before transition could be applied")
+      }
       await this.bridge.createPaymentStatusTransitions({
         payment_id: paymentId,
         from_status: from,
@@ -126,7 +192,7 @@ export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
         provider_status: providerStatus,
         occurred_at: new Date(),
       })
-      return snapshot(
+      const updated = snapshot(
         await this.bridge.updateCommercePayments({
           id: paymentId,
           status: to,
@@ -134,6 +200,15 @@ export class PaymentBridgeRecordAdapter implements PaymentRecordRepository {
           provider_status: providerStatus,
         }),
       )
+      if (
+        updated.id !== paymentId ||
+        updated.status !== to ||
+        (updated.providerReference ?? undefined) !== providerReference ||
+        (updated.providerStatus ?? undefined) !== providerStatus
+      ) {
+        throw new Error("Payment transition writeback did not match the requested provider evidence")
+      }
+      return updated
     })
   }
 }
