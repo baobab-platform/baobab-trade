@@ -127,8 +127,12 @@ export class ControlPlaneResourceAssignmentResolver implements ResourceAssignmen
   constructor(private readonly options: ControlPlaneResourceAssignmentResolverOptions) {
     const base = new URL(options.baseUrl)
     if (
-      base.protocol !== "https:" &&
-      !(base.protocol === "http:" && base.hostname === "localhost")
+      (base.protocol !== "https:" &&
+        !(base.protocol === "http:" && base.hostname === "localhost")) ||
+      !!base.username ||
+      !!base.password ||
+      !!base.search ||
+      !!base.hash
     ) {
       throw new Error("the Control Plane base URL must be https outside localhost")
     }
@@ -171,6 +175,9 @@ export class ControlPlaneResourceAssignmentResolver implements ResourceAssignmen
     } catch {
       throw unavailable()
     }
+    // A missing/blank Trade workload credential is not a CP decision and
+    // must not be put on the wire as an unauthenticated "Bearer " request.
+    if (typeof accessToken !== "string" || !accessToken.trim()) throw unavailable()
     let response: Response
     try {
       response = await this.fetcher(this.endpoint, {
