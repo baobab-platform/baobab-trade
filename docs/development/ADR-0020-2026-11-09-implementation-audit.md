@@ -47,7 +47,6 @@ CI should execute these checks on the actual PR head. No claims of successful co
 - ADR-0019: PR #212 — ERP PO evidence adoption, still an unqualified provider integration.
 - Keep this PR draft until review, CI and higher-order authority tests establish release readiness. Do not infer full ADR-0020 completion from the source tests.
 
-
 ## 27 November 2026 follow-up
 
 - The pricing context now retains the positive CP Market revision alongside tenant, seller LegalEntity, Market, product, buyer and currency. A margin policy may optionally be currency-scoped; when it is, the currency must match exactly.

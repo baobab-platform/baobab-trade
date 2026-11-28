@@ -74,7 +74,9 @@ describe("ADR-0020 commercial cost/price authority seam", () => {
   it("rejects cross-tenant, cross-seller, cross-Market and cross-product evidence", () => {
     for (const field of ["tenantId", "sellerLegalEntityId", "marketId", "productId"] as const) {
       expect(() => decide(context, { ...cost, [field]: "foreign" })).toThrow("scope mismatch")
-      expect(() => decide(context, cost, { ...policy, [field]: "foreign" })).toThrow("scope mismatch")
+      expect(() => decide(context, cost, { ...policy, [field]: "foreign" })).toThrow(
+        "scope mismatch",
+      )
     }
   })
 
@@ -90,30 +92,26 @@ describe("ADR-0020 commercial cost/price authority seam", () => {
   })
 
   it("refuses a different buyer's policy without inheriting their commercial terms", () => {
-    expect(() =>
-      decide(context, cost, { ...policy, buyerOrganisationId: "buyer-b" }),
-    ).toThrow("another buyer")
+    expect(() => decide(context, cost, { ...policy, buyerOrganisationId: "buyer-b" })).toThrow(
+      "another buyer",
+    )
   })
 
   it("requires an explicit matching currency, never guesses FX conversion", () => {
     expect(() => decide({ ...context, currencyCode: "USD" })).toThrow("currency mismatch")
     expect(() => decide(context, { ...cost, currencyCode: "USD" })).toThrow("currency mismatch")
     expect(() => decide({ ...context, currencyCode: "zar" })).toThrow("currency mismatch")
-    expect(() => decide(context, cost, { ...policy, currencyCode: "USD" })).toThrow("policy currency")
+    expect(() => decide(context, cost, { ...policy, currencyCode: "USD" })).toThrow(
+      "policy currency",
+    )
   })
 
   it("rejects missing provenance, fabricated accounting cost, and invalid source", () => {
     expect(() => decide(context, { ...cost, sourceReference: "" })).toThrow("provenance")
     expect(() => decide(context, cost, { ...policy, version: "" })).toThrow("provenance")
-    expect(() =>
-      decide(context, { ...cost, costBasisType: "ACTUAL_LANDED" }),
-    ).toThrow("ERP")
-    expect(() =>
-      decide(context, { ...cost, costBasisType: "WEIGHTED_AVERAGE" }),
-    ).toThrow("ERP")
-    expect(() =>
-      decide(context, { ...cost, sourceSystem: "UNKNOWN" as "ERP" }),
-    ).toThrow("source")
+    expect(() => decide(context, { ...cost, costBasisType: "ACTUAL_LANDED" })).toThrow("ERP")
+    expect(() => decide(context, { ...cost, costBasisType: "WEIGHTED_AVERAGE" })).toThrow("ERP")
+    expect(() => decide(context, { ...cost, sourceSystem: "UNKNOWN" as "ERP" })).toThrow("source")
   })
 
   it("refuses stale, future-dated, and malformed cost and policy windows", () => {
@@ -121,9 +119,9 @@ describe("ADR-0020 commercial cost/price authority seam", () => {
     expect(() => decide(context, { ...cost, observedAt: "2026-11-10T00:00:00Z" })).toThrow(
       "future-dated",
     )
-    expect(() => decide(context, cost, { ...policy, validFrom: now.replace("12:", "13:") })).toThrow(
-      "not effective",
-    )
+    expect(() =>
+      decide(context, cost, { ...policy, validFrom: now.replace("12:", "13:") }),
+    ).toThrow("not effective")
     expect(() => decide(context, cost, { ...policy, validUntil: now })).toThrow("not effective")
     expect(() => decide(context, { ...cost, validUntil: "2026-02-30T00:00:00Z" })).toThrow(
       "real UTC",
@@ -159,9 +157,7 @@ describe("ADR-0020 commercial cost/price authority seam", () => {
     expect(() => decide(context, cost, { ...policy, minimumBasisPoints: 3000 })).toThrow(
       "target is below",
     )
-    expect(() => decide(context, cost, { ...policy, minimumBasisPoints: 1.5 })).toThrow(
-      "integral",
-    )
+    expect(() => decide(context, cost, { ...policy, minimumBasisPoints: 1.5 })).toThrow("integral")
     expect(
       decide(context, cost, { ...policy, method: "MARKUP", targetBasisPoints: 1_000_001 }),
     ).toBeDefined()

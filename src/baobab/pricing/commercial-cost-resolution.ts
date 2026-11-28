@@ -84,12 +84,12 @@ const RESOLVER_VERSION = "ADR-0020-COMMERCIAL-KERNEL-1"
 const deny = (reason: string): never => {
   throw new Error("ADR-0020 pricing refusal: " + reason)
 }
-const validId = (value: unknown): value is string =>
-  typeof value === "string" && ID.test(value)
+const validId = (value: unknown): value is string => typeof value === "string" && ID.test(value)
 const validCurrency = (value: unknown): value is string =>
   typeof value === "string" && /^[A-Z]{3}$/.test(value)
 const amount = (value: unknown, label: string): bigint => {
-  if (typeof value !== "string" || !MINOR.test(value)) return deny(label + " is not exact minor-unit money")
+  if (typeof value !== "string" || !MINOR.test(value))
+    return deny(label + " is not exact minor-unit money")
   const parsed = BigInt(value)
   if (parsed > MAX) return deny(label + " exceeds supported precision")
   return parsed
@@ -99,10 +99,16 @@ const checked = (value: bigint, label: string): string => {
   return value.toString()
 }
 const timestamp = (value: string, label: string): number => {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value))
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)
+  )
     return deny(label + " must be an explicit UTC instant")
   const millis = Date.parse(value)
-  if (!Number.isFinite(millis) || new Date(millis).toISOString().slice(0, 19) !== value.slice(0, 19))
+  if (
+    !Number.isFinite(millis) ||
+    new Date(millis).toISOString().slice(0, 19) !== value.slice(0, 19)
+  )
     return deny(label + " is not a real UTC instant")
   return millis
 }
@@ -144,24 +150,45 @@ export function resolveCommercialPrice(
   if (!validId(context.buyerOrganisationId)) deny("buyer organisation is required")
   if (!Number.isSafeInteger(context.marketRevision) || context.marketRevision < 1)
     deny("Market revision must be a positive safe integer")
-  if (policy.currencyCode !== undefined &&
-      (!validCurrency(policy.currencyCode) || policy.currencyCode !== context.currencyCode))
+  if (
+    policy.currencyCode !== undefined &&
+    (!validCurrency(policy.currencyCode) || policy.currencyCode !== context.currencyCode)
+  )
     deny("margin policy currency mismatch")
-  if (!validCurrency(context.currencyCode) || !validCurrency(cost.currencyCode) ||
-      context.currencyCode !== cost.currencyCode) deny("cost/price FX or currency mismatch")
+  if (
+    !validCurrency(context.currencyCode) ||
+    !validCurrency(cost.currencyCode) ||
+    context.currencyCode !== cost.currencyCode
+  )
+    deny("cost/price FX or currency mismatch")
   requireScope(context, cost)
   requireScope(context, policy)
-  if (policy.buyerOrganisationId !== undefined &&
-      (!validId(policy.buyerOrganisationId) || policy.buyerOrganisationId !== context.buyerOrganisationId))
+  if (
+    policy.buyerOrganisationId !== undefined &&
+    (!validId(policy.buyerOrganisationId) ||
+      policy.buyerOrganisationId !== context.buyerOrganisationId)
+  )
     deny("customer margin policy belongs to another buyer")
   for (const value of [cost.sourceReference, cost.version, policy.policyReference, policy.version])
     if (!validId(value)) deny("missing or invalid cost/policy provenance")
-  if (!["ACTUAL_LANDED", "ESTIMATED_LANDED", "WEIGHTED_AVERAGE", "STANDARD", "REPLACEMENT", "POLICY_ADJUSTED"].includes(cost.costBasisType))
+  if (
+    ![
+      "ACTUAL_LANDED",
+      "ESTIMATED_LANDED",
+      "WEIGHTED_AVERAGE",
+      "STANDARD",
+      "REPLACEMENT",
+      "POLICY_ADJUSTED",
+    ].includes(cost.costBasisType)
+  )
     deny("unknown cost-basis type")
   if (cost.sourceSystem !== "ERP" && cost.sourceSystem !== "GOVERNED_ESTIMATE")
     deny("unknown cost evidence source")
-  if (!["ESTIMATED_LANDED", "REPLACEMENT", "POLICY_ADJUSTED"].includes(cost.costBasisType) &&
-      cost.sourceSystem !== "ERP") deny("actual/accounting cost must originate from ERP")
+  if (
+    !["ESTIMATED_LANDED", "REPLACEMENT", "POLICY_ADJUSTED"].includes(cost.costBasisType) &&
+    cost.sourceSystem !== "ERP"
+  )
+    deny("actual/accounting cost must originate from ERP")
   if (cost.costBasisType === "ACTUAL_LANDED" && cost.sourceSystem !== "ERP")
     deny("estimated evidence cannot assert actual landed cost")
   const costObserved = timestamp(cost.observedAt, "cost observation")
@@ -219,9 +246,7 @@ export function reconcileActualMargin(
   actualCostObservedAt: string
 } {
   const snapshot = resolution.snapshot
-  const expectedFingerprint = createHash("sha256")
-    .update(JSON.stringify(snapshot))
-    .digest("hex")
+  const expectedFingerprint = createHash("sha256").update(JSON.stringify(snapshot)).digest("hex")
   if (expectedFingerprint !== resolution.fingerprint) {
     deny("historical price snapshot fingerprint mismatch")
   }
@@ -236,9 +261,11 @@ export function reconcileActualMargin(
   const observedAt = timestamp(actual.observedAt, "actual cost observation")
   const validUntil = timestamp(actual.validUntil, "actual cost expiry")
   if (observedAt >= validUntil) deny("actual cost validity window is invalid")
-  const realised = amount(snapshot.quotedPriceMinor, "historical quote") -
+  const realised =
+    amount(snapshot.quotedPriceMinor, "historical quote") -
     amount(actual.amountMinor, "actual cost")
-  const expected = amount(snapshot.quotedPriceMinor, "historical quote") -
+  const expected =
+    amount(snapshot.quotedPriceMinor, "historical quote") -
     amount(snapshot.costEvidence.amountMinor, "historical cost")
   return {
     realisedMarginMinor: checked(realised, "realised margin"),

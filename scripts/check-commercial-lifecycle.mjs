@@ -1,4 +1,4 @@
-// Dependency-free exact-decimal/state regressions. Run with Node 24's TS transform.
+// Dependency-free exact-decimal/state regressions. The imported kernel uses erasable TypeScript syntax.
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
