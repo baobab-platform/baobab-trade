@@ -1,0 +1,304 @@
+{
+  "shared_source_sha": "7f547ccdd759208355ef9224d2177929f4bf224e",
+  "reference_file": "scripts/tests/test_buyer_commitment_valuation.py",
+  "reference_file_sha256": "84b2e8762e54e23cc1a3c5e5cd4c0b0a8ac8a2b39cfde8fff369403fc57b7914",
+  "classification": "STATIC_REFERENCE_VECTORS_NOT_NATIVE_PRICE_OR_AUTHORITY",
+  "vectors": [
+    {
+      "name": "accepted_example",
+      "facts": {
+        "resource_id": "cart_synthetic01",
+        "resource_version": 4,
+        "transaction_digest": "sha256:9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e",
+        "currency": "UGX",
+        "basis": "FINAL_PRICED",
+        "components": [
+          {
+            "component_kind": "MERCHANDISE",
+            "amount_minor": 1100000,
+            "determination": "FINAL",
+            "source_reference": "line_synthetic01"
+          },
+          {
+            "component_kind": "ORDER_DISCOUNT",
+            "amount_minor": -50000,
+            "determination": "FINAL",
+            "source_reference": "adjustment_synthetic01"
+          },
+          {
+            "component_kind": "SHIPPING",
+            "amount_minor": 50000,
+            "determination": "FINAL",
+            "source_reference": "shipping_method_synthetic01"
+          },
+          {
+            "component_kind": "TAX",
+            "amount_minor": 150000,
+            "determination": "FINAL",
+            "source_reference": "tax_line_synthetic01"
+          }
+        ]
+      },
+      "expected_amount_minor": 1250000,
+      "expected_digest": "sha256:ec293faad4e8175b85ec59a2fffe99035860b132d9f2b8d811619ec27c4cc429"
+    },
+    {
+      "name": "all_charge_kinds",
+      "facts": {
+        "resource_id": "cart_synthetic01",
+        "resource_version": 4,
+        "transaction_digest": "sha256:9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e",
+        "currency": "UGX",
+        "basis": "FINAL_PRICED",
+        "components": [
+          {
+            "component_kind": "MERCHANDISE",
+            "amount_minor": 10000,
+            "determination": "FINAL",
+            "source_reference": "line"
+          },
+          {
+            "component_kind": "ITEM_DISCOUNT",
+            "amount_minor": -200,
+            "determination": "FINAL",
+            "source_reference": "item_discount"
+          },
+          {
+            "component_kind": "ORDER_DISCOUNT",
+            "amount_minor": -100,
+            "determination": "FINAL",
+            "source_reference": "order_discount"
+          },
+          {
+            "component_kind": "SHIPPING",
+            "amount_minor": 50,
+            "determination": "FINAL",
+            "source_reference": "shipping"
+          },
+          {
+            "component_kind": "HANDLING",
+            "amount_minor": 50,
+            "determination": "FINAL",
+            "source_reference": "handling"
+          },
+          {
+            "component_kind": "INSURANCE",
+            "amount_minor": 50,
+            "determination": "FINAL",
+            "source_reference": "insurance"
+          },
+          {
+            "component_kind": "SERVICE_CHARGE",
+            "amount_minor": 50,
+            "determination": "FINAL",
+            "source_reference": "service_charge"
+          },
+          {
+            "component_kind": "TAX",
+            "amount_minor": 50,
+            "determination": "FINAL",
+            "source_reference": "tax"
+          },
+          {
+            "component_kind": "DUTY_AND_IMPORT_CHARGE",
+            "amount_minor": 50,
+            "determination": "FINAL",
+            "source_reference": "duty_and_import_charge"
+          },
+          {
+            "component_kind": "REFUNDABLE_DEPOSIT",
+            "amount_minor": 50,
+            "determination": "FINAL",
+            "source_reference": "refundable_deposit"
+          }
+        ]
+      },
+      "expected_amount_minor": 10050,
+      "expected_digest": "sha256:06bcf74382e86a599bf7f15701a681d9dcf736654546926127d0290118829bb3"
+    },
+    {
+      "name": "safe_final_large_intermediate",
+      "facts": {
+        "resource_id": "cart_synthetic01",
+        "resource_version": 4,
+        "transaction_digest": "sha256:9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e",
+        "currency": "UGX",
+        "basis": "FINAL_PRICED",
+        "components": [
+          {
+            "component_kind": "MERCHANDISE",
+            "amount_minor": 9007199254740991,
+            "determination": "FINAL",
+            "source_reference": "line"
+          },
+          {
+            "component_kind": "TAX",
+            "amount_minor": 1,
+            "determination": "FINAL",
+            "source_reference": "tax"
+          },
+          {
+            "component_kind": "ORDER_DISCOUNT",
+            "amount_minor": -1,
+            "determination": "FINAL",
+            "source_reference": "discount"
+          }
+        ]
+      },
+      "expected_amount_minor": 9007199254740991,
+      "expected_digest": "sha256:fe13f070db7a91dcaa188c196ae0d886cc4e796e665c575670ee328afe4a01f2"
+    },
+    {
+      "name": "non_ascii_resource",
+      "facts": {
+        "resource_id": "cart_é_🌍",
+        "resource_version": 4,
+        "transaction_digest": "sha256:9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e",
+        "currency": "UGX",
+        "basis": "FINAL_PRICED",
+        "components": [
+          {
+            "component_kind": "MERCHANDISE",
+            "amount_minor": 1100000,
+            "determination": "FINAL",
+            "source_reference": "line_synthetic01"
+          },
+          {
+            "component_kind": "ORDER_DISCOUNT",
+            "amount_minor": -50000,
+            "determination": "FINAL",
+            "source_reference": "adjustment_synthetic01"
+          },
+          {
+            "component_kind": "SHIPPING",
+            "amount_minor": 50000,
+            "determination": "FINAL",
+            "source_reference": "shipping_method_synthetic01"
+          },
+          {
+            "component_kind": "TAX",
+            "amount_minor": 150000,
+            "determination": "FINAL",
+            "source_reference": "tax_line_synthetic01"
+          }
+        ]
+      },
+      "expected_amount_minor": 1250000,
+      "expected_digest": "sha256:7a0913b3996c4d6b5f7524f3d9d65e6a4a67a1d01582cbc59150ea641d2ad187"
+    },
+    {
+      "name": "unicode_resource_at_character_limit",
+      "facts": {
+        "resource_id": "🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍",
+        "resource_version": 4,
+        "transaction_digest": "sha256:9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e",
+        "currency": "UGX",
+        "basis": "FINAL_PRICED",
+        "components": [
+          {
+            "component_kind": "MERCHANDISE",
+            "amount_minor": 1100000,
+            "determination": "FINAL",
+            "source_reference": "line_synthetic01"
+          },
+          {
+            "component_kind": "ORDER_DISCOUNT",
+            "amount_minor": -50000,
+            "determination": "FINAL",
+            "source_reference": "adjustment_synthetic01"
+          },
+          {
+            "component_kind": "SHIPPING",
+            "amount_minor": 50000,
+            "determination": "FINAL",
+            "source_reference": "shipping_method_synthetic01"
+          },
+          {
+            "component_kind": "TAX",
+            "amount_minor": 150000,
+            "determination": "FINAL",
+            "source_reference": "tax_line_synthetic01"
+          }
+        ]
+      },
+      "expected_amount_minor": 1250000,
+      "expected_digest": "sha256:51979f20734c979d578ee58f9c777049b9f421b67522c05a5eeade460e6550bc"
+    },
+    {
+      "name": "escaped_resource",
+      "facts": {
+        "resource_id": "cart_\"\\\n\t",
+        "resource_version": 4,
+        "transaction_digest": "sha256:9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e",
+        "currency": "UGX",
+        "basis": "FINAL_PRICED",
+        "components": [
+          {
+            "component_kind": "MERCHANDISE",
+            "amount_minor": 1100000,
+            "determination": "FINAL",
+            "source_reference": "line_synthetic01"
+          },
+          {
+            "component_kind": "ORDER_DISCOUNT",
+            "amount_minor": -50000,
+            "determination": "FINAL",
+            "source_reference": "adjustment_synthetic01"
+          },
+          {
+            "component_kind": "SHIPPING",
+            "amount_minor": 50000,
+            "determination": "FINAL",
+            "source_reference": "shipping_method_synthetic01"
+          },
+          {
+            "component_kind": "TAX",
+            "amount_minor": 150000,
+            "determination": "FINAL",
+            "source_reference": "tax_line_synthetic01"
+          }
+        ]
+      },
+      "expected_amount_minor": 1250000,
+      "expected_digest": "sha256:1f4cfdb3027e6415b7eaed32d3df8dca5db1b75a013f55786f916c42bedf9b97"
+    },
+    {
+      "name": "maximum_safe_resource_version",
+      "facts": {
+        "resource_id": "cart_synthetic01",
+        "resource_version": 9007199254740991,
+        "transaction_digest": "sha256:9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e9f2c4e6a8b0d1f3e",
+        "currency": "UGX",
+        "basis": "FINAL_PRICED",
+        "components": [
+          {
+            "component_kind": "MERCHANDISE",
+            "amount_minor": 1100000,
+            "determination": "FINAL",
+            "source_reference": "line_synthetic01"
+          },
+          {
+            "component_kind": "ORDER_DISCOUNT",
+            "amount_minor": -50000,
+            "determination": "FINAL",
+            "source_reference": "adjustment_synthetic01"
+          },
+          {
+            "component_kind": "SHIPPING",
+            "amount_minor": 50000,
+            "determination": "FINAL",
+            "source_reference": "shipping_method_synthetic01"
+          },
+          {
+            "component_kind": "TAX",
+            "amount_minor": 150000,
+            "determination": "FINAL",
+            "source_reference": "tax_line_synthetic01"
+          }
+        ]
+      },
+      "expected_amount_minor": 1250000,
+      "expected_digest": "sha256:7806a4196e1b249871755cce197f8730c0792fe2bd4b9954c9b963e8cda708eb"
+    }
+  ]
+}
