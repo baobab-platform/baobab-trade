@@ -33,6 +33,7 @@ export CP_IMAGE=baobab-trade-a-ta08/cp:local NODE_IMAGE=node:24.18.1-alpine3.24
 export TRADE_IMAGE=${TRADE_IMAGE:-baobab-trade-a-ta08/trade:local}
 export CPDB_PASSWORD="cpdb-$(openssl rand -hex 12)" TRADEDB_ADMIN_PASSWORD="pg-$(openssl rand -hex 12)"
 export TRADE_DB_PASSWORD="trade-$(openssl rand -hex 12)" TRADE_WORKLOAD_SECRET=$(openssl rand -hex 24)
+export TRADE_WORKFORCE_FIXTURE_SECRET=$(openssl rand -hex 24)
 export TRADE_JWT_SECRET=$(openssl rand -hex 24) TRADE_COOKIE_SECRET=$(openssl rand -hex 24)
 # CP derives an engine instance key from its UUID; Trade needs it before it starts.
 ENGINE_UUID=$(python3 -c 'import uuid; print(uuid.uuid4())')
@@ -45,7 +46,7 @@ collect() {
     "${COMPOSE[@]}" logs --no-color "$s" > "$OUT/$s.log" 2>&1 || true
   done
   # Logs are evidence: they must never carry a token or a run secret.
-  if grep -l -e "$TRADE_WORKLOAD_SECRET" -e "$TRADE_DB_PASSWORD" -e "$CPDB_PASSWORD" "$OUT"/*.log >/dev/null 2>&1 \
+  if grep -l -e "$TRADE_WORKLOAD_SECRET" -e "$TRADE_WORKFORCE_FIXTURE_SECRET" -e "$TRADE_DB_PASSWORD" -e "$CPDB_PASSWORD" "$OUT"/*.log >/dev/null 2>&1 \
      || grep -Pl 'eyJ[A-Za-z0-9_-]{20,}\.' "$OUT"/*.log >/dev/null 2>&1; then
     log "a log carries a token or a run secret"
     echo "FAIL L01 logs carry a token or a run secret" >> "$OUT/trade-a-report.txt"

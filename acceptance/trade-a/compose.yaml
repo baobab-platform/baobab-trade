@@ -34,6 +34,12 @@ x-trade-env: &trade-env
   COOKIE_SECRET: ${TRADE_COOKIE_SECRET}
   BAOBAB_CONTROL_PLANE_BASE_URL: https://cp.gated.test
   BAOBAB_TRADE_ENGINE_INSTANCE_ID: ${TRADE_ENGINE_INSTANCE_ID}
+  # Registration allows the protected Auth Module to start. TA-08 does not
+  # certify the workforce login flow.
+  BAOBAB_IAM_OIDC_ISSUER: https://iam.gated.test/realms/baobab
+  BAOBAB_IAM_OIDC_CLIENT_ID: trade-ta08-workforce-registration
+  BAOBAB_IAM_OIDC_CLIENT_SECRET: ${TRADE_WORKFORCE_FIXTURE_SECRET}
+  BAOBAB_IAM_OIDC_CALLBACK_URL: https://trade.gated.test/auth/user/oidc/callback
   BAOBAB_IAM_WORKLOAD_TOKEN_URL: https://iam.gated.test/realms/baobab/token
   BAOBAB_IAM_WORKLOAD_CLIENT_ID: baobab-trade-legal-actor-assessor-staging
   BAOBAB_IAM_WORKLOAD_CLIENT_SECRET: ${TRADE_WORKLOAD_SECRET}
