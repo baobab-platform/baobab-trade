@@ -1,6 +1,6 @@
 import { MedusaError } from "@medusajs/framework/utils"
 import jwt from "jsonwebtoken"
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { GET } from "../src/api/store/b2b/context/route"
 import { B2B_MODULE } from "../src/modules/b2b"
 import { signRealToken, TEST_JWT_SECRET } from "./support/real-token"
@@ -93,6 +93,15 @@ const buildResponse = () => {
   }
   return res as typeof res & { json: (body: unknown) => void; statusCode?: number; body?: unknown }
 }
+
+const originalTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
+beforeEach(() => {
+  process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tn_1"
+})
+afterEach(() => {
+  if (originalTenant === undefined) delete process.env.BAOBAB_ZURIBEANS_TENANT_ID
+  else process.env.BAOBAB_ZURIBEANS_TENANT_ID = originalTenant
+})
 
 describe("GET /store/b2b/context (Gate ZB-03.7 real-token verification)", () => {
   it("rejects a request with no canonical_organisation_id", async () => {
