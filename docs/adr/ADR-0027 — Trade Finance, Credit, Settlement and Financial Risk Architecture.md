@@ -1,6 +1,7 @@
 # ADR-0027 — Trade Finance, Credit, Settlement and Financial Risk Architecture
 
-**Status:** Proposed — Normative Trade Architecture  
+**Status:** Accepted  
+**Architecture acceptance:** 2026-11-09, Platform Owner directive. This accepts the normative decision, not any unverified production readiness claim. Later accepted ADRs and Shared/CP/IAM authority remain governing where they impose stricter requirements.
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Primary Repository:** `nabhold/baobab-trade`  
@@ -2757,7 +2758,7 @@ A second invariant closes the B2B lifecycle:
 
 # Decision Outcome
 
-**ACCEPTED WHEN APPROVED**
+**ACCEPTED — governing architecture; engineering and connected qualification tracked separately**
 
 Implementation SHALL proceed:
 
