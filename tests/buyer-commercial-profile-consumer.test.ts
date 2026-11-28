@@ -67,6 +67,7 @@ const request = (body: ReturnType<typeof event>, organisationStatus = "PENDING")
     updateB2BOrganisations: vi.fn(async (patch) => ({ id: "b2borg_1", ...patch })),
   }
   const erp = {
+    listBuyerCommercialProfileProjections: vi.fn(async () => [] as Array<{ observed_at: Date }>),
     createBuyerCommercialProfileProjections: vi.fn(async (input) => ({ id: "erpbcp_1", ...input })),
     deleteBuyerCommercialProfileProjections: vi.fn(),
   }
@@ -121,6 +122,30 @@ describe("ZB-04 ERP commercial profile consumer", () => {
       id: "b2borg_1",
       erp_business_partner_id: "BP-10001",
     })
+    expect(fixture.events.createEventOutboxes).not.toHaveBeenCalled()
+  })
+
+  it("does not activate a buyer on an ERP projection whose observation is in the future", async () => {
+    const signedFuture = event("APPROVED")
+    signedFuture.data.as_of = "2099-01-01T00:00:00.000Z"
+    const fixture = request(signedFuture)
+    await expect(POST(fixture.req as never, response())).rejects.toThrow(
+      "future-dated ERP commercial profile",
+    )
+    expect(fixture.erp.createBuyerCommercialProfileProjections).not.toHaveBeenCalled()
+    expect(fixture.b2b.updateB2BOrganisations).not.toHaveBeenCalled()
+  })
+
+  it("rejects an out-of-order signed ERP profile before activation or projection", async () => {
+    const fixture = request(event("APPROVED"))
+    fixture.erp.listBuyerCommercialProfileProjections.mockResolvedValueOnce([
+      { observed_at: new Date("2026-10-01T00:00:00.000Z") },
+    ])
+    await expect(POST(fixture.req as never, response())).rejects.toThrow(
+      "stale ERP commercial profile",
+    )
+    expect(fixture.erp.createBuyerCommercialProfileProjections).not.toHaveBeenCalled()
+    expect(fixture.b2b.updateB2BOrganisations).not.toHaveBeenCalled()
     expect(fixture.events.createEventOutboxes).not.toHaveBeenCalled()
   })
 
