@@ -56,6 +56,7 @@ const buyerContext = (change: Partial<TradeBuyerExecutionContext> = {}) =>
     digital_estate_id: "estate_synthetic",
     tenant_id: "tn_synthetic01",
     engine_instance_id: "ei_trade01",
+    market_id: "market_synthetic",
     buyer_organisation_id: "b2borg_synthetic01",
     buyer_membership_id: "b2bmem_synthetic01",
     expires_at: new Date(NOW + 30_000).toISOString(),
@@ -183,6 +184,21 @@ describe("classifyNativeCommitment", () => {
       seller_context_id: CONTEXT,
       buyer_context_id: buyerContext().context_id,
     })
+  })
+
+  it("refuses B2B native classification without exact selected CP Market", async () => {
+    for (const market_id of [undefined, "market_other"]) {
+      const result = await run({
+        request: {
+          buyer: {
+            model: "BUYER_ORGANISATION",
+            context: buyerContext({ market_id }),
+          },
+        },
+      })
+      expect(result.result).toEqual({ outcome: "REFUSED", reason: "CLASSIFICATION_CONFLICT" })
+      expect(result.store.rows).toHaveLength(0)
+    }
   })
 
   it("classifies B2C only for a positively established consumer", async () => {

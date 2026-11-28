@@ -167,6 +167,7 @@ export async function runClassificationRegression(pool: Pool): Promise<string[]>
       digital_estate_id: estate,
       tenant_id: tenant,
       engine_instance_id: engine,
+      market_id: market,
       buyer_organisation_id: `b2borg_${run}`,
       buyer_membership_id: `b2bmem_${run}`,
       expires_at: new Date(Date.now() + 600_000).toISOString(),
