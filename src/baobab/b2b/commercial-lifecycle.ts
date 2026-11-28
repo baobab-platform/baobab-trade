@@ -65,16 +65,17 @@ export type Quotation = QuotationInput & {
 }
 export type CommercialResource = Rfq | Quotation
 export class CommercialRefusal extends Error {
-  constructor(
-    readonly code:
-      | "INVALID_REQUEST"
-      | "NOT_FOUND"
-      | "CONFLICT"
-      | "AUTHORITY_UNAVAILABLE"
-      | "AUTHORITY_DENIED"
-      | "COMMITMENT_NOT_QUALIFIED",
-  ) {
+  readonly code:
+    | "INVALID_REQUEST"
+    | "NOT_FOUND"
+    | "CONFLICT"
+    | "AUTHORITY_UNAVAILABLE"
+    | "AUTHORITY_DENIED"
+    | "COMMITMENT_NOT_QUALIFIED"
+
+  constructor(code: CommercialRefusal["code"]) {
     super(code)
+    this.code = code
   }
 }
 export const refuseCommercial = (code: CommercialRefusal["code"]): never => {
