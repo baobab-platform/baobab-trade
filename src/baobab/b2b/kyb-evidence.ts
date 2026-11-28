@@ -36,7 +36,23 @@ export const assertVerifiedBuyerKybPackage = async (
   const now = Date.now()
   const verified = new Set(
     evidence
-      .filter((item) => !item.expires_at || new Date(item.expires_at).valueOf() > now)
+      .filter((item) => {
+        // VERIFIED is necessary but not sufficient: a future-issued
+        // certificate, malformed document hash or missing canonical identity
+        // must never activate buyer review.
+        const issued = item.issued_at ? new Date(item.issued_at).valueOf() : undefined
+        const expires = item.expires_at ? new Date(item.expires_at).valueOf() : undefined
+        return (
+          (issued === undefined || (Number.isFinite(issued) && issued <= now)) &&
+          (expires === undefined || (Number.isFinite(expires) && expires > now)) &&
+          typeof item.canonical_document_id === "string" &&
+          item.canonical_document_id.trim().length > 0 &&
+          typeof item.document_version === "string" &&
+          item.document_version.trim().length > 0 &&
+          typeof item.content_sha256 === "string" &&
+          /^[a-f0-9]{64}$/.test(item.content_sha256)
+        )
+      })
       .map((item) => item.evidence_type),
   )
   const missing = REQUIRED_BUYER_KYB_EVIDENCE.filter((type) => !verified.has(type))
