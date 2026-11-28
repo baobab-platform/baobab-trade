@@ -4,6 +4,10 @@ const CommerceFulfilment = model.define(
   {
     id: model.id({ prefix: "ful" }).primaryKey(),
     digital_estate: model.text(),
+    tenant_id: model.text().index().nullable(),
+    principal_id: model.text().index().nullable(),
+    market_id: model.text().nullable(),
+    market_revision: model.bigNumber().nullable(),
     fulfilment_reference: model.text().unique(),
     order_reference: model.text().index(),
     organisation_id: model.text().index().nullable(),
