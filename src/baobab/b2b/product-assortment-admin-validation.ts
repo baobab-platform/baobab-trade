@@ -24,17 +24,37 @@ const CONFIDENCES: ClassificationConfidence[] = [
 
 const STATUSES: CommercialAssortmentStatus[] = ["ACTIVE", "SUSPENDED", "WITHDRAWN"]
 
-const REGS: RegulatoryEligibility[] = [
-  "NOT_EVALUATED",
-  "PENDING",
-  "ELIGIBLE",
-  "ELIGIBLE_WITH_CONDITIONS",
-  "REVIEW_REQUIRED",
-  "INELIGIBLE",
-  "SUSPENDED",
-  "EXPIRED",
-  "ERROR",
-]
+const isValidIsoTimestamp = (value: string): boolean => {
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-](\d{2}):(\d{2}))$/.exec(
+      value,
+    )
+  if (!match) return false
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const hour = Number(match[4])
+  const minute = Number(match[5])
+  const second = Number(match[6])
+  const offsetHour = match[7] === "Z" ? 0 : Number(match[8])
+  const offsetMinute = match[7] === "Z" ? 0 : Number(match[9])
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+  return (
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= daysInMonth[month - 1] &&
+    hour <= 23 &&
+    minute <= 59 &&
+    second <= 59 &&
+    offsetHour <= 23 &&
+    offsetMinute <= 59 &&
+    Number.isFinite(Date.parse(value))
+  )
+}
 
 const requireString = (
   value: unknown,
@@ -108,29 +128,69 @@ export const validateMarketEligibilityBody = (
     if (!r.ok) return r
   }
 
-  let status: CommercialAssortmentStatus = "ACTIVE"
-  if (body.status !== undefined) {
-    if (
-      typeof body.status !== "string" ||
-      !STATUSES.includes(body.status as CommercialAssortmentStatus)
-    ) {
-      return { ok: false, error: { field: "status", message: "invalid status" } }
+  if (
+    typeof body.status !== "string" ||
+    !STATUSES.includes(body.status as CommercialAssortmentStatus)
+  ) {
+    return {
+      ok: false,
+      error: { field: "status", message: "status is required and must be valid" },
     }
-    status = body.status as CommercialAssortmentStatus
   }
+  const status = body.status as CommercialAssortmentStatus
 
-  let regulatory: RegulatoryEligibility = "NOT_EVALUATED"
-  if (body.regulatory_eligibility !== undefined) {
-    if (
-      typeof body.regulatory_eligibility !== "string" ||
-      !REGS.includes(body.regulatory_eligibility as RegulatoryEligibility)
-    ) {
+  if (
+    body.regulatory_eligibility !== undefined &&
+    body.regulatory_eligibility !== "NOT_EVALUATED"
+  ) {
+    return {
+      ok: false,
+      error: {
+        field: "regulatory_eligibility",
+        message: "regulatory_eligibility is owned by the qualified regulatory provider",
+      },
+    }
+  }
+  const regulatory: RegulatoryEligibility = "NOT_EVALUATED"
+
+  // Store eligibility is temporal policy, not an arbitrarily parseable
+  // JavaScript Date. Unqualified/reversed windows must never be activated.
+  const boundaries: Record<string, Date | null> = {}
+  for (const field of ["effective_from", "effective_until"]) {
+    const value = body[field]
+    if (value === null || value === undefined) {
+      boundaries[field] = null
+      continue
+    }
+    if (typeof value !== "string" || !isValidIsoTimestamp(value)) {
       return {
         ok: false,
-        error: { field: "regulatory_eligibility", message: "invalid regulatory_eligibility" },
+        error: { field, message: `${field} must be an ISO 8601 timestamp with timezone` },
       }
     }
-    regulatory = body.regulatory_eligibility as RegulatoryEligibility
+    boundaries[field] = new Date(value)
+  }
+
+  if (
+    boundaries.effective_from &&
+    boundaries.effective_until &&
+    boundaries.effective_from.getTime() >= boundaries.effective_until.getTime()
+  ) {
+    return {
+      ok: false,
+      error: { field: "effective_until", message: "effective_until must follow effective_from" },
+    }
+  }
+
+  if (
+    body.policy_reference !== undefined &&
+    body.policy_reference !== null &&
+    (typeof body.policy_reference !== "string" || !body.policy_reference.trim())
+  ) {
+    return {
+      ok: false,
+      error: { field: "policy_reference", message: "policy_reference must be a non-empty string" },
+    }
   }
 
   return {
@@ -140,6 +200,10 @@ export const validateMarketEligibilityBody = (
       market_key: String(body.market_key).trim(),
       status,
       regulatory_eligibility: regulatory,
+      policy_reference:
+        typeof body.policy_reference === "string" ? body.policy_reference.trim() : null,
+      effective_from: boundaries.effective_from,
+      effective_until: boundaries.effective_until,
     },
   }
 }

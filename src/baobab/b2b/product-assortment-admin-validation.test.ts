@@ -40,19 +40,50 @@ describe("ZB-06 admin payload validation", () => {
     const result = validateMarketEligibilityBody({
       product_id: "prod_1",
       market_key: "zuribeans_ug",
+      status: "ACTIVE",
       regulatory_eligibility: "MAYBE",
     })
     expect(result.ok).toBe(false)
   })
 
-  it("accepts ACTIVE + ELIGIBLE market eligibility", () => {
+  it("does not let Trade admin create regulatory clearance", () => {
+    for (const regulatory_eligibility of [
+      "ELIGIBLE",
+      "ELIGIBLE_WITH_CONDITIONS",
+      "PENDING",
+      "REVIEW_REQUIRED",
+      "INELIGIBLE",
+      "SUSPENDED",
+      "EXPIRED",
+      "ERROR",
+    ]) {
+      const result = validateMarketEligibilityBody({
+        product_id: "prod_1",
+        market_key: "zuribeans_za",
+        status: "ACTIVE",
+        regulatory_eligibility,
+      })
+      expect(result.ok).toBe(false)
+    }
+  })
+
+  it("requires an explicit commercial assortment status", () => {
+    expect(
+      validateMarketEligibilityBody({
+        product_id: "prod_1",
+        market_key: "zuribeans_za",
+      }).ok,
+    ).toBe(false)
+  })
+
+  it("rejects impossible calendar dates even when their timestamp shape is ISO-like", () => {
     const result = validateMarketEligibilityBody({
       product_id: "prod_1",
       market_key: "zuribeans_za",
-      status: "ACTIVE",
-      regulatory_eligibility: "ELIGIBLE",
+      status: "SUSPENDED",
+      effective_from: "2026-02-30T08:00:00Z",
     })
-    expect(result.ok).toBe(true)
+    expect(result.ok).toBe(false)
   })
 
   it("rejects purchase constraint with non-positive MOQ", () => {

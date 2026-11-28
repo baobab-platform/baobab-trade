@@ -8,7 +8,8 @@ import {
 describe("DEV-07 component evidence boundary", () => {
   it("retains every unimplemented original obligation as BLOCKED", () => {
     const report = dev07Report([...DEV07_COMPONENT_CASES], "a".repeat(40))
-    expect(Object.values(report.cases).filter((r) => r.result === "PASS")).toHaveLength(16)
+    expect(Object.values(report.cases).filter((r) => r.result === "PASS")).toHaveLength(17)
+    expect(report.cases["missing-catalogue-authority-refused"].result).toBe("PASS")
     for (const name of Object.keys(DEV07_BLOCKED_CASES))
       expect(report.cases[name].result).toBe("BLOCKED")
     expect(report.int05_qualified).toBe(false)

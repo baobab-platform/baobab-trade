@@ -11,6 +11,7 @@ export const DEV07_COMPONENT_CASES = [
   "ug-native-catalogue",
   "za-native-catalogue",
   "public-clearance-cannot-be-relaxed",
+  "missing-catalogue-authority-refused",
   "current-market-assortment",
   "expired-market-assortment-refused",
   "future-market-assortment-refused",

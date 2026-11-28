@@ -21,6 +21,7 @@ import {
   evaluateBuyerOperation,
   type BuyerOperationFacts,
 } from "../baobab/b2b/buyer-operation-policy"
+import { partitionCurrentMarketAssortment } from "../baobab/b2b/product-assortment-policy"
 import { ZURIBEANS_CATALOGUE } from "../baobab/catalogue"
 import { GET as assortment } from "../api/store/b2b/assortment/route"
 import { dev07Report } from "../baobab/development/dev07-report"
@@ -206,45 +207,51 @@ export default async function ({ container }: ExecArgs) {
     })
     cleanups.push(() => b2b.deleteMarketProductEligibilities(eligibility.id))
     absenceChecks.push(() => b2b.listMarketProductEligibilities({ id: eligibility.id }))
-    const invoke = async (query: Record<string, string>) => {
-      let body: { sellable_product_ids: string[] } | undefined
+    const invokeWithoutCatalogueAuthority = async (query: Record<string, string>) => {
       const req = { query, scope: { resolve: () => b2b } }
       const res = {
         setHeader: () => {},
         status: () => res,
-        json: (value: typeof body) => {
-          body = value
-        },
+        json: () => assert.fail("The unqualified catalogue route must refuse the request"),
       }
       await assortment(req as never, res as never)
-      assert(body)
-      return body
     }
     for (const value of ["false", "0", "invalid"]) {
       await assert.rejects(
-        () => invoke({ market_key: "zuribeans_ug", require_regulatory_clearance: value }),
+        () =>
+          invokeWithoutCatalogueAuthority({
+            market_key: "zuribeans_ug",
+            require_regulatory_clearance: value,
+          }),
         /clearance is mandatory/,
       )
     }
     pass("public-clearance-cannot-be-relaxed")
-    assert((await invoke({ market_key: "zuribeans_ug" })).sellable_product_ids.includes(product.id))
-    assert(
-      !(await invoke({ market_key: "zuribeans_za" })).sellable_product_ids.includes(product.id),
+    await assert.rejects(
+      () => invokeWithoutCatalogueAuthority({ market_key: "zuribeans_ug" }),
+      /B2B catalogue unavailable/,
     )
+    pass("missing-catalogue-authority-refused")
+
+    const readNativeAssortment = async (marketKey: string) => {
+      const rows = await b2b.listMarketProductEligibilities({
+        market_key: marketKey,
+        product_id: product.id,
+      })
+      return partitionCurrentMarketAssortment(rows, new Date()).sellable_product_ids
+    }
+    assert((await readNativeAssortment("zuribeans_ug")).includes(product.id))
+    assert(!(await readNativeAssortment("zuribeans_za")).includes(product.id))
     pass("current-market-assortment")
     await b2b.updateMarketProductEligibilities({ id: eligibility.id, effective_until: before })
-    assert(
-      !(await invoke({ market_key: "zuribeans_ug" })).sellable_product_ids.includes(product.id),
-    )
+    assert(!(await readNativeAssortment("zuribeans_ug")).includes(product.id))
     pass("expired-market-assortment-refused")
     await b2b.updateMarketProductEligibilities({
       id: eligibility.id,
       effective_from: after,
       effective_until: new Date(after.getTime() + 60_000),
     })
-    assert(
-      !(await invoke({ market_key: "zuribeans_ug" })).sellable_product_ids.includes(product.id),
-    )
+    assert(!(await readNativeAssortment("zuribeans_ug")).includes(product.id))
     pass("future-market-assortment-refused")
     await b2b.updateMarketProductEligibilities({
       id: eligibility.id,
@@ -252,9 +259,7 @@ export default async function ({ container }: ExecArgs) {
       effective_from: before,
       effective_until: after,
     })
-    assert(
-      !(await invoke({ market_key: "zuribeans_ug" })).sellable_product_ids.includes(product.id),
-    )
+    assert(!(await readNativeAssortment("zuribeans_ug")).includes(product.id))
     pass("withdrawn-market-assortment-refused")
   } finally {
     // Attempt every cleanup, including when an assertion fails. Do not publish

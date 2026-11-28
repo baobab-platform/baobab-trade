@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from "vitest"
 import { partitionCurrentMarketAssortment } from "../src/baobab/b2b/product-assortment-policy"
 import { GET } from "../src/api/store/b2b/assortment/route"
+import { PRODUCT_CATALOGUE_ACCESS } from "../src/baobab/catalogue/visibility-authority"
 
 const now = new Date("2026-10-25T12:00:00Z")
-const row = { product_id: "prod_a", status: "ACTIVE", regulatory_eligibility: "ELIGIBLE" }
+const row = {
+  product_id: "prod_a",
+  market_key: "zuribeans_ug",
+  status: "ACTIVE",
+  regulatory_eligibility: "ELIGIBLE",
+}
 const ids = (rows: Parameters<typeof partitionCurrentMarketAssortment>[0], clock = now) =>
   partitionCurrentMarketAssortment(rows, clock).sellable_product_ids
 
@@ -41,7 +47,7 @@ describe("DEV-07 current public assortment", () => {
             query: { market_key: "zuribeans_ug", require_regulatory_clearance: value },
             scope: { resolve },
           } as never,
-          {} as never,
+          { setHeader: vi.fn() } as never,
         ),
       ).rejects.toThrow(/clearance is mandatory/)
       expect(resolve).not.toHaveBeenCalled()
@@ -62,10 +68,27 @@ describe("DEV-07 current public assortment", () => {
         payload = value
       },
     }
+    const accessPort = {
+      authorizeRequest: vi.fn(async () => ({
+        tenantId: "tn_zuribeans",
+        canonicalMarketId: "mkt_zuribeans_ug",
+        marketKey: "zuribeans_ug",
+        digitalEstateId: "estate:zuribeans",
+        buyerPrincipalId: "principal_1",
+        canonicalBuyerOrganisationId: "buyer_org_1",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      })),
+      visibleProductIds: vi.fn(async (_scope: unknown, eligible: string[]) => eligible),
+    }
     await GET(
       {
         query: { market_key: "zuribeans_ug" },
-        scope: { resolve: () => ({ listMarketProductEligibilities: list }) },
+        scope: {
+          resolve: (key: string) =>
+            key === PRODUCT_CATALOGUE_ACCESS
+              ? accessPort
+              : { listMarketProductEligibilities: list },
+        },
       } as never,
       res as never,
     )
@@ -75,5 +98,9 @@ describe("DEV-07 current public assortment", () => {
       sellable_product_ids: [row.product_id],
     })
     expect(res.setHeader).toHaveBeenCalledWith("Cache-Control", "no-store")
+    expect(accessPort.authorizeRequest).toHaveBeenCalledOnce()
+    expect(accessPort.visibleProductIds).toHaveBeenCalledOnce()
+    expect(payload).not.toHaveProperty("blocked")
+    expect(payload).not.toHaveProperty("counts")
   })
 })
