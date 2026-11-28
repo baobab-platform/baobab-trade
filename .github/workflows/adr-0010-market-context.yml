@@ -1,0 +1,42 @@
+name: ADR-0010 Market Context Development Conformance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  exact-cp-market-authority:
+    name: Market, seller and currency substitution denials (development)
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Verify ADR-0010 file formatting
+        run: |
+          npx prettier --check \
+            src/baobab/market/execution-authority.ts \
+            src/baobab/context/resolver.ts \
+            src/baobab/control-plane/client.ts \
+            tests/adr-0010-market-execution.test.ts \
+            tests/commerce-context.test.ts \
+            tests/control-plane-client.test.ts \
+            docs/development/ADR-0010-2026-11-09-implementation-audit.md
+      - name: Test CP Market currency and mapping boundaries
+        run: |
+          npx vitest run \
+            tests/adr-0010-market-execution.test.ts \
+            tests/commerce-context.test.ts \
+            tests/control-plane-client.test.ts \
+            tests/market-config.test.ts \
+            tests/market-mapping.test.ts
