@@ -83,6 +83,31 @@ describe("ControlPlaneWorkloadTenantVerifier", () => {
     )
   })
 
+  it("refuses an expired or malformed CP workload attestation lease", async () => {
+    const resolve = vi.fn().mockResolvedValue({
+      context_id: "ctx",
+      tenant_id: "tn_1",
+      organisation_id: "canon-org-1",
+      expires_at: "2025-01-01T00:00:00Z",
+    })
+    const verifier = new ControlPlaneWorkloadTenantVerifier(
+      fakeTokenProvider(),
+      fakeControlPlaneClient(resolve),
+    )
+    await expect(
+      verifier.verifyOrganisationTenant("tn_1", "canon-org-1", "corr-1"),
+    ).rejects.toThrow("expired")
+    resolve.mockResolvedValueOnce({
+      context_id: "ctx",
+      tenant_id: "tn_1",
+      organisation_id: "canon-org-1",
+      expires_at: "invalid",
+    })
+    await expect(
+      verifier.verifyOrganisationTenant("tn_1", "canon-org-1", "corr-1"),
+    ).rejects.toThrow("expired")
+  })
+
   it("throws TenantAttestationError when the Control Plane echoes a different tenant_id", async () => {
     const resolvePlatformContext = vi.fn().mockResolvedValue({
       context_id: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b",

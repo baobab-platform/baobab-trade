@@ -89,6 +89,12 @@ export class ControlPlaneWorkloadTenantVerifier implements WorkloadTenantVerifie
       throw new TenantAttestationError("Control Plane did not attest the selected country")
     }
     const expiresAt = resolved.expires_at ? new Date(resolved.expires_at) : undefined
+    // A successful HTTP response is not a fresh attestation when CP provided
+    // an already-expired lease. Preserve ADR-0028's opt-in behaviour, but once
+    // configured, an expired or malformed lease must fail closed.
+    if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now())) {
+      throw new TenantAttestationError("Control Plane workload attestation has expired")
+    }
     return {
       contextId: resolved.context_id,
       expiresAt,
