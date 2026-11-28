@@ -21,4 +21,4 @@ validation:
     - "development.docker"
     - "development.github_cli"
 notes:
-  - "Medusa remains the Trade runtime; this declaration only describes compatibility with nabhold/baobab-dev."
+  - "Medusa remains the Trade runtime. Codespaces uses the existing baobab-dev 1.4.4 base with a repository-pinned Node feature. Trade uses npm."

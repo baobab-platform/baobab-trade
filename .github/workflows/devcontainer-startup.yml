@@ -5,6 +5,8 @@ on:
     paths:
       - ".devcontainer/**"
       - ".baobab/environment.yaml"
+      - ".nvmrc"
+      - "package.json"
       - ".github/workflows/devcontainer-startup.yml"
   workflow_dispatch:
 
@@ -34,7 +36,9 @@ jobs:
         run: |
           npm exec --yes --package=@devcontainers/cli@0.90.0 -- devcontainer exec --workspace-folder . sh -ec '
             test "$(id -un)" = vscode
-            test "$(node --version)" = v24.21.0
+            test "$(node --version)" = "v$(cat .nvmrc)"
+            expected_npm=$(node -p "require(\"./package.json\").packageManager")
+            test "npm@$(npm --version)" = "$expected_npm"
             psql --version
             gh --version
             docker version
