@@ -1,5 +1,16 @@
 export type TradeUom = "BAG" | "CARTON" | "EACH"
-export type TradeIncoterm = "EXW" | "FCA" | "FOB" | "CFR" | "CIF" | "DAP" | "DPU" | "DDP"
+export type TradeIncoterm =
+  | "EXW"
+  | "FCA"
+  | "CPT"
+  | "CIP"
+  | "DAP"
+  | "DPU"
+  | "DDP"
+  | "FAS"
+  | "FOB"
+  | "CFR"
+  | "CIF"
 export type CrossBorderLine = {
   canonicalProductKey: string
   hsClassificationReference: string
@@ -51,6 +62,11 @@ export const validateCrossBorderMetadata = (value: CrossBorderTransactionMetadat
     value.importerRegistrationReference,
   ])
     if (!field) throw new Error("Cross-border transaction metadata is incomplete")
+  const allowedIncoterms: readonly string[] = [
+    "EXW", "FCA", "CPT", "CIP", "DAP", "DPU", "DDP", "FAS", "FOB", "CFR", "CIF",
+  ]
+  if (!allowedIncoterms.includes(value.incoterm))
+    throw new Error("Unsupported Incoterms rule code")
   if (!value.lines.length) throw new Error("Cross-border transaction requires trade lines")
   for (const line of value.lines) {
     if (!/^HS-[0-9]{4}(?:\.[0-9]{2,6})?$/.test(line.hsClassificationReference))
