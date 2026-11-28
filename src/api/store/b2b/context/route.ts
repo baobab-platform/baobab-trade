@@ -30,6 +30,7 @@ import {
   resolveBuyerContext,
 } from "../../../../baobab/b2b"
 import { getWorkloadTenantVerifier } from "../../../../baobab/control-plane/workload-tenant-verifier"
+import { assertLegacyTenantOwnership } from "../../../../baobab/b2b/legacy-tenant-scope"
 
 export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) => {
   // Buyer membership, roles and denial outcomes are session-specific. Do not
@@ -54,6 +55,7 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     )
   }
   const organisation = organisations[0]
+  assertLegacyTenantOwnership(organisation, organisation.id)
 
   // A canonical link does not override the locally suspended/retired buyer
   // relationship. Never return active membership or role data for it.

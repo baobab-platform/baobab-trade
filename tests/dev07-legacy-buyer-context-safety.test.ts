@@ -1,5 +1,5 @@
 import { MedusaError } from "@medusajs/framework/utils"
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { resolveBuyerContext } from "../src/baobab/b2b/context-resolver"
 import { GET } from "../src/api/store/b2b/context/route"
 import { B2B_MODULE } from "../src/modules/b2b"
@@ -47,6 +47,15 @@ const contextFor = async (
  * Source-level hardening of the legacy Medusa session read path only.
  * Passing these tests is not joined IAM/CP identity or INT-05 qualification.
  */
+const originalTenant = process.env.BAOBAB_ZURIBEANS_TENANT_ID
+beforeEach(() => {
+  process.env.BAOBAB_ZURIBEANS_TENANT_ID = "tenant-1"
+})
+afterEach(() => {
+  if (originalTenant === undefined) delete process.env.BAOBAB_ZURIBEANS_TENANT_ID
+  else process.env.BAOBAB_ZURIBEANS_TENANT_ID = originalTenant
+})
+
 describe("DEV-07 legacy buyer context fails closed", () => {
   it("resolves an ACTIVE membership within its effective interval", async () => {
     const now = Date.now()

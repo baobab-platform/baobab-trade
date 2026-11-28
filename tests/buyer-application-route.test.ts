@@ -81,6 +81,7 @@ describe("POST /store/b2b/organisations/apply", () => {
       id: "b2bapp_1",
       ...normalized,
       tenant_id: "tn_zuribeans",
+      applicant_customer_id: "cus_1",
       request_hash: createHash("sha256").update(JSON.stringify(normalized)).digest("hex"),
       status: "SUBMITTED",
       revision: 1,

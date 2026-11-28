@@ -193,8 +193,9 @@ export class HttpControlPlaneClient implements ControlPlaneClient {
     }
 
     const candidate: unknown = await response.json()
-    if (!isValidMarket(candidate)) {
-      throw new Error("Control Plane returned an invalid market")
+    if (!isValidMarket(candidate) || candidate.market_id !== marketId) {
+      // A valid 200 document for a *different* Market is not market authority.
+      throw new Error("Control Plane returned an invalid or mismatched market")
     }
 
     return candidate
