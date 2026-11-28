@@ -9,7 +9,7 @@ import type {
   IStockLocationService,
 } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
-import { reconcileInventory } from "../baobab/inventory"
+import { inventoryReconciliationColumns, reconcileInventory } from "../baobab/inventory"
 import { findByMetadataKey } from "../baobab/market/mapping"
 import { THAMANI_CATALOGUE } from "../baobab/thamani/catalogue"
 import {
@@ -143,16 +143,13 @@ export default async function bootstrapThamaniInventory({ container }: ExecArgs)
           erpOnHand: projection.on_hand_quantity,
           medusaStocked: level.stocked_quantity,
           medusaReserved: level.reserved_quantity,
+          medusaAvailable: level.available_quantity,
         })
         await bridge.createInventoryReconciliations({
           projection_id: projection.id,
           inventory_item_id: item.id,
           stock_location_id: location.id,
-          erp_on_hand_quantity: result.erpOnHand,
-          medusa_stocked_quantity: result.medusaStocked,
-          medusa_reserved_quantity: result.medusaReserved,
-          delta_quantity: result.delta,
-          status: result.status,
+          ...inventoryReconciliationColumns(result),
           observed_at: new Date(),
         })
       }
