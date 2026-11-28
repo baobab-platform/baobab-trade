@@ -58,6 +58,7 @@ type Change = {
   roles?: Array<{ role: string; membership_id: string }>
   timeAfterCp?: number
   mutateOnCp?: boolean
+  mutateOrgProvenanceOnCp?: boolean
 }
 
 const world = (change: Change = {}) => {
@@ -190,6 +191,8 @@ const world = (change: Change = {}) => {
               if (change.tenantError) throw change.tenantError
               if (change.timeAfterCp !== undefined) currentTime = change.timeAfterCp
               if (change.mutateOnCp) memberships[0].revision += 1
+              if (change.mutateOrgProvenanceOnCp)
+                organisations[0].link_provenance = "cp-attestation:changed-during-lookup"
               return {
                 contextId: CP_CONTEXT,
                 expiresAt: new Date(NOW + 50_000),
@@ -577,6 +580,12 @@ describe("buyer execution context (ADR-SHARED-042 CAA-04/05)", () => {
       expect(refused(await promise).reasons).toEqual(["ROLE_NOT_PERMITTED"])
       expect(calls.some((c) => c.startsWith("attest:"))).toBe(false)
     }
+  })
+
+  it("refuses an authority provenance change after CP even with a stale revision", async () => {
+    expect(refused(await run({ mutateOrgProvenanceOnCp: true }).promise).reasons).toEqual([
+      "BUYER_NOT_AUTHORISED",
+    ])
   })
 
   it("refuses a revision changed while CP was resolving", async () => {

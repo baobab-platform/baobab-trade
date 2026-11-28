@@ -362,7 +362,13 @@ async function evaluate(
     currentOrganisations[0].id !== organisation.id ||
     currentOrganisations[0].relationship_revision !== organisation.relationship_revision ||
     currentOrganisations[0].status !== "ACTIVE" ||
+    currentOrganisations[0].tenant_id !== estate.tenantId ||
+    currentOrganisations[0].canonical_organisation_id !== requested ||
+    currentOrganisations[0].engine_instance_id !== estate.engineInstanceId ||
+    currentOrganisations[0].link_provenance !== organisation.link_provenance ||
     currentMemberships[0].id !== membership.id ||
+    currentMemberships[0].principal_id !== principal.principalId ||
+    currentMemberships[0].organisation_id !== organisation.id ||
     currentMemberships[0].revision !== membership.revision ||
     currentMemberships[0].status !== "ACTIVE"
   ) {

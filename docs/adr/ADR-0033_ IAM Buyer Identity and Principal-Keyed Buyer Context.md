@@ -1,6 +1,7 @@
 # ADR-0033: IAM Buyer Identity and the Trade Buyer Execution Context
 
-Status: Proposed — Trade's implementation record for ADR-SHARED-042 CAA-04/CAA-05 (Accepted 2026-10-21), and for the Platform Owner ruling of 2026-10-22 recorded in its §14. Where this record and ADR-SHARED-042 differ, ADR-SHARED-042 governs.
+Status: Accepted — Trade's implementation record for ADR-SHARED-042 CAA-04/CAA-05 (Accepted 2026-10-21), and for the Platform Owner ruling of 2026-10-22 recorded in its §14. Where this record and ADR-SHARED-042 differ, ADR-SHARED-042 governs.
+Architecture acceptance: Platform Owner directive 2026-11-09; acceptance of this governed decision is not authorization to enable unqualified buyer commitments.
 Date: 2026-10-21, reworked 2026-10-22
 
 ## Context
