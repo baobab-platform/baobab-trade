@@ -36,4 +36,26 @@ describe("ZB-04 end-to-end certification controls", () => {
     const ci = readFileSync(".github/workflows/ci.yml", "utf8")
     expect(ci).toContain("npm run test:zb04")
   })
+  it("only treats executable Vitest cases as repository controls", () => {
+    const seen = new Set<string>()
+    for (const control of certification.controls) {
+      expect(seen.has(control.id), "duplicate ZB-04 control id").toBe(false)
+      seen.add(control.id)
+      for (const path of control.evidence) {
+        expect(path).toMatch(/^tests\/[a-z0-9-]+\.test\.ts$/)
+        const implementation = readFileSync(path, "utf8")
+        expect(implementation).toMatch(/\b(?:it|test)\s*\(/)
+      }
+    }
+  })
+
+  it("does not let a source-only evidence manifest masquerade as connected certification", () => {
+    const serialized = JSON.stringify(certification)
+    expect(serialized).not.toMatch(/(?:BEGIN PRIVATE KEY|Bearer\s+[A-Za-z0-9._-]{16,}|invitation_token\s*:\s*["'][^"']{16,})/)
+    expect(certification.productionEvidence.length).toBeGreaterThanOrEqual(7)
+    expect(certification.crossRepositoryDependencies.length).toBeGreaterThan(0)
+    expect(certification.status).toBe("IMPLEMENTED_AWAITING_ENVIRONMENT_CERTIFICATION")
+    expect(certification).not.toHaveProperty("environmentCertified", true)
+  })
+
 })
