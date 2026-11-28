@@ -54,8 +54,15 @@ export const POST = async (req: AuthenticatedMedusaRequest<AcceptBody>, res: Med
     throw new MedusaError(MedusaError.Types.NOT_FOUND, "invitation is invalid or already used")
   }
 
-  if (membership.invitation_expires_at && new Date(membership.invitation_expires_at) < new Date()) {
-    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "invitation has expired")
+  // ADR-0031 requires a bounded 48-hour token, not optional expiry.
+  // Null, malformed and already-expired leases must all fail closed.
+  const expiry = membership.invitation_expires_at
+    ? new Date(membership.invitation_expires_at).getTime()
+    : Number.NaN
+  const remainingMs = expiry - Date.now()
+  if (!Number.isFinite(expiry) || remainingMs <= 0 ||
+      remainingMs > 48 * 60 * 60 * 1000) {
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "invitation has expired or is invalid")
   }
 
   const existing = await b2b.listBuyerMemberships({
