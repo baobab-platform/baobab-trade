@@ -1,9 +1,12 @@
 import { startTradeOTel } from "./src/baobab/observability/otel-bootstrap"
+import { validateTradeStartupConfiguration } from "./src/baobab/config/startup-validation"
 import { defineConfig, loadEnv } from "@medusajs/framework/utils"
 import { getInfrastructureModules } from "./src/baobab/config/infrastructure"
 import { buildAuthProviderConfiguration } from "./src/baobab/auth/providers"
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd())
+// ADR-0008 §8: refuse malformed critical config before initialising Medusa or OTel.
+validateTradeStartupConfiguration(process.env)
 startTradeOTel()
 
 const requiredSecrets = ["JWT_SECRET", "COOKIE_SECRET"]
