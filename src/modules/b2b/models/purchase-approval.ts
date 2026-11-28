@@ -10,6 +10,8 @@ const PurchaseApproval = model.define(
     cart_id: model.text().index().nullable(),
     order_id: model.text().index().nullable(),
     status: model.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).default("PENDING"),
+    // Database-owned approval row revision, distinct from resource_version.
+    revision: model.number().default(1),
     amount_minor: model.bigNumber(),
     currency_code: model.text(),
     reason: model.text(),

@@ -139,6 +139,8 @@ jobs:
         run: npm ci
       - name: Apply Medusa migrations
         run: npm run migrate
+      - name: Qualify database-owned purchase approval revisions
+        run: node scripts/check-purchase-approval-revision.mjs
       - name: Apply search index migrations
         run: npm run migrate:search
       - name: Regression — governed seller binding lifecycle (disposable PostgreSQL 17 only)
