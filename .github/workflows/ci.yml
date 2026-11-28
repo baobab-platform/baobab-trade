@@ -407,6 +407,8 @@ jobs:
         run: npm run migrate:search
       - name: Verify production infrastructure modules
         run: npm run verify:infrastructure
+      - name: Verify ADR-0007 readiness against PostgreSQL 17
+        run: npm run verify:readiness
 
   trade-a-real-cp:
     name: Trade-A TA-08 real-runtime acceptance — shipped image, real CP, signed tokens (not EA Gate D, not L4)
